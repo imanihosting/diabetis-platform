@@ -1,0 +1,22 @@
+# One-shot migration runner.
+#
+# Kept separate from the backend image so migrations can be applied without
+# shipping the API, and so the test stack can gate every service on schema
+# readiness.
+#
+#   docker build -f infra/docker/Dockerfile.migrate .
+
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=production
+
+# A minimal manifest of its own rather than the repo root's: that one declares
+# workspaces which do not exist in this image.
+RUN printf '{"name":"migrate","private":true,"type":"module"}\n' > package.json \
+ && npm install --no-audit --no-fund pg@^8.13.1 \
+ && npm cache clean --force
+
+COPY scripts/migrate.mjs ./scripts/migrate.mjs
+COPY infra/db/migrations ./infra/db/migrations
+
+CMD ["node", "scripts/migrate.mjs"]

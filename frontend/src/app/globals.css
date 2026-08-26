@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Light theme is the default; dark is opt-in via prefers-color-scheme.
+ * Every colour is defined here on :root so nothing is left undefined when the
+ * media query does not apply.
+ */
+:root {
+  --ink: 23 26 33;
+  --ink-muted: 92 99 112;
+  --ink-faint: 145 152 165;
+
+  --surface: 252 252 253;
+  --surface-raised: 255 255 255;
+  --surface-sunken: 244 245 247;
+
+  --line: 224 227 232;
+  --accent: 21 94 117;
+
+  --evidence-insufficient: 145 152 165;
+  --evidence-weak: 180 120 40;
+  --evidence-moderate: 42 110 150;
+  --evidence-strong: 30 110 90;
+
+  --range-below: 190 70 60;
+  --range-in: 40 110 85;
+  --range-above: 175 110 35;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: 232 234 238;
+    --ink-muted: 156 163 176;
+    --ink-faint: 110 117 130;
+
+    --surface: 16 18 22;
+    --surface-raised: 24 27 33;
+    --surface-sunken: 12 14 18;
+
+    --line: 44 49 58;
+    --accent: 110 190 210;
+
+    --evidence-insufficient: 110 117 130;
+    --evidence-weak: 210 160 80;
+    --evidence-moderate: 110 175 215;
+    --evidence-strong: 100 190 160;
+
+    --range-below: 230 130 120;
+    --range-in: 110 195 160;
+    --range-above: 225 175 95;
+  }
+}
+
+body {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers should align in columns wherever they are compared. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

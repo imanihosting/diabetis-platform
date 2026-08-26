@@ -1,0 +1,33 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# Environment — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+.gstack/
+
+# Python packaging artifacts
+*.egg-info/
+
+# Test-stack config: no real credentials, safe to commit
+!backend/.env.test

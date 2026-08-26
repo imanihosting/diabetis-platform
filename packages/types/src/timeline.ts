@@ -1,0 +1,63 @@
+import { z } from 'zod';
+import { confidenceSchema, dataSourceSchema, uuidSchema } from './common';
+
+/**
+ * The metabolic timeline is the product's central primitive: one ordered
+ * stream of everything that happened, each entry carrying where it came from
+ * and how much the platform trusts it.
+ */
+export const timelineEventTypeSchema = z.enum([
+  'glucose_sample',
+  'meal_started',
+  'meal_ended',
+  'medication_taken',
+  'exercise_started',
+  'exercise_ended',
+  'sleep_started',
+  'sleep_ended',
+  'stress_reported',
+  'symptom_reported',
+  'lab_collected',
+  'appointment',
+]);
+export type TimelineEventType = z.infer<typeof timelineEventTypeSchema>;
+
+export const createTimelineEventSchema = z.object({
+  occurredAt: z.coerce.date(),
+  eventType: timelineEventTypeSchema,
+  source: dataSourceSchema.default('manual'),
+  confidence: confidenceSchema.default(1.0),
+  payload: z.record(z.unknown()).default({}),
+});
+export type CreateTimelineEventInput = z.infer<typeof createTimelineEventSchema>;
+
+export const timelineEventSchema = z.object({
+  id: uuidSchema,
+  userId: uuidSchema,
+  occurredAt: z.coerce.date(),
+  eventType: timelineEventTypeSchema,
+  source: dataSourceSchema,
+  confidence: confidenceSchema,
+  payload: z.record(z.unknown()),
+  createdAt: z.coerce.date(),
+});
+export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+
+export const timelineQuerySchema = z.object({
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+  eventTypes: z.array(timelineEventTypeSchema).optional(),
+  limit: z.coerce.number().int().min(1).max(2000).default(500),
+});
+export type TimelineQuery = z.infer<typeof timelineQuerySchema>;
+
+/**
+ * A timeline entry as the UI consumes it: the raw event plus the display
+ * metadata the interface needs to show provenance honestly.
+ */
+export const timelineEntrySchema = timelineEventSchema.extend({
+  label: z.string(),
+  /** True when `confidence` < 1 or the source is `inferred`. */
+  isInferred: z.boolean(),
+});
+export type TimelineEntry = z.infer<typeof timelineEntrySchema>;

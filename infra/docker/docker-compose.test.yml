@@ -1,0 +1,132 @@
+# Fully isolated test stack.
+#
+# Brings up a throwaway PostgreSQL and MinIO, applies the migrations, then runs
+# the test suites against them. Nothing here touches the provisioned VMs, so
+# tests can create, mutate, and delete freely, and a failed run leaves no
+# residue on shared infrastructure.
+#
+#   npm run test:docker          run everything, exit with the suite's status
+#   npm run test:docker:down     tear down, including volumes
+#
+# To iterate on integration tests from your editor instead, start just the
+# dependencies and point the local suite at them:
+#
+#   npm run test:stack:up
+#   npm run test:integration
+#
+# The Postgres image carries the same extension versions as the production VM
+# (timescaledb 2.29.2, vector 0.8.6), so hypertables, vector indexes, and the
+# PL/pgSQL guard triggers are exercised for real rather than mocked.
+
+name: diabetes-platform-test
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_DB: diabetes_test
+      POSTGRES_USER: diabetes_test
+      POSTGRES_PASSWORD: diabetes_test
+    # The database is disposable, so durability is pure overhead here.
+    # Turning off fsync and full page writes makes the suite noticeably
+    # faster. Never do this anywhere the data matters.
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - shared_preload_libraries=timescaledb
+    volumes:
+      # Named volume, removed by `npm run test:docker:down` (-v).
+      - test-pgdata:/home/postgres/pgdata/data
+    ports:
+      # Non-default host ports so the stack never collides with a local
+      # PostgreSQL, and `npm run test:integration` can run against it directly.
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U diabetes_test -d diabetes_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: testaccess
+      MINIO_ROOT_PASSWORD: testsecret123
+    ports:
+      - "59000:9000"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Creates the bucket the suite writes to, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set t http://minio:9000 testaccess testsecret123 &&
+        mc mb --ignore-existing t/medicaldata &&
+        echo "bucket ready"
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.migrate
+    environment:
+      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend-tests:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      target: test
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "false"
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: medicaldata
+      S3_ACCESS_KEY_ID: testaccess
+      S3_SECRET_ACCESS_KEY: testsecret123
+      S3_FORCE_PATH_STYLE: "true"
+      S3_PREFIX: diabetes-platform/
+      JWT_SECRET: test-secret-that-is-long-enough-for-validation
+      METABOLIC_ENGINE_URL: http://metabolic-engine-test:8000
+    command: ["npm", "run", "test:all", "--workspace", "backend"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  engine-tests:
+    build:
+      context: ../../metabolic-engine
+      dockerfile: Dockerfile
+      target: test
+    environment:
+      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+      ENVIRONMENT: test
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  test-pgdata:

@@ -1,0 +1,98 @@
+# Runs the platform locally in containers, against the provisioned
+# PostgreSQL and MinIO VMs.
+#
+#   npm run docker:up        build and start
+#   npm run docker:logs
+#   npm run docker:down
+#
+# For an isolated stack with its own throwaway database and object storage,
+# use docker-compose.test.yml instead — see infra/README.md.
+
+name: diabetes-platform
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      # Explicit: the Dockerfile also defines a `test` stage, which would
+      # otherwise be selected as the last stage in the file.
+      target: runtime
+    environment:
+      NODE_ENV: production
+      BACKEND_PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-false}
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT in .env}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      S3_PREFIX: ${S3_PREFIX:-diabetes-platform/}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      METABOLIC_ENGINE_URL: http://metabolic-engine:8000
+      METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN}
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    ports:
+      - "4000:4000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  metabolic-engine:
+    build:
+      context: ../../metabolic-engine
+      dockerfile: Dockerfile
+      target: runtime
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN}
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+      target: runtime
+    environment:
+      # The browser talks to a same-origin /api that Next rewrites here.
+      BACKEND_URL: http://backend:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  redis-data:
