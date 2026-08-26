@@ -23,6 +23,20 @@ export const REFRESH_COOKIE_NAME = 'wellovue_refresh';
  */
 const LEGACY_COOKIE_NAMES = ['diabetes_refresh'];
 
+/**
+ * A readable hint that a session exists. Carries no authority whatsoever.
+ *
+ * The refresh cookie is HttpOnly and scoped to /api/auth, so a public page has
+ * no way to tell whether the visitor is signed in. Without that, the marketing
+ * header has to either show "Sign in" to someone who already is, or ask the
+ * API on every anonymous page view just to find out.
+ *
+ * This holds the single character "1". It grants nothing, proves nothing, and
+ * is never trusted by the server. It exists so the header can point somebody
+ * at their own timeline instead of a login form.
+ */
+export const SESSION_HINT_COOKIE_NAME = 'wellovue_signed_in';
+
 /** Scoped to the auth routes, so it is not attached to every API request. */
 const REFRESH_COOKIE_PATH = '/api/auth';
 
@@ -45,6 +59,17 @@ export function setRefreshCookie(
   isProduction: boolean,
 ): void {
   response.cookie(REFRESH_COOKIE_NAME, token, refreshCookieOptions(isProduction));
+
+  // Readable by the page, and deliberately so. Lax rather than Strict, because
+  // it has to survive a return navigation from somewhere else; there is
+  // nothing here worth protecting from a cross-site read.
+  response.cookie(SESSION_HINT_COOKIE_NAME, '1', {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: '/',
+    maxAge: refreshCookieOptions(isProduction).maxAge,
+  });
 }
 
 export function clearRefreshCookie(response: Response, isProduction: boolean): void {
@@ -53,4 +78,11 @@ export function clearRefreshCookie(response: Response, isProduction: boolean): v
   for (const name of [REFRESH_COOKIE_NAME, ...LEGACY_COOKIE_NAMES]) {
     response.clearCookie(name, options);
   }
+
+  response.clearCookie(SESSION_HINT_COOKIE_NAME, {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: '/',
+  });
 }

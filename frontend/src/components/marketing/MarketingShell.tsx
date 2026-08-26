@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Disclosure } from '@/components/Disclosure';
 import { LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
+import { useSessionHint } from '@/hooks/useSessionHint';
 
 /**
  * Header and footer for every public page.
@@ -15,6 +16,14 @@ import { LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
  */
 export function MarketingShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+
+  // Someone already signed in needs a way back to their own timeline. Sending
+  // them to a login form they do not need is how a public page becomes a dead
+  // end for the people who use the product most.
+  const signedIn = useSessionHint();
+  const account = signedIn
+    ? { href: '/timeline', label: 'Your timeline' }
+    : { href: '/login', label: 'Sign in' };
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -43,10 +52,10 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           ))}
 
           <Link
-            href="/login"
+            href={account.href}
             className="text-sm font-medium text-[var(--ink)] underline-offset-[6px] hover:underline"
           >
-            Sign in
+            {account.label}
           </Link>
         </nav>
 
@@ -75,11 +84,11 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                   </Link>
                 ))}
                 <Link
-                  href="/login"
+                  href={account.href}
                   onClick={close}
                   className="mt-1 border-t border-[var(--rule)] px-3 pb-2 pt-3 text-sm font-medium text-[var(--ink)]"
                 >
-                  Sign in
+                  {account.label}
                 </Link>
               </nav>
             )}

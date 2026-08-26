@@ -5,7 +5,7 @@ import { Bullet, Clause, LegalPage } from '@/components/marketing/LegalPage';
 export const metadata: Metadata = {
   title: 'Cookies · Wellovue',
   description:
-    'Wellovue sets one cookie, only after you sign in, and only to keep you signed in. No analytics, no advertising, no third parties.',
+    'Wellovue sets two cookies, both only after you sign in, and both only so the site works. No analytics, no advertising, no third parties.',
 };
 
 export default function CookiesPage() {
@@ -13,9 +13,9 @@ export default function CookiesPage() {
     <LegalPage
       title="Cookies"
       updated="26 August 2026"
-      summary="One cookie, set only after you sign in, and only to keep you signed in. Nothing is set before that, and nothing is shared with anyone."
+      summary="Two cookies, both set only after you sign in, and neither of any use to anyone else. Nothing is set before you sign in, and nothing is shared."
     >
-      <Clause n={1} title="The only cookie we set">
+      <Clause n={1} title="The cookies we set">
         <div className="not-prose overflow-x-auto">
           <table className="w-full min-w-[34rem] border border-[var(--rule)] text-sm">
             <tbody className="divide-y divide-[var(--rule)]">
@@ -41,13 +41,44 @@ export default function CookiesPage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-8">
+          The second exists only so a public page can tell that you are already
+          signed in, and offer you your own timeline instead of a login form.
+        </p>
+
+        <div className="not-prose mt-4 overflow-x-auto">
+          <table className="w-full min-w-[34rem] border border-[var(--rule)] text-sm">
+            <tbody className="divide-y divide-[var(--rule)]">
+              {[
+                ['Name', 'wellovue_signed_in'],
+                ['Purpose', 'Lets a public page show a link to your timeline'],
+                ['Set when', 'You sign in. Never before'],
+                ['Contains', 'The single character 1. Nothing else'],
+                ['Grants access', 'None. The server never trusts it for anything'],
+                ['Readable by scripts', 'Yes, deliberately. That is the whole point of it'],
+                ['Expires', '30 days, or immediately when you sign out'],
+              ].map(([k, v]) => (
+                <tr key={k}>
+                  <th
+                    scope="row"
+                    className="w-[13rem] bg-[var(--paper-sunk)] px-4 py-3 text-left align-top font-medium text-[var(--ink)]"
+                  >
+                    {k}
+                  </th>
+                  <td className="px-4 py-3 align-top text-[var(--ink-muted)]">{v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Clause>
 
       <Clause n={2} title="Why there is no cookie banner">
         <p>
           Under UK and EU rules, a cookie that is strictly necessary to provide a
           service the user asked for does not require consent. Keeping you signed
-          in is that kind of cookie, and it is the only one we set.
+          in and knowing where to send you are both that kind of cookie, and they
+          are the only ones we set.
         </p>
         <p>
           If we ever add one that is not strictly necessary, you will be asked
@@ -82,7 +113,7 @@ export default function CookiesPage() {
 
       <Clause n={4} title="Removing it">
         <p>
-          Signing out deletes it. You can also clear it from your browser
+          Signing out deletes both. You can also clear them from your browser
           settings at any time. The only consequence is that you will be signed
           out and will need to sign in again.
         </p>

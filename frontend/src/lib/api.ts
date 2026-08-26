@@ -1,3 +1,4 @@
+import { clearSessionHint } from '@/hooks/useSessionHint';
 import type {
   ClientAuthResponse,
   GlucoseSummary,
@@ -59,7 +60,12 @@ async function refreshSession(): Promise<boolean> {
         method: 'POST',
         credentials: 'same-origin',
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        // The hint outlived the session it described. Clear it so the public
+        // header stops offering a route the app cannot honour.
+        clearSessionHint();
+        return false;
+      }
 
       const payload = (await res.json()) as ClientAuthResponse;
       tokenStore.set(payload.tokens.accessToken);

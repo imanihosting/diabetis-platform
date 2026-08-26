@@ -131,6 +131,51 @@ describe('API end to end', () => {
       expect(cookie).toMatch(/Path=\/api\/auth/i);
     });
 
+    it('sets a readable session hint that grants nothing', async () => {
+      const res = await http()
+        .post('/api/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      const hint = setCookies(res).find((c) => c.startsWith('wellovue_signed_in='));
+      expect(hint).toBeDefined();
+      // Readable on purpose: a public page uses it to offer the timeline
+      // rather than a login form. It must never look like a credential.
+      expect(hint).not.toMatch(/HttpOnly/i);
+      expect(hint).toMatch(/Path=\//i);
+      expect(hint).toMatch(/wellovue_signed_in=1/);
+    });
+
+    it('does not accept the hint as authentication', async () => {
+      // Holding the hint and nothing else must get you nowhere.
+      await http()
+        .get('/api/users/me')
+        .set('Cookie', 'wellovue_signed_in=1')
+        .expect(401);
+
+      await http()
+        .post('/api/auth/refresh')
+        .set('Cookie', 'wellovue_signed_in=1')
+        .expect(401);
+    });
+
+    it('clears the hint on sign out, so no page can keep claiming a session', async () => {
+      const login = await http()
+        .post('/api/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      const res = await http()
+        .post('/api/auth/logout')
+        .set({ authorization: `Bearer ${login.body.tokens.accessToken}` })
+        .set('Cookie', refreshCookie(login))
+        .send({})
+        .expect(204);
+
+      const cleared = setCookies(res).find((c) => c.startsWith('wellovue_signed_in='));
+      expect(cleared).toMatch(/wellovue_signed_in=;/);
+    });
+
     it('rotates the refresh cookie, invalidating the used one', async () => {
       const login = await http()
         .post('/api/auth/login')

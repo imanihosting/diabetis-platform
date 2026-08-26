@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useLogin, useRegister } from '@/hooks/useAuth';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useCurrentUser, useLogin, useRegister } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/api';
 import { LEGAL_NAV } from '@/lib/navigation';
 
@@ -18,6 +19,16 @@ export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const router = useRouter();
+  const existing = useCurrentUser();
+
+  // Arriving here with a live session means the visitor was looking for their
+  // account, not for a form. Send them on rather than asking them to prove
+  // again what the cookie already establishes.
+  useEffect(() => {
+    if (existing.data) router.replace('/timeline');
+  }, [existing.data, router]);
 
   const login = useLogin();
   const register = useRegister();
