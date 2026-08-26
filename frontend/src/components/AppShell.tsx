@@ -5,16 +5,15 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Disclosure } from '@/components/Disclosure';
-import { APP_NAV, LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
+import { APP_NAV, APP_SECONDARY_NAV, LEGAL_NAV, isCurrent } from '@/lib/navigation';
 import { useLogout } from '@/hooks/useAuth';
 
 /**
  * Chrome for the signed-in app.
  *
- * The primary row stays Timeline, Log and Evidence: that is the daily work, and
- * putting About or Contact beside them would make six equal-looking links where
- * three of them are read once. The public pages are reachable from a disclosure
- * and again from the footer, which is where people look for them anyway.
+ * The primary row stays Timeline, Log and Evidence: that is the daily work.
+ * Contact and the policy pages are reachable from a disclosure and again from
+ * the footer, which is where people look for them anyway.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -54,7 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {(close) => (
               <>
                 <nav aria-label="More" className="flex flex-col">
-                  {MARKETING_NAV.map((item) => (
+                  {APP_SECONDARY_NAV.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
@@ -94,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-rule py-5">
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
-          {[...MARKETING_NAV, ...LEGAL_NAV].map((item) => (
+          {[...APP_SECONDARY_NAV, ...LEGAL_NAV].map((item) => (
             <Link
               key={item.href}
               href={item.href}
