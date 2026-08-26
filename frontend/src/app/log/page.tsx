@@ -17,8 +17,8 @@ export default function LogPage() {
         Everything you add here appears on your timeline with its source.
       </p>
 
-      <div className="mt-6 flex gap-6 border-b border-line" role="tablist">
-        {(['glucose', 'meal', 'activity'] as Tab[]).map((option) => (
+      <div className="mt-6 flex gap-6 border-b border-rule" role="tablist">
+        {(['glucose','meal','activity'] as Tab[]).map((option) => (
           <button
             key={option}
             role="tab"
@@ -26,7 +26,7 @@ export default function LogPage() {
             onClick={() => setTab(option)}
             className={
               tab === option
-                ? 'border-b-2 border-accent pb-2 text-sm capitalize text-ink'
+                ? 'border-b-2 border-ink pb-2 text-sm capitalize text-ink'
                 : 'border-b-2 border-transparent pb-2 text-sm capitalize text-ink-faint hover:text-ink-muted'
             }
           >
@@ -91,7 +91,7 @@ function GlucoseForm() {
             id="unit"
             value={unit}
             onChange={(e) => setUnit(e.target.value as 'mmol/L' | 'mg/dL')}
-            className="mt-1 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm text-ink"
+            className="mt-2 border-b border-rule bg-transparent pb-2 text-base text-ink focus:border-ink"
           >
             <option value="mmol/L">mmol/L</option>
             <option value="mg/dL">mg/dL</option>
@@ -121,7 +121,7 @@ function CsvImport() {
   });
 
   return (
-    <div className="rounded-md border border-dashed border-line px-4 py-3">
+    <div className="border border-dashed border-rule px-4 py-3">
       <label htmlFor="csv" className="block text-sm text-ink-muted">
         Or import a CGM / meter export
       </label>
@@ -133,7 +133,7 @@ function CsvImport() {
           const file = e.target.files?.[0];
           if (file) mutation.mutate(file);
         }}
-        className="mt-2 block w-full text-xs text-ink-faint file:mr-3 file:rounded file:border file:border-line file:bg-surface-raised file:px-3 file:py-1.5 file:text-xs file:text-ink"
+        className="mt-2 block w-full text-xs text-ink-faint file:mr-3 file:rounded file:border file:border-rule file:bg-paper-raised file:px-3 file:py-1.5 file:text-xs file:text-ink"
       />
       {mutation.isPending && (
         <p className="mt-2 text-xs text-ink-faint">Importing…</p>
@@ -147,7 +147,7 @@ function CsvImport() {
         </p>
       )}
       {mutation.isError && (
-        <p className="mt-2 text-xs text-range-below">
+        <p className="mt-2 text-xs text-zone-belowText">
           {mutation.error instanceof ApiError
             ? mutation.error.message
             : 'Import failed.'}
@@ -201,9 +201,9 @@ function MealForm() {
             id="mealType"
             value={mealType}
             onChange={(e) => setMealType(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm text-ink"
+            className="mt-2 w-full border-b border-rule bg-transparent pb-2 text-base text-ink focus:border-ink"
           >
-            {['breakfast', 'lunch', 'dinner', 'snack', 'other'].map((t) => (
+            {['breakfast','lunch','dinner','snack','other'].map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -268,7 +268,7 @@ function Form({
       {children}
 
       {mutation.isError && (
-        <p role="alert" className="text-sm text-range-below">
+        <p role="alert" className="text-sm text-zone-belowText">
           {mutation.error instanceof ApiError
             ? mutation.error.message
             : 'Could not save.'}
@@ -281,7 +281,7 @@ function Form({
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-surface disabled:opacity-60"
+        className="bg-ink px-6 py-3 text-base font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-60"
       >
         {mutation.isPending ? 'Saving…' : label}
       </button>
@@ -317,7 +317,7 @@ function Input({
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+        className="mt-2 w-full border-b border-rule bg-transparent pb-2 text-base text-ink focus:border-ink"
       />
     </div>
   );

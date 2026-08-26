@@ -16,14 +16,14 @@ const ENTRIES = [
  */
 export function TimelineExcerpt() {
   return (
-    <ol className="border-l border-[var(--brand-rule)]">
+    <ol className="border-l border-[var(--rule)]">
       {ENTRIES.map((entry) => (
         <li key={entry.time + entry.label} className="relative py-3.5 pl-6">
           <span
             aria-hidden
             className="absolute -left-[4.5px] top-[1.45rem] h-2 w-2 rounded-full"
             style={{
-              background: entry.certain ? 'var(--brand-ink)' : 'var(--paper)',
+              background: entry.certain ? 'var(--ink)' : 'var(--paper)',
               boxShadow: entry.certain
                 ? 'none'
                 : 'inset 0 0 0 1.5px var(--above-range)',
@@ -32,14 +32,14 @@ export function TimelineExcerpt() {
 
           <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
             <span className="flex items-baseline gap-3">
-              <time className="measure text-xs text-[var(--brand-ink-3)]">
+              <time className="measure text-xs text-[var(--ink-faint)]">
                 {entry.time}
               </time>
               <span
                 className={
                   entry.value
                     ? `measure text-[0.95rem] ${entry.above ? 'text-[var(--above-range-text)]' : 'text-[var(--in-range-text)]'}`
-                    : 'text-[0.95rem] text-[var(--brand-ink)]'
+                    : 'text-[0.95rem] text-[var(--ink)]'
                 }
               >
                 {entry.label}
@@ -47,7 +47,7 @@ export function TimelineExcerpt() {
               </span>
             </span>
 
-            <span className="text-xs text-[var(--brand-ink-3)]">
+            <span className="text-xs text-[var(--ink-faint)]">
               {entry.source}
               {!entry.certain && ' · 60% confidence'}
             </span>

@@ -24,14 +24,14 @@ export function Boundaries() {
   return (
     <div className="grid gap-x-14 gap-y-10 sm:grid-cols-2">
       <div>
-        <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+        <h3 className="text-sm font-semibold text-[var(--ink)]">
           Never, under any circumstances
         </h3>
         <ul className="mt-4 space-y-3">
           {NEVER.map((item) => (
             <li
               key={item}
-              className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--brand-ink-2)]"
+              className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--ink-muted)]"
             >
               <span aria-hidden className="text-[var(--below-range-text)]">
                 &#215;
@@ -43,14 +43,14 @@ export function Boundaries() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+        <h3 className="text-sm font-semibold text-[var(--ink)]">
           Only with a clinician
         </h3>
         <ul className="mt-4 space-y-3">
           {GATED.map((item) => (
             <li
               key={item}
-              className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--brand-ink-2)]"
+              className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--ink-muted)]"
             >
               <span aria-hidden className="text-[var(--above-range-text)]">
                 &#8213;

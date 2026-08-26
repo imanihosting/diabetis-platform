@@ -42,14 +42,19 @@ export function Provenance({
     >
       <span
         aria-hidden
-        className={cn(
-          'h-1.5 w-1.5 rounded-full',
-          inferred ? 'bg-evidence-weak' : 'bg-evidence-strong',
-        )}
+        className="h-1.5 w-1.5 rounded-full"
+        style={
+          inferred
+            ? {
+                background: 'var(--paper)',
+                boxShadow: 'inset 0 0 0 1.5px var(--above-range)',
+              }
+            : { background: 'var(--ink)' }
+        }
       />
       {SOURCE_LABELS[source] ?? source}
       {inferred && (
-        <span className="tabular">
+        <span className="measure">
           · {Math.round(confidence * 100)}% confidence
         </span>
       )}

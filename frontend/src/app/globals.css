@@ -2,142 +2,109 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Light theme is the default; dark is opt-in via prefers-color-scheme.
- * Every colour is defined here on :root so nothing is left undefined when the
- * media query does not apply.
- */
-:root {
-  --ink: 23 26 33;
-  --ink-muted: 92 99 112;
-  --ink-faint: 108 115 128;
-
-  --surface: 252 252 253;
-  --surface-raised: 255 255 255;
-  --surface-sunken: 244 245 247;
-
-  --line: 224 227 232;
-  --accent: 21 94 117;
-
-  --evidence-insufficient: 145 152 165;
-  --evidence-weak: 180 120 40;
-  --evidence-moderate: 42 110 150;
-  --evidence-strong: 30 110 90;
-
-  --range-below: 190 70 60;
-  --range-in: 40 110 85;
-  --range-above: 175 110 35;
-
-  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: 232 234 238;
-    --ink-muted: 156 163 176;
-    --ink-faint: 132 139 152;
-
-    --surface: 16 18 22;
-    --surface-raised: 24 27 33;
-    --surface-sunken: 12 14 18;
-
-    --line: 44 49 58;
-    --accent: 110 190 210;
-
-    --evidence-insufficient: 110 117 130;
-    --evidence-weak: 210 160 80;
-    --evidence-moderate: 110 175 215;
-    --evidence-strong: 100 190 160;
-
-    --range-below: 230 130 120;
-    --range-in: 110 195 160;
-    --range-above: 225 175 95;
-  }
-}
-
-body {
-  background-color: rgb(var(--surface));
-  color: rgb(var(--ink));
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Numbers should align in columns wherever they are compared. */
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
-
 /* ---------------------------------------------------------------------------
- * Landing page (brand register)
+ * One palette, used by every surface.
  *
- * A committed palette built on the one visual glucose data already owns: the
- * target range band. Warm paper, warm ink, and a single load-bearing green
- * that means "in range" everywhere it appears. Amber means above. Nothing on
- * this page is coloured for decoration, so a reader can tell a colour is
- * carrying meaning before they read the label.
+ * The marketing pages and the signed-in app share a visual language: warm
+ * paper, warm ink, and colour reserved for meaning. They differ in density and
+ * type scale, not in vocabulary, because a dashboard needs to be scanned and a
+ * landing page needs to be read.
  *
- * No teal appears anywhere. That is the point.
+ * Two things carry meaning, and nothing else is coloured:
+ *   - where a glucose value sits relative to target
+ *   - how far a finding can be trusted
+ *
+ * Both use the same two hues, so a reader learns the key once. No teal or blue
+ * appears anywhere, which is what keeps this off the clinical-healthcare
+ * default.
  * ------------------------------------------------------------------------ */
-.brand {
+:root {
   --paper: oklch(0.978 0.006 85);
   --paper-sunk: oklch(0.951 0.009 85);
   --paper-raised: oklch(0.993 0.004 85);
 
-  --brand-ink: oklch(0.235 0.014 75);
-  --brand-ink-2: oklch(0.455 0.012 75);
-  /* Dark enough for 4.5:1 body contrast: this carries real text
-     (eyebrows, footer, provenance), not decoration. */
-  --brand-ink-3: oklch(0.545 0.011 75);
-  --brand-rule: oklch(0.885 0.008 85);
+  --ink: oklch(0.235 0.014 75);
+  --ink-muted: oklch(0.455 0.012 75);
+  --ink-faint: oklch(0.545 0.011 75);
+  --rule: oklch(0.885 0.008 85);
 
-  /* The commitment. */
+  /* Glucose relative to target. */
   --in-range: oklch(0.545 0.132 152);
   --in-range-wash: oklch(0.943 0.035 152);
   --above-range: oklch(0.655 0.128 68);
   --above-range-wash: oklch(0.951 0.034 68);
   --below-range: oklch(0.545 0.152 26);
 
-  /* Same hues, darkened until they clear 4.5:1 as text.
-     The values above are tuned for filled shapes, where 3:1 is the bar; a
-     coloured glyph next to a sentence is text and has to meet the text bar. */
+  /* Darkened until they clear 4.5:1 as text. The values above are tuned for
+     filled shapes, where 3:1 is the bar; a coloured glyph beside a sentence is
+     text and has to meet the text bar. */
   --in-range-text: oklch(0.505 0.125 152);
   --above-range-text: oklch(0.505 0.115 68);
   --below-range-text: oklch(0.505 0.150 26);
 
-  background-color: var(--paper);
-  color: var(--brand-ink);
-  font-family: var(--font-hyperlegible), ui-sans-serif, system-ui, sans-serif;
+  /* How much a finding can be trusted. Deliberately the same two hues: neutral
+     when there is nothing to say, amber when the answer is soft, green as it
+     firms up. Always paired with a written label, never colour alone. */
+  --evidence-insufficient: oklch(0.545 0.011 75);
+  --evidence-weak: oklch(0.505 0.115 68);
+  --evidence-moderate: oklch(0.545 0.085 152);
+  --evidence-strong: oklch(0.480 0.135 152);
+
+  --font-sans: var(--font-hyperlegible), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-hyperlegible-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
-  .brand {
-    /* The ground inverts; the range language does not. Someone who chose a
-       dark system should not be handed a page that ignores it, and the
-       commitment survives the swap because it was never the background. */
+  :root {
+    /* The ground inverts; the meaning of the colours does not. */
     --paper: oklch(0.185 0.010 75);
     --paper-sunk: oklch(0.148 0.010 75);
     --paper-raised: oklch(0.232 0.011 75);
 
-    --brand-ink: oklch(0.945 0.007 85);
-    --brand-ink-2: oklch(0.755 0.009 85);
-    --brand-ink-3: oklch(0.685 0.011 85);
-    --brand-rule: oklch(0.315 0.010 75);
+    --ink: oklch(0.945 0.007 85);
+    --ink-muted: oklch(0.755 0.009 85);
+    --ink-faint: oklch(0.685 0.011 85);
+    --rule: oklch(0.315 0.010 75);
 
     --in-range: oklch(0.755 0.135 152);
     --in-range-wash: oklch(0.305 0.048 152);
     --above-range: oklch(0.795 0.125 72);
     --above-range-wash: oklch(0.315 0.045 72);
     --below-range: oklch(0.705 0.145 26);
+
     --in-range-text: oklch(0.785 0.125 152);
     --above-range-text: oklch(0.815 0.115 72);
     --below-range-text: oklch(0.745 0.140 26);
+
+    --evidence-insufficient: oklch(0.685 0.011 85);
+    --evidence-weak: oklch(0.815 0.115 72);
+    --evidence-moderate: oklch(0.760 0.080 152);
+    --evidence-strong: oklch(0.800 0.135 152);
   }
 }
 
-.brand ::selection {
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
   background-color: var(--in-range-wash);
-  color: var(--brand-ink);
+  color: var(--ink);
+}
+
+/* Measured values. Digits align in columns and are never mistaken for prose. */
+.measure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Kept for tables of figures that are not in the mono face. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 /* A legibility floor on small screens.
@@ -147,28 +114,20 @@ body {
  * it. Raising the floor here is cheaper than hand-tuning every label, and it
  * only ever raises a size. */
 @media (max-width: 640px) {
-  .brand .text-xs {
+  .text-xs {
     font-size: 0.8125rem;
     line-height: 1.15rem;
   }
-  .brand .text-\[0\.7rem\] {
+  .text-\[0\.7rem\] {
     font-size: 0.8125rem;
   }
 }
 
-/* One focus ring for the whole page. The 3px offset puts it outside the
-   element, so it lands on the paper even on the near-black button and stays
-   visible against every surface here. */
-.brand :focus-visible {
-  outline: 2px solid var(--brand-ink);
+/* One focus ring everywhere. The offset puts it outside the element, so it
+   lands on the paper even on the near-black button. */
+:focus-visible {
+  outline: 2px solid var(--ink);
   outline-offset: 3px;
-}
-
-/* Measured values. Digits align in columns and are never mistaken for prose. */
-.measure {
-  font-family: var(--font-hyperlegible-mono), ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
 }
 
 /* Scroll reveal. Everything is fully visible when motion is not wanted. */
@@ -184,10 +143,8 @@ body {
     opacity: 1;
     transform: none;
   }
-}
 
-/* Draws the glucose trace on once, left to right, like a plotter. */
-@media (prefers-reduced-motion: no-preference) {
+  /* Draws the glucose trace on once, left to right, like a plotter. */
   .trace-draw {
     stroke-dasharray: var(--trace-length, 2000);
     stroke-dashoffset: var(--trace-length, 2000);

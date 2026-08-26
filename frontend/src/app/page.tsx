@@ -25,13 +25,13 @@ export default function LandingPage() {
           <h1 className="max-w-[19ch] text-statement font-semibold text-balance">
             Most diabetes tools tell you what happened.
           </h1>
-          <p className="mt-4 max-w-[24ch] text-statement font-semibold text-[var(--brand-ink-3)] text-balance">
+          <p className="mt-4 max-w-[24ch] text-statement font-semibold text-[var(--ink-faint)] text-balance">
             This one helps you find out why.
           </p>
         </Reveal>
 
         <Reveal delay={120}>
-          <p className="mt-7 max-w-[66ch] text-lede text-[var(--brand-ink-2)]">
+          <p className="mt-7 max-w-[66ch] text-lede text-[var(--ink-muted)]">
             Your meter records numbers. It cannot tell you whether the walk
             helped, or how sure anyone should be. This works that out from your
             own data.
@@ -42,13 +42,13 @@ export default function LandingPage() {
           <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-8">
             <Link
               href="/login"
-              className="inline-block bg-[var(--brand-ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
+              className="inline-block bg-[var(--ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
             >
               Create an account
             </Link>
             <a
               href="#stay-in-touch"
-              className="text-lede text-[var(--brand-ink-2)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
+              className="text-lede text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
             >
               or leave your email
             </a>
@@ -75,12 +75,12 @@ export default function LandingPage() {
         aside={
           <Reveal>
             <div className="grid gap-8 sm:grid-cols-2">
-              <div className="border-t-2 border-[var(--brand-rule)] pt-5">
-                <p className="text-sm text-[var(--brand-ink-3)]">A tracker says</p>
-                <p className="measure mt-3 text-[clamp(1.35rem,1rem+1vw,1.75rem)] text-[var(--brand-ink-2)]">
+              <div className="border-t-2 border-[var(--rule)] pt-5">
+                <p className="text-sm text-[var(--ink-faint)]">A tracker says</p>
+                <p className="measure mt-3 text-[clamp(1.35rem,1rem+1vw,1.75rem)] text-[var(--ink-muted)]">
                   12.2 mmol/L at 21:40
                 </p>
-                <p className="mt-4 text-sm leading-relaxed text-[var(--brand-ink-3)]">
+                <p className="mt-4 text-sm leading-relaxed text-[var(--ink-faint)]">
                   True, and you already knew. It happened, it is written down,
                   and nothing follows from it.
                 </p>
@@ -90,13 +90,13 @@ export default function LandingPage() {
                 className="border-t-2 pt-5"
                 style={{ borderColor: 'var(--in-range)' }}
               >
-                <p className="text-sm text-[var(--brand-ink-3)]">This says</p>
-                <p className="mt-3 text-[clamp(1.35rem,1rem+1vw,1.75rem)] leading-snug text-[var(--brand-ink)]">
+                <p className="text-sm text-[var(--ink-faint)]">This says</p>
+                <p className="mt-3 text-[clamp(1.35rem,1rem+1vw,1.75rem)] leading-snug text-[var(--ink)]">
                   Across 156 meals, walking afterwards was associated with a{' '}
                   <span className="measure text-[var(--in-range-text)]">1.1</span>{' '}
                   mmol/L lower rise.
                 </p>
-                <p className="mt-4 text-sm leading-relaxed text-[var(--brand-ink-3)]">
+                <p className="mt-4 text-sm leading-relaxed text-[var(--ink-faint)]">
                   Testable. And below it, in full, everything that comparison
                   does not account for.
                 </p>
@@ -164,25 +164,25 @@ export default function LandingPage() {
         heading="Turn a hunch into something you can actually settle."
         aside={
           <Reveal>
-            <div className="border border-[var(--brand-rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
-              <p className="text-sm text-[var(--brand-ink-3)]">Proposed trial</p>
+            <div className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
+              <p className="text-sm text-[var(--ink-faint)]">Proposed trial</p>
               <p className="mt-4 text-[clamp(1.25rem,1rem+0.9vw,1.6rem)] leading-snug">
                 The same breakfast for six days. Walk after three of them,
                 chosen at random.
               </p>
 
-              <dl className="mt-8 space-y-4 border-t border-[var(--brand-rule)] pt-6 text-sm">
+              <dl className="mt-8 space-y-4 border-t border-[var(--rule)] pt-6 text-sm">
                 <div className="flex justify-between gap-6">
-                  <dt className="text-[var(--brand-ink-3)]">Predicted difference</dt>
+                  <dt className="text-[var(--ink-faint)]">Predicted difference</dt>
                   <dd className="measure text-[var(--in-range-text)]">-1.3 mmol/L</dd>
                 </div>
                 <div className="flex justify-between gap-6">
-                  <dt className="text-[var(--brand-ink-3)]">Recorded before it starts</dt>
-                  <dd className="text-[var(--brand-ink-2)]">Yes, permanently</dd>
+                  <dt className="text-[var(--ink-faint)]">Recorded before it starts</dt>
+                  <dd className="text-[var(--ink-muted)]">Yes, permanently</dd>
                 </div>
                 <div className="flex justify-between gap-6">
-                  <dt className="text-[var(--brand-ink-3)]">Clinician sign-off</dt>
-                  <dd className="text-[var(--brand-ink-2)]">Not required</dd>
+                  <dt className="text-[var(--ink-faint)]">Clinician sign-off</dt>
+                  <dd className="text-[var(--ink-muted)]">Not required</dd>
                 </div>
               </dl>
             </div>
@@ -247,14 +247,14 @@ export default function LandingPage() {
       {/* ---- Close ------------------------------------------------------- */}
       <section
         id="stay-in-touch"
-        className="border-t border-[var(--brand-rule)] bg-[var(--paper-sunk)] py-[clamp(4rem,10vw,9rem)]"
+        className="border-t border-[var(--rule)] bg-[var(--paper-sunk)] py-[clamp(4rem,10vw,9rem)]"
       >
         <div className="mx-auto max-w-6xl px-7 sm:px-6">
           <Reveal>
             <h2 className="max-w-[20ch] text-fold font-semibold text-balance">
               Find out what is actually true for you.
             </h2>
-            <p className="mt-6 max-w-[52ch] text-lede text-[var(--brand-ink-2)]">
+            <p className="mt-6 max-w-[52ch] text-lede text-[var(--ink-muted)]">
               Bring the readings you already have. A CSV from your meter or CGM
               is enough to start.
             </p>
@@ -262,7 +262,7 @@ export default function LandingPage() {
             <div className="mt-10 flex flex-col gap-10 sm:flex-row sm:items-end sm:gap-16">
               <Link
                 href="/login"
-                className="inline-block shrink-0 bg-[var(--brand-ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
+                className="inline-block shrink-0 bg-[var(--ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
               >
                 Create an account
               </Link>

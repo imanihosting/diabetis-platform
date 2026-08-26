@@ -20,7 +20,7 @@ export default function EvidencePage() {
         sharper.
       </p>
 
-      <div className="mt-8 rounded-md border border-dashed border-line px-6 py-10">
+      <div className="mt-8 border border-dashed border-rule px-6 py-10">
         <p className="text-sm text-ink-muted">
           The pattern engine is running but is not yet connected to this screen.
         </p>
@@ -56,7 +56,7 @@ function FindingPreview() {
   };
 
   return (
-    <article className="mt-6 rounded-md border border-line bg-surface-raised p-5 opacity-70">
+    <article className="mt-6 border border-rule bg-paper-raised p-5 opacity-70">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-md text-sm text-ink">{finding.summary}</p>
         <EvidenceBadge
@@ -65,9 +65,9 @@ function FindingPreview() {
         />
       </div>
 
-      <p className="tabular mt-4 text-reading-sm font-medium text-ink">
+      <p className="measure mt-4 text-reading-sm font-medium text-ink">
         {finding.effectEstimate}
-        <span className="ml-2 text-xs font-normal text-ink-faint">
+        <span className="ml-2 font-sans text-xs font-normal text-ink-faint">
           {finding.effectUnit}
         </span>
       </p>
@@ -80,7 +80,7 @@ function FindingPreview() {
 
 function Section({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="mt-5 border-t border-line pt-4">
+    <div className="mt-5 border-t border-rule pt-4">
       <h4 className="text-xs uppercase tracking-wide text-ink-faint">{title}</h4>
       <ul className="mt-2 space-y-1">
         {items.map((item) => (

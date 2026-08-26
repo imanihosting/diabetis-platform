@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6">
-      <header className="flex items-center justify-between gap-4 border-b border-line py-5">
+      <header className="flex items-center justify-between gap-4 border-b border-rule py-5">
         <Link href="/timeline" className="text-sm font-medium tracking-tight text-ink">
           Wellovue
         </Link>
@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Disclosure
             label="More"
             triggerClassName="text-sm text-ink-faint transition-colors hover:text-ink-muted"
-            panelClassName="w-[min(20rem,calc(100vw-3rem))] rounded-md border border-line bg-surface-raised p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.45)]"
+            panelClassName="w-[min(20rem,calc(100vw-3rem))]  border border-rule bg-paper-raised p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.45)]"
           >
             {(close) => (
               <>
@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       key={item.href}
                       href={item.href}
                       onClick={close}
-                      className="rounded px-3 py-2.5 hover:bg-surface-sunken"
+                      className="rounded px-3 py-2.5 hover:bg-paper-sunk"
                     >
                       <span className="block text-sm text-ink">{item.label}</span>
                       {item.detail && (
@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   ))}
                 </nav>
 
-                <div className="mt-1 border-t border-line pt-1">
+                <div className="mt-1 border-t border-rule pt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -79,9 +79,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                       logout.mutate();
                     }}
                     disabled={logout.isPending}
-                    className="w-full rounded px-3 py-2.5 text-left text-sm text-ink hover:bg-surface-sunken disabled:opacity-60"
+                    className="w-full rounded px-3 py-2.5 text-left text-sm text-ink hover:bg-paper-sunk disabled:opacity-60"
                   >
-                    {logout.isPending ? 'Signing out…' : 'Sign out'}
+                    {logout.isPending ? 'Signing out…':'Sign out'}
                   </button>
                 </div>
               </>
@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="flex-1 py-8">{children}</main>
 
-      <footer className="border-t border-line py-5">
+      <footer className="border-t border-rule py-5">
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
           {[...MARKETING_NAV, ...LEGAL_NAV].map((item) => (
             <Link

@@ -23,10 +23,10 @@ export function LegalPage({
     <MarketingShell>
       <header className="mx-auto max-w-3xl px-7 pb-8 pt-[clamp(1.5rem,4vw,3rem)] sm:px-6">
         <h1 className="text-fold font-semibold text-balance">{title}</h1>
-        <p className="measure mt-4 text-sm text-[var(--brand-ink-3)]">
+        <p className="measure mt-4 text-sm text-[var(--ink-faint)]">
           Last updated {updated}
         </p>
-        <p className="mt-6 max-w-[62ch] text-lede text-[var(--brand-ink-2)]">
+        <p className="mt-6 max-w-[62ch] text-lede text-[var(--ink-muted)]">
           {summary}
         </p>
       </header>
@@ -49,14 +49,14 @@ export function Clause({
   children: ReactNode;
 }) {
   return (
-    <section className="border-t border-[var(--brand-rule)] py-8">
-      <h2 className="flex items-baseline gap-3 text-lede font-semibold text-[var(--brand-ink)]">
-        <span className="measure text-sm text-[var(--brand-ink-3)]">
+    <section className="border-t border-[var(--rule)] py-8">
+      <h2 className="flex items-baseline gap-3 text-lede font-semibold text-[var(--ink)]">
+        <span className="measure text-sm text-[var(--ink-faint)]">
           {String(n).padStart(2, '0')}
         </span>
         {title}
       </h2>
-      <div className="mt-4 max-w-[68ch] space-y-4 leading-relaxed text-[var(--brand-ink-2)] [&_a]:text-[var(--brand-ink)] [&_a]:underline [&_a]:underline-offset-4 [&_li]:flex [&_li]:gap-2.5 [&_ul]:mt-3 [&_ul]:space-y-2">
+      <div className="mt-4 max-w-[68ch] space-y-4 leading-relaxed text-[var(--ink-muted)] [&_a]:text-[var(--ink)] [&_a]:underline [&_a]:underline-offset-4 [&_li]:flex [&_li]:gap-2.5 [&_ul]:mt-3 [&_ul]:space-y-2">
         {children}
       </div>
     </section>
@@ -66,7 +66,7 @@ export function Clause({
 /** A list marker that stays legible in greyscale and never carries meaning alone. */
 export function Bullet() {
   return (
-    <span aria-hidden className="text-[var(--brand-ink-3)]">
+    <span aria-hidden className="text-[var(--ink-faint)]">
       &#8213;
     </span>
   );

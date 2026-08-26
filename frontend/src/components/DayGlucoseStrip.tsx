@@ -33,7 +33,7 @@ export function DayGlucoseStrip({ entries }: { entries: TimelineEntry[] }) {
   const y = (mmol: number) => ((scaleMax - mmol) / span) * 100;
 
   const path = readings
-    .map((r, i) => `${i === 0 ? 'M' : 'L'} ${x(r.at).toFixed(2)} ${y(r.mmol).toFixed(2)}`)
+    .map((r, i) => `${i === 0 ? 'M':'L'} ${x(r.at).toFixed(2)} ${y(r.mmol).toFixed(2)}`)
     .join(' ');
 
   const inRange = values.filter(
@@ -41,12 +41,12 @@ export function DayGlucoseStrip({ entries }: { entries: TimelineEntry[] }) {
   ).length;
 
   return (
-    <figure className="mb-2 rounded-md border border-line bg-surface-raised px-4 py-3">
+    <figure className="mb-2 border border-rule bg-paper-raised px-4 py-3">
       <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 text-xs">
         <span className="text-ink-muted">
-          Glucose · <span className="tabular">{readings.length}</span> readings
+          Glucose · <span className="measure">{readings.length}</span> readings
         </span>
-        <span className="tabular text-ink-faint">
+        <span className="measure text-ink-faint">
           {Math.min(...values).toFixed(1)}–{Math.max(...values).toFixed(1)} mmol/L
           {' · '}
           {Math.round((inRange / values.length) * 100)}% in target
@@ -66,18 +66,18 @@ export function DayGlucoseStrip({ entries }: { entries: TimelineEntry[] }) {
           y={y(TARGET_HIGH_MMOL)}
           width="100"
           height={y(TARGET_LOW_MMOL) - y(TARGET_HIGH_MMOL)}
-          className="fill-range-in/10"
+          className="fill-[color-mix(in_oklch,var(--in-range)_14%,transparent)]"
         />
         <path
           d={path}
           fill="none"
-          className="stroke-accent"
+          className="stroke-ink"
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
 
-      <div className="mt-1 flex justify-between text-[10px] tabular text-ink-faint">
+      <div className="mt-1 flex justify-between text-[10px] measure text-ink-faint">
         <span>00:00</span>
         <span>12:00</span>
         <span>24:00</span>

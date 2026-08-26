@@ -40,7 +40,7 @@ export function EmailCapture() {
     return (
       <p
         role="status"
-        className="flex items-baseline gap-2 text-lede text-[var(--brand-ink-2)]"
+        className="flex items-baseline gap-2 text-lede text-[var(--ink-muted)]"
       >
         <span aria-hidden className="text-[var(--in-range-text)]">
           &#10003;
@@ -53,7 +53,7 @@ export function EmailCapture() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="max-w-md">
-      <label htmlFor="waitlist-email" className="block text-sm text-[var(--brand-ink-2)]">
+      <label htmlFor="waitlist-email" className="block text-sm text-[var(--ink-muted)]">
         Or leave your email
       </label>
 
@@ -71,12 +71,12 @@ export function EmailCapture() {
             setEmail(e.target.value);
             if (state === 'invalid' || state === 'failed') setState('idle');
           }}
-          className="min-w-0 flex-1 border-b border-[var(--brand-rule)] bg-transparent pb-2 text-lede text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-3)] focus:border-[var(--brand-ink)]"
+          className="min-w-0 flex-1 border-b border-[var(--rule)] bg-transparent pb-2 text-lede text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)]"
         />
         <button
           type="submit"
           disabled={state === 'submitting'}
-          className="shrink-0 self-end border-b border-[var(--brand-ink)] pb-2 text-lede font-medium text-[var(--brand-ink)] transition-opacity disabled:opacity-50"
+          className="shrink-0 self-end border-b border-[var(--ink)] pb-2 text-lede font-medium text-[var(--ink)] transition-opacity disabled:opacity-50"
         >
           {state === 'submitting' ? 'Sending' : 'Send'}
         </button>

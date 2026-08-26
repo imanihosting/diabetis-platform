@@ -116,7 +116,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
                 x2={x(meal.atMinutes)}
                 y1="0"
                 y2="100"
-                stroke="var(--brand-rule)"
+                stroke="var(--rule)"
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
               />
@@ -125,7 +125,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
           <path
             d={d}
             fill="none"
-            stroke="var(--brand-ink)"
+            stroke="var(--ink)"
             strokeWidth="1.75"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -138,7 +138,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
 
       </div>
 
-      <div className="mt-3 flex justify-between text-xs text-[var(--brand-ink-3)] measure">
+      <div className="mt-3 flex justify-between text-xs text-[var(--ink-faint)] measure">
         <span>00:00</span>
         <span aria-hidden>12:00</span>
         <span>24:00</span>
@@ -151,7 +151,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
           {DAY_MEALS.map((meal) => (
             <span
               key={meal.atMinutes}
-              className="absolute top-2 -translate-x-1/2 whitespace-nowrap text-center text-xs leading-tight text-[var(--brand-ink-3)]"
+              className="absolute top-2 -translate-x-1/2 whitespace-nowrap text-center text-xs leading-tight text-[var(--ink-faint)]"
               style={{ left: `${Math.min(94, Math.max(6, x(meal.atMinutes)))}%` }}
             >
               {meal.label}

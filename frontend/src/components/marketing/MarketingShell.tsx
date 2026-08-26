@@ -17,11 +17,11 @@ export function MarketingShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="brand flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-6 px-7 py-5 sm:px-6">
         <Link
           href="/"
-          className="text-sm font-semibold tracking-tight text-[var(--brand-ink)]"
+          className="text-sm font-semibold tracking-tight text-[var(--ink)]"
         >
           Wellovue
         </Link>
@@ -34,8 +34,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               aria-current={isCurrent(pathname, item.href) ? 'page' : undefined}
               className={
                 isCurrent(pathname, item.href)
-                  ? 'text-sm text-[var(--brand-ink)] underline decoration-1 underline-offset-[6px]'
-                  : 'text-sm text-[var(--brand-ink-2)] underline-offset-[6px] hover:text-[var(--brand-ink)] hover:underline'
+                  ? 'text-sm text-[var(--ink)] underline decoration-1 underline-offset-[6px]'
+                  : 'text-sm text-[var(--ink-muted)] underline-offset-[6px] hover:text-[var(--ink)] hover:underline'
               }
             >
               {item.label}
@@ -44,7 +44,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
           <Link
             href="/login"
-            className="text-sm font-medium text-[var(--brand-ink)] underline-offset-[6px] hover:underline"
+            className="text-sm font-medium text-[var(--ink)] underline-offset-[6px] hover:underline"
           >
             Sign in
           </Link>
@@ -54,8 +54,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           <Disclosure
             label="Menu"
             openLabel="Close"
-            triggerClassName="text-sm font-medium text-[var(--brand-ink)] underline-offset-4 hover:underline"
-            panelClassName="w-[min(17rem,calc(100vw-3.5rem))] border border-[var(--brand-rule)] bg-[var(--paper-raised)] p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
+            triggerClassName="text-sm font-medium text-[var(--ink)] underline-offset-4 hover:underline"
+            panelClassName="w-[min(17rem,calc(100vw-3.5rem))] border border-[var(--rule)] bg-[var(--paper-raised)] p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
           >
             {(close) => (
               <nav aria-label="Main" className="flex flex-col">
@@ -67,8 +67,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                     aria-current={isCurrent(pathname, item.href) ? 'page' : undefined}
                     className={
                       isCurrent(pathname, item.href)
-                        ? 'px-3 py-2.5 text-sm font-medium text-[var(--brand-ink)]'
-                        : 'px-3 py-2.5 text-sm text-[var(--brand-ink-2)] hover:text-[var(--brand-ink)]'
+                        ? 'px-3 py-2.5 text-sm font-medium text-[var(--ink)]'
+                        : 'px-3 py-2.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)]'
                     }
                   >
                     {item.label}
@@ -77,7 +77,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 <Link
                   href="/login"
                   onClick={close}
-                  className="mt-1 border-t border-[var(--brand-rule)] px-3 pb-2 pt-3 text-sm font-medium text-[var(--brand-ink)]"
+                  className="mt-1 border-t border-[var(--rule)] px-3 pb-2 pt-3 text-sm font-medium text-[var(--ink)]"
                 >
                   Sign in
                 </Link>
@@ -89,7 +89,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-[var(--brand-rule)] py-10">
+      <footer className="border-t border-[var(--rule)] py-10">
         <div className="mx-auto max-w-6xl px-7 sm:px-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:gap-x-14">
             <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-3">
@@ -97,7 +97,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="text-sm text-[var(--brand-ink-2)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
+                  className="text-sm text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
                 >
                   {item.label}
                 </Link>
@@ -109,7 +109,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="text-sm text-[var(--brand-ink-3)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
+                  className="text-sm text-[var(--ink-faint)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
                 >
                   {item.label}
                 </Link>
@@ -117,7 +117,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             </nav>
           </div>
 
-          <div className="mt-8 flex flex-col gap-4 text-xs leading-relaxed text-[var(--brand-ink-3)] sm:flex-row sm:justify-between">
+          <div className="mt-8 flex flex-col gap-4 text-xs leading-relaxed text-[var(--ink-faint)] sm:flex-row sm:justify-between">
             <p className="max-w-[62ch]">
               For understanding your own patterns and preparing for appointments.
               Not a medical device, and not a substitute for professional care.

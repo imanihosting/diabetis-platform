@@ -1,6 +1,6 @@
 'use client';
 
-import type { TimelineEntry, TimelineEventType } from '@wellovue/types';
+import type { TimelineEntry } from '@wellovue/types';
 import { Provenance } from './Provenance';
 import { GlucoseValue } from './GlucoseValue';
 import { DayGlucoseStrip } from './DayGlucoseStrip';
@@ -16,7 +16,7 @@ import { cn } from '@/lib/cn';
 export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   if (entries.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-line px-6 py-12 text-center">
+      <div className="border border-dashed border-rule px-6 py-12 text-center">
         <p className="text-ink-muted">Nothing recorded in this period yet.</p>
         <p className="mt-1 text-sm text-ink-faint">
           Add a glucose reading, log a meal, or import a device export to start
@@ -41,27 +41,27 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
 
         return (
         <section key={day}>
-          <h3 className="sticky top-0 z-10 bg-surface/90 py-2 text-sm font-medium text-ink-muted backdrop-blur">
+          <h3 className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--paper)_90%,transparent)] py-2 text-sm font-medium text-ink-muted backdrop-blur">
             {formatDay(day)}
           </h3>
 
           {dense && <DayGlucoseStrip entries={glucose} />}
 
-          <ol className="relative ml-2 border-l border-line">
+          <ol className="relative ml-2 border-l border-rule">
             {streamed.map((entry) => (
               <li key={entry.id} className="relative py-3 pl-6">
                 <span
                   aria-hidden
                   className={cn(
-                    'absolute -left-[4.5px] top-[1.35rem] h-2 w-2 rounded-full ring-4 ring-surface',
-                    entry.isInferred ? 'bg-evidence-weak' : 'bg-accent',
+                    'absolute -left-[4.5px] top-[1.35rem] h-2 w-2 rounded-full ring-4 ring-paper',
+                    entry.isInferred ? 'bg-evidence-weak':'bg-ink',
                   )}
                 />
 
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <div className="flex items-baseline gap-3">
                     <time
-                      className="tabular text-xs text-ink-faint"
+                      className="measure text-xs text-ink-faint"
                       dateTime={new Date(entry.occurredAt).toISOString()}
                     >
                       {formatTime(entry.occurredAt)}
@@ -76,7 +76,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
           </ol>
 
           {dense && events.length === 0 && (
-            <p className="ml-2 border-l border-line py-3 pl-6 text-sm text-ink-faint">
+            <p className="ml-2 border-l border-rule py-3 pl-6 text-sm text-ink-faint">
               No meals, medication, or activity logged on this day.
             </p>
           )}
@@ -101,29 +101,10 @@ function EntryContent({ entry }: { entry: TimelineEntry }) {
   }
 
   return (
-    <span className="text-sm text-ink">
-      <span className="text-ink-faint">{eventIcon(entry.eventType)} </span>
-      {entry.label}
-    </span>
+    <span className="text-sm text-ink">{entry.label}</span>
   );
 }
 
-function eventIcon(type: TimelineEventType): string {
-  const icons: Partial<Record<TimelineEventType, string>> = {
-    meal_started: '🍽',
-    meal_ended: '🍽',
-    medication_taken: '💊',
-    exercise_started: '🚶',
-    exercise_ended: '🚶',
-    sleep_started: '🌙',
-    sleep_ended: '☀',
-    stress_reported: '⚡',
-    symptom_reported: '⚑',
-    lab_collected: '🧪',
-    appointment: '📅',
-  };
-  return icons[type] ?? '•';
-}
 
 function groupByDay(entries: TimelineEntry[]): [string, TimelineEntry[]][] {
   const groups = new Map<string, TimelineEntry[]>();

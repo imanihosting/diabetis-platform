@@ -12,12 +12,12 @@ export function PageHeader({
 }) {
   return (
     <header className="mx-auto max-w-6xl px-7 pb-[clamp(2rem,5vw,3.5rem)] pt-[clamp(1.5rem,4vw,3rem)] sm:px-6">
-      <p className="text-sm text-[var(--brand-ink-3)]">{eyebrow}</p>
+      <p className="text-sm text-[var(--ink-faint)]">{eyebrow}</p>
       <h1 className="mt-4 max-w-[20ch] text-statement font-semibold text-balance">
         {heading}
       </h1>
       {children && (
-        <div className="mt-7 max-w-[62ch] space-y-5 text-lede text-[var(--brand-ink-2)]">
+        <div className="mt-7 max-w-[62ch] space-y-5 text-lede text-[var(--ink-muted)]">
           {children}
         </div>
       )}
@@ -38,17 +38,17 @@ export function Prose({
   aside?: ReactNode;
 }) {
   return (
-    <section className="border-t border-[var(--brand-rule)] py-[clamp(2.75rem,6vw,5rem)]">
+    <section className="border-t border-[var(--rule)] py-[clamp(2.75rem,6vw,5rem)]">
       <div className="mx-auto max-w-6xl px-7 sm:px-6">
         <div className="grid gap-x-16 gap-y-8 lg:grid-cols-12">
           <div className="lg:col-span-5">
             {eyebrow && (
-              <p className="text-sm text-[var(--brand-ink-3)]">{eyebrow}</p>
+              <p className="text-sm text-[var(--ink-faint)]">{eyebrow}</p>
             )}
             <h2 className="mt-3 text-fold font-semibold text-balance">{heading}</h2>
           </div>
 
-          <div className="max-w-[68ch] space-y-5 text-lede leading-relaxed text-[var(--brand-ink-2)] lg:col-span-7">
+          <div className="max-w-[68ch] space-y-5 text-lede leading-relaxed text-[var(--ink-muted)] lg:col-span-7">
             {children}
             {aside}
           </div>

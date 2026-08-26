@@ -44,19 +44,19 @@ const STEPS = [
  */
 export function LoopSteps() {
   return (
-    <ol className="border-t border-[var(--brand-rule)]">
+    <ol className="border-t border-[var(--rule)]">
       {STEPS.map((step) => (
         <li
           key={step.n}
-          className="grid gap-x-8 gap-y-2 border-b border-[var(--brand-rule)] py-6 sm:grid-cols-12"
+          className="grid gap-x-8 gap-y-2 border-b border-[var(--rule)] py-6 sm:grid-cols-12"
         >
-          <p className="measure text-sm text-[var(--brand-ink-3)] sm:col-span-1">
+          <p className="measure text-sm text-[var(--ink-faint)] sm:col-span-1">
             {String(step.n).padStart(2, '0')}
           </p>
-          <h3 className="text-lede font-semibold text-[var(--brand-ink)] sm:col-span-3">
+          <h3 className="text-lede font-semibold text-[var(--ink)] sm:col-span-3">
             {step.title}
           </h3>
-          <p className="max-w-[62ch] leading-relaxed text-[var(--brand-ink-2)] sm:col-span-8">
+          <p className="max-w-[62ch] leading-relaxed text-[var(--ink-muted)] sm:col-span-8">
             {step.body}
           </p>
         </li>

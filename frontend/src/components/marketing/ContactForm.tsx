@@ -54,14 +54,14 @@ export function ContactForm() {
 
   if (state === 'done') {
     return (
-      <div role="status" className="border border-[var(--brand-rule)] bg-[var(--paper-raised)] p-8">
-        <p className="flex items-baseline gap-2.5 text-lede text-[var(--brand-ink)]">
+      <div role="status" className="border border-[var(--rule)] bg-[var(--paper-raised)] p-8">
+        <p className="flex items-baseline gap-2.5 text-lede text-[var(--ink)]">
           <span aria-hidden className="text-[var(--in-range-text)]">
             &#10003;
           </span>
           That reached us.
         </p>
-        <p className="mt-3 max-w-[52ch] leading-relaxed text-[var(--brand-ink-2)]">
+        <p className="mt-3 max-w-[52ch] leading-relaxed text-[var(--ink-muted)]">
           We read everything and reply to {email}. If it is urgent and clinical,
           please do not wait on us: contact your clinician or your local
           emergency service.
@@ -96,14 +96,14 @@ export function ContactForm() {
       </div>
 
       <div className="mt-6">
-        <label htmlFor="contact-topic" className="block text-sm text-[var(--brand-ink-2)]">
+        <label htmlFor="contact-topic" className="block text-sm text-[var(--ink-muted)]">
           What is this about?
         </label>
         <select
           id="contact-topic"
           value={topic}
           onChange={(e) => setTopic(e.target.value as ContactTopic)}
-          className="mt-2 w-full border-b border-[var(--brand-rule)] bg-transparent pb-2 text-lede text-[var(--brand-ink)] focus:border-[var(--brand-ink)] sm:w-auto sm:min-w-[22rem]"
+          className="mt-2 w-full border-b border-[var(--rule)] bg-transparent pb-2 text-lede text-[var(--ink)] focus:border-[var(--ink)] sm:w-auto sm:min-w-[22rem]"
         >
           {TOPICS.map((t) => (
             <option key={t.value} value={t.value}>
@@ -114,7 +114,7 @@ export function ContactForm() {
       </div>
 
       <div className="mt-6">
-        <label htmlFor="contact-message" className="block text-sm text-[var(--brand-ink-2)]">
+        <label htmlFor="contact-message" className="block text-sm text-[var(--ink-muted)]">
           Message
         </label>
         <textarea
@@ -128,16 +128,16 @@ export function ContactForm() {
             setMessage(e.target.value);
             if (errors.message) setErrors((err) => ({ ...err, message: '' }));
           }}
-          className="mt-2 w-full resize-y border border-[var(--brand-rule)] bg-[var(--paper-raised)] p-4 text-[1.0625rem] leading-relaxed text-[var(--brand-ink)] focus:border-[var(--brand-ink)]"
+          className="mt-2 w-full resize-y border border-[var(--rule)] bg-[var(--paper-raised)] p-4 text-[1.0625rem] leading-relaxed text-[var(--ink)] focus:border-[var(--ink)]"
         />
 
         <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-          <p id="contact-message-hint" className="max-w-[58ch] text-xs leading-relaxed text-[var(--brand-ink-3)]">
+          <p id="contact-message-hint" className="max-w-[58ch] text-xs leading-relaxed text-[var(--ink-faint)]">
             Please leave out medical details. This is an ordinary support inbox,
             not part of your health record, and we would rather not hold
             something you did not mean to send.
           </p>
-          <p className="measure shrink-0 text-xs text-[var(--brand-ink-3)]">
+          <p className="measure shrink-0 text-xs text-[var(--ink-faint)]">
             {message.length}/{MAX}
           </p>
         </div>
@@ -158,7 +158,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={state === 'submitting'}
-        className="mt-8 bg-[var(--brand-ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85 disabled:opacity-50"
+        className="mt-8 bg-[var(--ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85 disabled:opacity-50"
       >
         {state === 'submitting' ? 'Sending' : 'Send message'}
       </button>
@@ -187,10 +187,10 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm text-[var(--brand-ink-2)]">
+      <label htmlFor={id} className="block text-sm text-[var(--ink-muted)]">
         {label}
         {optional && (
-          <span className="text-[var(--brand-ink-3)]"> (optional)</span>
+          <span className="text-[var(--ink-faint)]"> (optional)</span>
         )}
       </label>
       <input
@@ -201,7 +201,7 @@ function Field({
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full border-b border-[var(--brand-rule)] bg-transparent pb-2 text-lede text-[var(--brand-ink)] focus:border-[var(--brand-ink)]"
+        className="mt-2 w-full border-b border-[var(--rule)] bg-transparent pb-2 text-lede text-[var(--ink)] focus:border-[var(--ink)]"
       />
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-2 text-sm text-[var(--below-range-text)]">

@@ -113,7 +113,7 @@ export default function HowItWorksPage() {
           Questions about any of this belong on the{' '}
           <Link
             href="/contact"
-            className="text-[var(--brand-ink)] underline underline-offset-4"
+            className="text-[var(--ink)] underline underline-offset-4"
           >
             contact page
           </Link>

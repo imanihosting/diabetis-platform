@@ -23,12 +23,12 @@ export function GlucoseValue({
 }) {
   const mmol = unit === 'mmol/L' ? value : value / 18.0182;
   const band =
-    mmol < TARGET_LOW_MMOL ? 'below' : mmol > TARGET_HIGH_MMOL ? 'above' : 'in';
+    mmol < TARGET_LOW_MMOL ? 'below': mmol > TARGET_HIGH_MMOL ?'above':'in';
 
   const bandStyles = {
-    below: 'text-range-below',
-    in: 'text-range-in',
-    above: 'text-range-above',
+    below: 'text-zone-belowText',
+    in: 'text-zone-inText',
+    above: 'text-zone-aboveText',
   } as const;
 
   const bandLabels = {
@@ -41,9 +41,9 @@ export function GlucoseValue({
     <span className={cn('inline-flex items-baseline gap-1.5', className)}>
       <span
         className={cn(
-          'tabular font-medium',
+          'measure font-medium',
           bandStyles[band],
-          size === 'lg' ? 'text-reading' : 'text-base',
+          size === 'lg' ? 'text-reading':'text-base',
         )}
       >
         {value}

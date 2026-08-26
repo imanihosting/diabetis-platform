@@ -80,7 +80,7 @@ export default function AboutPage() {
         <p>
           <Link
             href="/how-it-works"
-            className="text-[var(--brand-ink)] underline underline-offset-4"
+            className="text-[var(--ink)] underline underline-offset-4"
           >
             How this works
           </Link>{' '}
@@ -98,7 +98,7 @@ export default function AboutPage() {
         <p>
           If you want to use it now, bring a CSV from your meter or CGM. If you
           would rather wait, leave an address on the{' '}
-          <Link href="/" className="text-[var(--brand-ink)] underline underline-offset-4">
+          <Link href="/" className="text-[var(--ink)] underline underline-offset-4">
             home page
           </Link>{' '}
           and we will write when there is something worth writing about.

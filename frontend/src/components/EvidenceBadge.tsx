@@ -2,10 +2,10 @@ import { evidenceStrength, type EvidenceStrength } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 const STYLES: Record<EvidenceStrength, string> = {
-  insufficient: 'border-evidence-insufficient/40 text-evidence-insufficient',
-  weak: 'border-evidence-weak/40 text-evidence-weak',
-  moderate: 'border-evidence-moderate/40 text-evidence-moderate',
-  strong: 'border-evidence-strong/40 text-evidence-strong',
+  insufficient: 'border-[color-mix(in_oklch,var(--evidence-insufficient)_45%,transparent)] text-evidence-insufficient',
+  weak: 'border-[color-mix(in_oklch,var(--evidence-weak)_45%,transparent)] text-evidence-weak',
+  moderate: 'border-[color-mix(in_oklch,var(--evidence-moderate)_45%,transparent)] text-evidence-moderate',
+  strong: 'border-[color-mix(in_oklch,var(--evidence-strong)_45%,transparent)] text-evidence-strong',
 };
 
 const LABELS: Record<EvidenceStrength, string> = {
@@ -36,13 +36,13 @@ export function EvidenceBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-2 rounded-sm border px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-2  border px-2 py-0.5 text-xs font-medium',
         STYLES[strength],
         className,
       )}
     >
       {LABELS[strength]}
-      <span className="tabular opacity-70">n={sampleCount}</span>
+      <span className="measure opacity-70">n={sampleCount}</span>
     </span>
   );
 }

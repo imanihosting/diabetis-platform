@@ -31,11 +31,11 @@ export default function TimelinePage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="rounded-md border border-line px-6 py-10 text-center">
+        <div className="border border-rule px-6 py-10 text-center">
           <p className="text-ink">You are not signed in.</p>
           <a
             href="/login"
-            className="mt-3 inline-block text-sm text-accent underline underline-offset-4"
+            className="mt-3 inline-block text-sm text-ink underline underline-offset-4"
           >
             Sign in to see your timeline
           </a>
@@ -56,7 +56,7 @@ export default function TimelinePage() {
           </p>
         </div>
 
-        <div className="flex gap-1 rounded-md border border-line p-0.5" role="group">
+        <div className="flex gap-1 border border-rule p-0.5" role="group">
           {PERIODS.map((period) => (
             <button
               key={period.days}
@@ -66,7 +66,7 @@ export default function TimelinePage() {
               className={cn(
                 'rounded px-3 py-1 text-xs transition-colors',
                 days === period.days
-                  ? 'bg-surface-sunken text-ink'
+                  ? 'bg-paper-sunk text-ink'
                   : 'text-ink-faint hover:text-ink-muted',
               )}
             >
@@ -85,7 +85,7 @@ export default function TimelinePage() {
       {timeline.isPending && <p className="text-sm text-ink-faint">Loading timeline…</p>}
 
       {timeline.isError && (
-        <p className="text-sm text-range-below">
+        <p className="text-sm text-zone-belowText">
           Could not load the timeline. {(timeline.error as Error).message}
         </p>
       )}

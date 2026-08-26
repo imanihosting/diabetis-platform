@@ -22,9 +22,9 @@ export function Finding() {
   ];
 
   return (
-    <figure className="border border-[var(--brand-rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
+    <figure className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <span className="text-sm text-[var(--brand-ink-3)]">
+        <span className="text-sm text-[var(--ink-faint)]">
           post_meal_walk_effect
         </span>
         <span className="inline-flex items-baseline gap-2 text-sm">
@@ -33,8 +33,8 @@ export function Finding() {
             className="inline-block h-2 w-2 translate-y-[-1px] rounded-full"
             style={{ background: 'var(--in-range)' }}
           />
-          <span className="text-[var(--brand-ink-2)]">Moderate evidence</span>
-          <span className="measure text-[var(--brand-ink-3)]">n=156</span>
+          <span className="text-[var(--ink-muted)]">Moderate evidence</span>
+          <span className="measure text-[var(--ink-faint)]">n=156</span>
         </span>
       </figcaption>
 
@@ -48,14 +48,14 @@ export function Finding() {
 
       <dl className="mt-8 grid gap-6 sm:grid-cols-2">
         <div>
-          <dt className="text-xs uppercase tracking-[0.08em] text-[var(--brand-ink-3)]">
+          <dt className="text-xs uppercase tracking-[0.08em] text-[var(--ink-faint)]">
             What this does not account for
           </dt>
           <dd>
-            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-[var(--brand-ink-2)]">
+            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-[var(--ink-muted)]">
               {limitations.map((item) => (
                 <li key={item} className="flex gap-2.5">
-                  <span aria-hidden className="text-[var(--brand-ink-3)]">
+                  <span aria-hidden className="text-[var(--ink-faint)]">
                     &#8213;
                   </span>
                   {item}
@@ -66,14 +66,14 @@ export function Finding() {
         </div>
 
         <div>
-          <dt className="text-xs uppercase tracking-[0.08em] text-[var(--brand-ink-3)]">
+          <dt className="text-xs uppercase tracking-[0.08em] text-[var(--ink-faint)]">
             What would sharpen it
           </dt>
           <dd>
-            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-[var(--brand-ink-2)]">
+            <ul className="mt-3 space-y-2 text-sm leading-relaxed text-[var(--ink-muted)]">
               {improve.map((item) => (
                 <li key={item} className="flex gap-2.5">
-                  <span aria-hidden className="text-[var(--brand-ink-3)]">
+                  <span aria-hidden className="text-[var(--ink-faint)]">
                     &#8213;
                   </span>
                   {item}

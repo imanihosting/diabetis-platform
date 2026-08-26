@@ -17,8 +17,8 @@ export default function CookiesPage() {
     >
       <Clause n={1} title="The only cookie we set">
         <div className="not-prose overflow-x-auto">
-          <table className="w-full min-w-[34rem] border border-[var(--brand-rule)] text-sm">
-            <tbody className="divide-y divide-[var(--brand-rule)]">
+          <table className="w-full min-w-[34rem] border border-[var(--rule)] text-sm">
+            <tbody className="divide-y divide-[var(--rule)]">
               {[
                 ['Name', 'wellovue_refresh'],
                 ['Purpose', 'Keeps you signed in, and lets a reload restore your session'],
@@ -31,11 +31,11 @@ export default function CookiesPage() {
                 <tr key={k}>
                   <th
                     scope="row"
-                    className="w-[13rem] bg-[var(--paper-sunk)] px-4 py-3 text-left align-top font-medium text-[var(--brand-ink)]"
+                    className="w-[13rem] bg-[var(--paper-sunk)] px-4 py-3 text-left align-top font-medium text-[var(--ink)]"
                   >
                     {k}
                   </th>
-                  <td className="px-4 py-3 align-top text-[var(--brand-ink-2)]">{v}</td>
+                  <td className="px-4 py-3 align-top text-[var(--ink-muted)]">{v}</td>
                 </tr>
               ))}
             </tbody>
