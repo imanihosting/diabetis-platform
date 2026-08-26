@@ -23,6 +23,7 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
   app.use(helmet());
+  // cookie-parser is applied in AppModule so tests share the behaviour.
   app.enableCors({
     origin: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
     credentials: true,
@@ -30,6 +31,7 @@ async function bootstrap(): Promise<void> {
   // No global ValidationPipe: request validation is done per-route with
   // ZodValidationPipe against the schemas in @diabetes/types, so the API
   // enforces exactly the contract the frontend compiles against.
+  // ZodExceptionFilter is registered in AppModule.
   app.enableShutdownHooks();
 
   // API docs are a development aid; they describe every health-data endpoint,

@@ -20,6 +20,9 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
+    # Without these, strict mode reports every pandas/scipy call as untyped.
+    "pandas-stubs>=2.2.0",
+    "scipy-stubs>=1.14.0",
 ]
 
 [tool.ruff]
@@ -33,5 +36,15 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.11"
+# Matches the runtime in metabolic-engine/Dockerfile.
+python_version = "3.12"
 strict = true
+files = ["app", "tests"]
+
+[[tool.mypy.overrides]]
+# pandas-stubs types DataFrame operations loosely: most element access and
+# arithmetic returns Any, so strict mode flags otherwise-correct code. The
+# engines are covered by tests that assert on real numbers instead.
+module = "app.engines.*"
+disallow_any_expr = false
+warn_return_any = false

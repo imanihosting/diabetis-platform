@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
+import { swcTransform } from './vitest-swc-plugin';
 
 /**
  * Loads .env.test for local runs, without clobbering variables the environment
@@ -39,10 +39,7 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
-  plugins: [
-    // Vitest transforms with esbuild, which cannot emit decorator metadata.
-    // Without it NestJS dependency injection resolves every constructor
-    // parameter as undefined. SWC emits the metadata NestJS needs.
-    swc.vite({ module: { type: 'es6' } }),
-  ],
+  // NestJS DI needs decorator metadata that esbuild cannot emit — see
+  // vitest-swc-plugin.ts.
+  plugins: [swcTransform()],
 });

@@ -2,8 +2,9 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   createTimelineEventSchema,
-  timelineQuerySchema,
+  timelineQueryInputSchema,
   type CreateTimelineEventInput,
+  type TimelineQueryInput,
 } from '@diabetes/types';
 import { TimelineService } from './timeline.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -23,16 +24,10 @@ export class TimelineController {
   })
   query(
     @CurrentUser() user: AuthenticatedUser,
-    @Query() query: Record<string, unknown>,
+    @Query(new ZodValidationPipe(timelineQueryInputSchema))
+    query: TimelineQueryInput,
   ) {
-    const defaults = {
-      to: query.to ?? new Date().toISOString(),
-      from:
-        query.from ??
-        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    };
-    const parsed = timelineQuerySchema.parse({ ...query, ...defaults });
-    return this.timeline.query(user.id, parsed);
+    return this.timeline.query(user.id, query);
   }
 
   @Post('events')

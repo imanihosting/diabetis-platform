@@ -1,5 +1,5 @@
 import type {
-  AuthResponse,
+  ClientAuthResponse,
   GlucoseSummary,
   LoginInput,
   Meal,
@@ -12,11 +12,15 @@ import type {
 /**
  * Typed client for the backend.
  *
- * Requests go to a same-origin `/api` path that Next rewrites to the backend,
- * so the access token never travels in a cross-site request.
+ * Requests go to a same-origin `/api` path proxied to the backend, so the
+ * access token never travels in a cross-site request.
+ *
+ * Nothing is written to localStorage. The refresh token lives in an HttpOnly
+ * cookie the page cannot read, and the access token is held in memory for the
+ * lifetime of the tab. An XSS can therefore use the session while it is
+ * running, but cannot walk away with a credential that outlives the page —
+ * which for a health record is the difference that matters.
  */
-const TOKEN_KEY = 'diabetes.accessToken';
-const REFRESH_KEY = 'diabetes.refreshToken';
 
 export class ApiError extends Error {
   constructor(
@@ -29,38 +33,53 @@ export class ApiError extends Error {
   }
 }
 
+let accessToken: string | null = null;
+
 export const tokenStore = {
-  get(): string | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.localStorage.getItem(TOKEN_KEY);
-    } catch {
-      // Private browsing and blocked site data both throw here.
-      return null;
-    }
+  get: (): string | null => accessToken,
+  set: (token: string): void => {
+    accessToken = token;
   },
-  set(access: string, refresh: string): void {
-    try {
-      window.localStorage.setItem(TOKEN_KEY, access);
-      window.localStorage.setItem(REFRESH_KEY, refresh);
-    } catch {
-      /* Session simply will not persist across reloads. */
-    }
-  },
-  clear(): void {
-    try {
-      window.localStorage.removeItem(TOKEN_KEY);
-      window.localStorage.removeItem(REFRESH_KEY);
-    } catch {
-      /* nothing to clean up */
-    }
+  clear: (): void => {
+    accessToken = null;
   },
 };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/**
+ * Guards against a burst of concurrent 401s each firing its own refresh, which
+ * would rotate the single-use refresh cookie several times and invalidate the
+ * session it was trying to save.
+ */
+let inFlightRefresh: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  inFlightRefresh ??= (async () => {
+    try {
+      const res = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return false;
+
+      const payload = (await res.json()) as ClientAuthResponse;
+      tokenStore.set(payload.tokens.accessToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      inFlightRefresh = null;
+    }
+  })();
+
+  return inFlightRefresh;
+}
+
+async function send(path: string, init: RequestInit): Promise<Response> {
   const token = tokenStore.get();
-  const res = await fetch(`/api${path}`, {
+  return fetch(`/api${path}`, {
     ...init,
+    // Sends the refresh cookie on the auth routes it is scoped to.
+    credentials: 'same-origin',
     headers: {
       ...(init.body && !(init.body instanceof FormData)
         ? { 'content-type': 'application/json' }
@@ -69,6 +88,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let res = await send(path, init);
+
+  // The access token is short-lived by design. A 401 usually means it simply
+  // expired, so try once to renew the session from the cookie before
+  // surfacing a failure the user would experience as being logged out.
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    if (await refreshSession()) {
+      res = await send(path, init);
+    }
+  }
 
   if (res.status === 204) return undefined as T;
 
@@ -85,18 +117,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+export { refreshSession };
+
 export const api = {
   auth: {
     register: (input: RegisterInput) =>
-      request<AuthResponse>('/auth/register', {
+      request<ClientAuthResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
     login: (input: LoginInput) =>
-      request<AuthResponse>('/auth/login', {
+      request<ClientAuthResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    // The server revokes the refresh token and clears its cookie.
     logout: () => request<void>('/auth/logout', { method: 'POST', body: '{}' }),
   },
 

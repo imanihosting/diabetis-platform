@@ -26,6 +26,14 @@ export class AuditService {
 
   constructor(private readonly db: DatabaseService) {}
 
+  /**
+   * Writes an audit entry, throwing if it cannot.
+   *
+   * Failing loudly is deliberate: an unrecorded touch of health data is worse
+   * than a failed request, because it leaves no trace that the access
+   * happened. Pass the transaction client whenever this describes a write, so
+   * the record and its audit entry commit or roll back together.
+   */
   async record(entry: AuditEntry, client?: PoolClient): Promise<void> {
     const sql = `
       insert into audit.events
@@ -46,13 +54,24 @@ export class AuditService {
       return;
     }
 
-    // Outside a transaction an audit failure must not take the request down,
-    // but it must be visible in the logs.
+    await this.db.query(sql, params);
+  }
+
+  /**
+   * Records an entry without failing the caller if the write does not land.
+   *
+   * Deliberately separate and deliberately verbose: swallowing an audit
+   * failure should be a decision someone made on purpose and can grep for,
+   * never the default a caller gets by forgetting to pass a client. Use only
+   * where the audited action has already completed irreversibly and failing
+   * the request would misrepresent what happened.
+   */
+  async recordBestEffort(entry: AuditEntry): Promise<void> {
     try {
-      await this.db.query(sql, params);
+      await this.record(entry);
     } catch (err) {
       this.logger.error(
-        `Failed to write audit entry ${entry.action}: ${(err as Error).message}`,
+        `Audit entry ${entry.action} was not recorded: ${(err as Error).message}`,
       );
     }
   }

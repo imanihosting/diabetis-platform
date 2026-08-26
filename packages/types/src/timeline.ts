@@ -52,6 +52,35 @@ export const timelineQuerySchema = z.object({
 export type TimelineQuery = z.infer<typeof timelineQuerySchema>;
 
 /**
+ * What arrives on the wire: `from` and `to` are optional and default to the
+ * last seven days, and `eventTypes` may be a single value or a repeated one.
+ *
+ * Defaults belong here rather than in the controller so one pipe validates the
+ * whole query — nothing is parsed by hand, so bad input is always a 400.
+ */
+export const timelineQueryInputSchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    eventTypes: z
+      .union([timelineEventTypeSchema, z.array(timelineEventTypeSchema)])
+      .optional()
+      .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])),
+    limit: z.coerce.number().int().min(1).max(2000).default(500),
+  })
+  .transform((v) => {
+    const to = v.to ?? new Date();
+    return {
+      to,
+      from: v.from ?? new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000),
+      eventTypes: v.eventTypes,
+      limit: v.limit,
+    };
+  })
+  .refine((v) => v.to > v.from, { message: '`from` must be before `to`' });
+export type TimelineQueryInput = z.infer<typeof timelineQueryInputSchema>;
+
+/**
  * A timeline entry as the UI consumes it: the raw event plus the display
  * metadata the interface needs to show provenance honestly.
  */

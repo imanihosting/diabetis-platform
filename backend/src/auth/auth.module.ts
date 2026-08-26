@@ -10,7 +10,9 @@ import { ENV, type Env } from '../config/env';
       inject: [ENV],
       useFactory: (env: Env) => ({
         secret: env.JWT_SECRET,
-        signOptions: { expiresIn: env.JWT_ACCESS_TTL },
+        // Env validation guarantees the `<number><unit>` shape that `ms`
+        // requires; its type is narrower than the schema can express.
+        signOptions: { expiresIn: env.JWT_ACCESS_TTL as `${number}m` },
       }),
     }),
   ],

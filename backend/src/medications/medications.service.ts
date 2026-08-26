@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateMedicationRecordInput,
   MedicationRecord,
@@ -24,35 +24,41 @@ export class MedicationsService {
     userId: string,
     input: CreateMedicationRecordInput,
   ): Promise<MedicationRecord> {
-    const row = await this.db.queryOne<MedicationRow>(
-      `insert into clinical.medication_records
-         (user_id, medication_name, dose_text, route, frequency_text,
-          started_on, ended_on, status, source)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       returning *`,
-      [
-        userId,
-        input.medicationName,
-        input.doseText ?? null,
-        input.route ?? null,
-        input.frequencyText ?? null,
-        input.startedOn ?? null,
-        input.endedOn ?? null,
-        input.status,
-        input.source,
-      ],
-    );
+    return this.db.transaction(async (client) => {
+      const { rows } = await client.query<MedicationRow>(
+        `insert into clinical.medication_records
+           (user_id, medication_name, dose_text, route, frequency_text,
+            started_on, ended_on, status, source)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         returning *`,
+        [
+          userId,
+          input.medicationName,
+          input.doseText ?? null,
+          input.route ?? null,
+          input.frequencyText ?? null,
+          input.startedOn ?? null,
+          input.endedOn ?? null,
+          input.status,
+          input.source,
+        ],
+      );
+      const row = rows[0];
 
-    await this.audit.record({
-      actorUserId: userId,
-      subjectUserId: userId,
-      action: 'medication.create',
-      resourceType: 'medication_record',
-      resourceId: row!.id,
-      metadata: { medicationName: input.medicationName },
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'medication.create',
+          resourceType: 'medication_record',
+          resourceId: row.id,
+          metadata: { medicationName: input.medicationName },
+        },
+        client,
+      );
+
+      return toMedication(row);
     });
-
-    return toMedication(row!);
   }
 
   async list(userId: string): Promise<MedicationRecord[]> {
@@ -65,25 +71,56 @@ export class MedicationsService {
     return rows.map(toMedication);
   }
 
-  /** Records that a dose was taken, as a timeline event. */
+  /**
+   * Records that a dose was taken, as a timeline event.
+   *
+   * The medication record is verified to belong to the caller first. Without
+   * that check any authenticated user could plant a timeline entry — and a
+   * matching audit entry — referencing someone else's medication record,
+   * corrupting both the clinical picture and the access trail.
+   */
   async recordTaken(
     userId: string,
     medicationRecordId: string,
     takenAt: Date,
   ): Promise<void> {
-    await this.db.query(
-      `insert into metabolic.events
-         (user_id, occurred_at, event_type, source, confidence, payload)
-       values ($1, $2, 'medication_taken', 'manual', 1.0, $3)`,
-      [userId, takenAt, JSON.stringify({ medicationRecordId })],
+    const owned = await this.db.queryOne<{ id: string; medication_name: string }>(
+      `select id, medication_name from clinical.medication_records
+        where id = $1 and user_id = $2`,
+      [medicationRecordId, userId],
     );
 
-    await this.audit.record({
-      actorUserId: userId,
-      subjectUserId: userId,
-      action: 'medication.taken',
-      resourceType: 'medication_record',
-      resourceId: medicationRecordId,
+    // Same response whether the record belongs to someone else or does not
+    // exist, so this cannot be used to probe for valid record ids.
+    if (!owned) {
+      throw new NotFoundException('Medication record not found');
+    }
+
+    await this.db.transaction(async (client) => {
+      await client.query(
+        `insert into metabolic.events
+           (user_id, occurred_at, event_type, source, confidence, payload)
+         values ($1, $2, 'medication_taken', 'manual', 1.0, $3)`,
+        [
+          userId,
+          takenAt,
+          JSON.stringify({
+            medicationRecordId,
+            medicationName: owned.medication_name,
+          }),
+        ],
+      );
+
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'medication.taken',
+          resourceType: 'medication_record',
+          resourceId: medicationRecordId,
+        },
+        client,
+      );
     });
   }
 }

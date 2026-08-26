@@ -40,11 +40,12 @@ app = FastAPI(
 async def require_service_token(request: Request) -> None:
     """Only the backend should reach this service.
 
-    When no token is configured the check is skipped, which is intended for
-    local development only — set METABOLIC_ENGINE_TOKEN everywhere else.
+    The check is skipped only when no token is configured, which Settings
+    permits solely in development — outside it, a missing token fails startup
+    rather than silently disabling authentication.
     """
     settings = get_settings()
-    if settings.metabolic_engine_token is None:
+    if not settings.metabolic_engine_token:
         return
 
     header = request.headers.get("authorization", "")

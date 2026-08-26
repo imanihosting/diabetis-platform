@@ -9,6 +9,19 @@ import { AppModule } from '../../src/app.module';
  * real guards. Nothing is stubbed, so this exercises the same path a browser
  * takes.
  */
+function setCookies(res: request.Response): string[] {
+  const raw = res.headers['set-cookie'];
+  if (!raw) return [];
+  return Array.isArray(raw) ? raw : [raw];
+}
+
+/** The refresh cookie in `name=value` form, ready to send back. */
+function refreshCookie(res: request.Response): string {
+  const cookie = setCookies(res).find((c) => c.startsWith('diabetes_refresh='));
+  if (!cookie) throw new Error('No refresh cookie was set');
+  return cookie.split(';')[0];
+}
+
 describe('API end to end', () => {
   let app: INestApplication;
   let http: () => request.Agent;
@@ -86,16 +99,68 @@ describe('API end to end', () => {
       expect(wrongPassword.body.message).toBe(unknownAccount.body.message);
     });
 
-    it('rotates the refresh token, invalidating the used one', async () => {
+    it('never puts the refresh token in the response body', async () => {
+      const res = await http()
+        .post('/api/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      // The refresh token is the long-lived credential; if it reaches the page
+      // as data, any XSS can walk away with a 30-day foothold.
+      expect(res.body.tokens.refreshToken).toBeUndefined();
+      expect(JSON.stringify(res.body)).not.toMatch(/refreshToken/);
+    });
+
+    it('sets the refresh cookie HttpOnly, SameSite=Strict, and scoped to /api/auth', async () => {
+      const res = await http()
+        .post('/api/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      const cookie = setCookies(res).find((c) => c.startsWith('diabetes_refresh='));
+      expect(cookie).toBeDefined();
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/SameSite=Strict/i);
+      expect(cookie).toMatch(/Path=\/api\/auth/i);
+    });
+
+    it('rotates the refresh cookie, invalidating the used one', async () => {
       const login = await http()
         .post('/api/auth/login')
         .send({ email, password })
         .expect(200);
-      const used = login.body.tokens.refreshToken;
+      const used = refreshCookie(login);
 
-      await http().post('/api/auth/refresh').send({ refreshToken: used }).expect(200);
+      const rotated = await http()
+        .post('/api/auth/refresh')
+        .set('Cookie', used)
+        .expect(200);
+      expect(rotated.body.tokens.accessToken).toBeTruthy();
+
       // A stolen refresh token is useful at most once.
-      await http().post('/api/auth/refresh').send({ refreshToken: used }).expect(401);
+      await http().post('/api/auth/refresh').set('Cookie', used).expect(401);
+    });
+
+    it('clears the cookie when a spent refresh token is replayed', async () => {
+      const login = await http()
+        .post('/api/auth/login')
+        .send({ email, password })
+        .expect(200);
+      const used = refreshCookie(login);
+      await http().post('/api/auth/refresh').set('Cookie', used).expect(200);
+
+      const replay = await http()
+        .post('/api/auth/refresh')
+        .set('Cookie', used)
+        .expect(401);
+
+      // Otherwise the browser keeps retrying a token that can never work.
+      const cleared = setCookies(replay).find((c) => c.startsWith('diabetes_refresh='));
+      expect(cleared).toMatch(/diabetes_refresh=;/);
+    });
+
+    it('refuses to refresh without a cookie', async () => {
+      await http().post('/api/auth/refresh').expect(401);
     });
   });
 
@@ -338,6 +403,125 @@ describe('API end to end', () => {
         expect(typeof entry.confidence).toBe('number');
         expect(typeof entry.isInferred).toBe('boolean');
       }
+    });
+  });
+
+  describe('cross-user isolation', () => {
+    const auth = () => ({ authorization: `Bearer ${accessToken}` });
+    let othersMedicationId: string;
+    let othersToken: string;
+
+    beforeAll(async () => {
+      // A second account whose records the first must never be able to touch.
+      const other = await http()
+        .post('/api/auth/register')
+        .send({ email: `other-${Date.now()}@test.local`, password })
+        .expect(201);
+      othersToken = other.body.tokens.accessToken;
+
+      const med = await http()
+        .post('/api/medications')
+        .set({ authorization: `Bearer ${othersToken}` })
+        .send({ medicationName: 'Gliclazide', status: 'active', source: 'manual' })
+        .expect(201);
+      othersMedicationId = med.body.id;
+    });
+
+    it('refuses to log a dose against another user\'s medication record', async () => {
+      // Without an ownership check this would plant a timeline entry and a
+      // matching audit entry referencing a record the caller does not own.
+      await http()
+        .post(`/api/medications/${othersMedicationId}/taken`)
+        .set(auth())
+        .send({ takenAt: new Date().toISOString() })
+        .expect(404);
+    });
+
+    it('answers the same way for a record that does not exist', async () => {
+      // Identical response, so this cannot be used to probe for valid ids.
+      await http()
+        .post('/api/medications/00000000-0000-0000-0000-000000000000/taken')
+        .set(auth())
+        .send({ takenAt: new Date().toISOString() })
+        .expect(404);
+    });
+
+    it('writes no timeline event when the ownership check fails', async () => {
+      const from = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const to = new Date(Date.now() + 60 * 1000).toISOString();
+      const timeline = await http()
+        .get(`/api/timeline?from=${from}&to=${to}&limit=500`)
+        .set(auth())
+        .expect(200);
+
+      const planted = timeline.body.filter(
+        (e: { eventType: string; payload: Record<string, unknown> }) =>
+          e.eventType === 'medication_taken' &&
+          e.payload.medicationRecordId === othersMedicationId,
+      );
+      expect(planted).toHaveLength(0);
+    });
+
+    it('does not leak another user\'s medications into this user\'s list', async () => {
+      const res = await http().get('/api/medications').set(auth()).expect(200);
+      const ids = res.body.map((m: { id: string }) => m.id);
+      expect(ids).not.toContain(othersMedicationId);
+    });
+
+    it('does not leak another user\'s meals into this user\'s timeline', async () => {
+      const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const to = new Date().toISOString();
+      const res = await http()
+        .get(`/api/timeline?from=${from}&to=${to}&limit=500`)
+        .set({ authorization: `Bearer ${othersToken}` })
+        .expect(200);
+
+      // The second account logged nothing but a medication record.
+      const meals = res.body.filter(
+        (e: { eventType: string }) => e.eventType === 'meal_started',
+      );
+      expect(meals).toHaveLength(0);
+    });
+  });
+
+  describe('input validation', () => {
+    const auth = () => ({ authorization: `Bearer ${accessToken}` });
+
+    it('returns 400, not 500, for an unrecognised glucose unit', async () => {
+      const from = new Date(Date.now() - 60_000).toISOString();
+      const to = new Date().toISOString();
+      const res = await http()
+        .get(`/api/glucose/summary?from=${from}&to=${to}&unit=bananas`)
+        .set(auth())
+        .expect(400);
+
+      expect(res.body.message).toBe('Validation failed');
+      expect(res.body.issues).toBeInstanceOf(Array);
+    });
+
+    it('returns 400 for a malformed timeline range', async () => {
+      await http()
+        .get('/api/timeline?from=not-a-date&to=also-not-a-date')
+        .set(auth())
+        .expect(400);
+    });
+
+    it('still reports a 404 as a 404, not a validation error', async () => {
+      // The Zod filter is a catch-all that delegates; a regression there would
+      // turn every ordinary HTTP error into a 400.
+      await http()
+        .get('/api/meals/00000000-0000-0000-0000-000000000000')
+        .set(auth())
+        .expect(404);
+    });
+
+    it('returns 400 when the range is inverted', async () => {
+      const from = new Date().toISOString();
+      const to = new Date(Date.now() - 60_000).toISOString();
+      await http()
+        .get(`/api/glucose/summary?from=${from}&to=${to}`)
+        .set(auth())
+        .expect(400);
     });
   });
 

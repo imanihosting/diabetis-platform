@@ -22,31 +22,37 @@ export class TimelineService {
   ) {}
 
   async addEvent(userId: string, input: CreateTimelineEventInput) {
-    const row = await this.db.queryOne<EventRow>(
-      `insert into metabolic.events
-         (user_id, occurred_at, event_type, source, confidence, payload)
-       values ($1, $2, $3, $4, $5, $6)
-       returning *`,
-      [
-        userId,
-        input.occurredAt,
-        input.eventType,
-        input.source,
-        input.confidence,
-        JSON.stringify(input.payload),
-      ],
-    );
+    return this.db.transaction(async (client) => {
+      const { rows } = await client.query<EventRow>(
+        `insert into metabolic.events
+           (user_id, occurred_at, event_type, source, confidence, payload)
+         values ($1, $2, $3, $4, $5, $6)
+         returning *`,
+        [
+          userId,
+          input.occurredAt,
+          input.eventType,
+          input.source,
+          input.confidence,
+          JSON.stringify(input.payload),
+        ],
+      );
+      const row = rows[0];
 
-    await this.audit.record({
-      actorUserId: userId,
-      subjectUserId: userId,
-      action: 'timeline.event.create',
-      resourceType: 'timeline_event',
-      resourceId: row!.id,
-      metadata: { eventType: input.eventType },
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'timeline.event.create',
+          resourceType: 'timeline_event',
+          resourceId: row.id,
+          metadata: { eventType: input.eventType },
+        },
+        client,
+      );
+
+      return toEntry(row);
     });
-
-    return toEntry(row!);
   }
 
   async query(userId: string, params: TimelineQuery): Promise<TimelineEntry[]> {

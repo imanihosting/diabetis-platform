@@ -17,11 +17,6 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
-});
-export type RefreshInput = z.infer<typeof refreshSchema>;
-
 export const primaryRoleSchema = z.enum(['patient', 'clinician', 'admin']);
 export type PrimaryRole = z.infer<typeof primaryRoleSchema>;
 
@@ -34,6 +29,13 @@ export const userSchema = z.object({
 });
 export type User = z.infer<typeof userSchema>;
 
+/**
+ * Server-internal token pair.
+ *
+ * The refresh token never reaches the browser as data: it is set as an
+ * HttpOnly cookie so page JavaScript cannot read it. See
+ * backend/src/auth/refresh-cookie.ts.
+ */
 export const authTokensSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -46,3 +48,15 @@ export const authResponseSchema = z.object({
   tokens: authTokensSchema,
 });
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+
+/** What the browser actually receives — no refresh token in the payload. */
+export const clientAuthTokensSchema = authTokensSchema.omit({
+  refreshToken: true,
+});
+export type ClientAuthTokens = z.infer<typeof clientAuthTokensSchema>;
+
+export const clientAuthResponseSchema = z.object({
+  user: userSchema,
+  tokens: clientAuthTokensSchema,
+});
+export type ClientAuthResponse = z.infer<typeof clientAuthResponseSchema>;

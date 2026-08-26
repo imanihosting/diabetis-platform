@@ -97,6 +97,21 @@ PL/pgSQL guard triggers are exercised for real rather than mocked.
 | `backend/test/integration/api.spec.ts` | 22 | yes |
 | `metabolic-engine/tests` | 7 | no |
 
+The engine's test stage also runs `ruff` and strict `mypy`, because a type
+checker nobody enforces drifts out of compliance within a week.
+
+### A note on `npm install`
+
+This directory's name contains a space, and npm 11.6.2 silently produces an
+incomplete dependency tree when installing under such a path — packages install
+without error while some of their own dependencies are missing, which surfaces
+much later as `Cannot find module 'vary'` or similar.
+
+`package-lock.json` is therefore generated from a space-free path and committed;
+use `npm ci` here rather than `npm install`. Renaming the directory (to
+`diabetes-platform`, which also fixes the spelling) removes the problem
+entirely.
+
 To iterate on integration tests from your editor, start just the dependencies
 and run the suite locally against them:
 
@@ -141,6 +156,17 @@ it, rather than a confident-looking number built on three readings.
 route requires an explicit `@Public()` decorator, so nothing is exposed by
 omission.
 
+**No credential is readable by page JavaScript.** The refresh token — the
+long-lived one — lives in an HttpOnly, SameSite=Strict cookie scoped to
+`/api/auth`. The short-lived access token is held in memory for the tab's
+lifetime and never written to storage. An XSS can use the session while it is
+running; it cannot walk away with a credential that outlives the page.
+
+**Health-data writes and their audit entries are atomic.** Every write commits
+in one transaction with the audit row describing it. A stored measurement with
+no record of who added it is not an acceptable outcome, so the audit write
+throws rather than being swallowed.
+
 **Migrations are plain SQL.** The schema uses TimescaleDB hypertables, pgvector
 index types, and PL/pgSQL guard triggers that ORM migration DSLs model poorly.
 
@@ -182,7 +208,7 @@ not yet settled. The scaffold takes the reversible option in each case:
 
 | Decision | Current placeholder |
 |---|---|
-| Authentication provider | Local JWT with argon2id. Credentials are isolated in `identity.credentials` so moving to OIDC means dropping one table, not reshaping users. |
+| Authentication provider | Local JWT with argon2id, refresh token in an HttpOnly cookie. Credentials are isolated in `identity.credentials` so moving to OIDC means dropping one table, not reshaping users. |
 | Embedding dimension | `vector(1536)`. Must be set to the real model's dimension before the first production migration — changing it later rewrites the table. |
 | Hosting | None assumed. Everything is containerisable and environment-driven. |
 | Target market and geography | None assumed. FHIR-shaped mappings keep records portable. |

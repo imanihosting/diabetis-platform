@@ -12,9 +12,11 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   createGlucoseSampleSchema,
-  glucoseUnitSchema,
+  glucoseListQuerySchema,
+  glucoseSummaryQuerySchema,
   importGlucoseSchema,
-  type GlucoseUnit,
+  type GlucoseListQuery,
+  type GlucoseSummaryQuery,
 } from '@diabetes/types';
 import { GlucoseService } from './glucose.service';
 import { parseGlucoseCsv } from './csv-parser';
@@ -117,40 +119,18 @@ export class GlucoseController {
   @ApiOperation({ summary: 'List glucose readings in a time range' })
   list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('from') from: string,
-    @Query('to') to: string,
+    @Query(new ZodValidationPipe(glucoseListQuerySchema)) query: GlucoseListQuery,
   ) {
-    const range = parseRange(from, to);
-    return this.glucose.list(user.id, range.from, range.to);
+    return this.glucose.list(user.id, query.from, query.to);
   }
 
   @Get('summary')
   @ApiOperation({ summary: 'Descriptive glucose summary for a time range' })
   summary(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('from') from: string,
-    @Query('to') to: string,
-    @Query('unit') unit?: string,
+    @Query(new ZodValidationPipe(glucoseSummaryQuerySchema))
+    query: GlucoseSummaryQuery,
   ) {
-    const range = parseRange(from, to);
-    const parsedUnit: GlucoseUnit = unit
-      ? glucoseUnitSchema.parse(unit)
-      : 'mmol/L';
-    return this.glucose.summary(user.id, range.from, range.to, parsedUnit);
+    return this.glucose.summary(user.id, query.from, query.to, query.unit);
   }
-}
-
-function parseRange(from?: string, to?: string): { from: Date; to: Date } {
-  const toDate = to ? new Date(to) : new Date();
-  const fromDate = from
-    ? new Date(from)
-    : new Date(toDate.getTime() - 14 * 24 * 60 * 60 * 1000);
-
-  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-    throw new BadRequestException('`from` and `to` must be valid ISO dates');
-  }
-  if (fromDate >= toDate) {
-    throw new BadRequestException('`from` must be before `to`');
-  }
-  return { from: fromDate, to: toDate };
 }

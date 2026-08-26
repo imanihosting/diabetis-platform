@@ -43,7 +43,9 @@ def meal_frame(starts: list[datetime], carbs: float = 45.0) -> pd.DataFrame:
     )
 
 
-def meal_with_response(start: datetime, baseline: float, peak: float):
+def meal_with_response(
+    start: datetime, baseline: float, peak: float
+) -> list[tuple[datetime, float]]:
     """Readings that give a meal a measurable baseline and post-meal peak."""
     return [
         (start - timedelta(minutes=5), baseline),

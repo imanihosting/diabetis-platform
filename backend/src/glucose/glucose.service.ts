@@ -29,33 +29,40 @@ export class GlucoseService {
   ) {}
 
   async create(userId: string, input: CreateGlucoseSampleInput) {
-    const rows = await this.db.query(
-      `insert into metabolic.glucose_samples
-         (user_id, measured_at, glucose_value, unit, trend, source, device_id, quality)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
-       on conflict (user_id, measured_at, source) do nothing
-       returning user_id, measured_at, glucose_value, unit, trend, source, inserted_at`,
-      [
-        userId,
-        input.measuredAt,
-        input.value,
-        input.unit,
-        input.trend ?? null,
-        input.source,
-        input.deviceId ?? null,
-        input.quality ?? null,
-      ],
-    );
+    // The reading and its audit entry commit together: a stored measurement
+    // with no record of who added it is not an acceptable outcome.
+    return this.db.transaction(async (client) => {
+      const { rows } = await client.query(
+        `insert into metabolic.glucose_samples
+           (user_id, measured_at, glucose_value, unit, trend, source, device_id, quality)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (user_id, measured_at, source) do nothing
+         returning user_id, measured_at, glucose_value, unit, trend, source, inserted_at`,
+        [
+          userId,
+          input.measuredAt,
+          input.value,
+          input.unit,
+          input.trend ?? null,
+          input.source,
+          input.deviceId ?? null,
+          input.quality ?? null,
+        ],
+      );
 
-    await this.audit.record({
-      actorUserId: userId,
-      subjectUserId: userId,
-      action: 'glucose.create',
-      resourceType: 'glucose_sample',
-      metadata: { measuredAt: input.measuredAt, source: input.source },
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'glucose.create',
+          resourceType: 'glucose_sample',
+          metadata: { measuredAt: input.measuredAt, source: input.source },
+        },
+        client,
+      );
+
+      return rows[0] ?? null;
     });
-
-    return rows[0] ?? null;
   }
 
   /**

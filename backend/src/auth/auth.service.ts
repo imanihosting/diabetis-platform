@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+import type { PoolClient } from 'pg';
 import { createHash, randomBytes } from 'node:crypto';
 import type {
   AuthResponse,
@@ -97,15 +98,24 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    await this.audit.record({
-      actorUserId: row.id,
-      subjectUserId: row.id,
-      action: 'auth.login',
-      resourceType: 'user',
-      resourceId: row.id,
+    // The audit entry and the session it describes commit together: a
+    // recorded login with no session, or a session with no record of the
+    // login, would both misrepresent what happened.
+    const tokens = await this.db.transaction(async (client) => {
+      await this.audit.record(
+        {
+          actorUserId: row.id,
+          subjectUserId: row.id,
+          action: 'auth.login',
+          resourceType: 'user',
+          resourceId: row.id,
+        },
+        client,
+      );
+      return this.issueTokens(row, client);
     });
 
-    return { user: toUser(row), tokens: await this.issueTokens(row) };
+    return { user: toUser(row), tokens };
   }
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
@@ -126,53 +136,70 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Rotate: a refresh token is single-use, so a stolen one is useful at most once.
-    await this.db.query(
-      'update identity.refresh_tokens set revoked_at = now() where id = $1',
-      [row.token_id],
-    );
+    // Rotate: a refresh token is single-use, so a stolen one is useful at most
+    // once. Revoking the old token and issuing the new one is atomic, or a
+    // failure between them would strand the session with no valid token.
+    const tokens = await this.db.transaction(async (client) => {
+      await client.query(
+        'update identity.refresh_tokens set revoked_at = now() where id = $1',
+        [row.token_id],
+      );
+      return this.issueTokens(row, client);
+    });
 
-    return { user: toUser(row), tokens: await this.issueTokens(row) };
+    return { user: toUser(row), tokens };
   }
 
   async logout(userId: string, refreshToken?: string): Promise<void> {
-    if (refreshToken) {
-      await this.db.query(
-        `update identity.refresh_tokens set revoked_at = now()
-          where user_id = $1 and token_hash = $2 and revoked_at is null`,
-        [userId, hashToken(refreshToken)],
-      );
-    } else {
-      await this.db.query(
-        `update identity.refresh_tokens set revoked_at = now()
-          where user_id = $1 and revoked_at is null`,
-        [userId],
-      );
-    }
+    await this.db.transaction(async (client) => {
+      if (refreshToken) {
+        await client.query(
+          `update identity.refresh_tokens set revoked_at = now()
+            where user_id = $1 and token_hash = $2 and revoked_at is null`,
+          [userId, hashToken(refreshToken)],
+        );
+      } else {
+        await client.query(
+          `update identity.refresh_tokens set revoked_at = now()
+            where user_id = $1 and revoked_at is null`,
+          [userId],
+        );
+      }
 
-    await this.audit.record({
-      actorUserId: userId,
-      subjectUserId: userId,
-      action: 'auth.logout',
-      resourceType: 'user',
-      resourceId: userId,
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'auth.logout',
+          resourceType: 'user',
+          resourceId: userId,
+        },
+        client,
+      );
     });
   }
 
-  private async issueTokens(user: UserRow) {
+  private async issueTokens(user: UserRow, client?: PoolClient) {
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.primary_role },
-      { expiresIn: this.env.JWT_ACCESS_TTL },
+      { expiresIn: this.env.JWT_ACCESS_TTL as `${number}m` },
     );
 
     // The refresh token is random, not a JWT: only its hash is stored, so a
     // database leak does not hand an attacker usable sessions.
     const refreshToken = randomBytes(48).toString('base64url');
-    await this.db.query(
-      `insert into identity.refresh_tokens (user_id, token_hash, expires_at)
-       values ($1, $2, now() + $3::interval)`,
-      [user.id, hashToken(refreshToken), toPostgresInterval(this.env.JWT_REFRESH_TTL)],
-    );
+    const insert = `insert into identity.refresh_tokens (user_id, token_hash, expires_at)
+                    values ($1, $2, now() + $3::interval)`;
+    const params = [
+      user.id,
+      hashToken(refreshToken),
+      toPostgresInterval(this.env.JWT_REFRESH_TTL),
+    ];
+    if (client) {
+      await client.query(insert, params);
+    } else {
+      await this.db.query(insert, params);
+    }
 
     return {
       accessToken,

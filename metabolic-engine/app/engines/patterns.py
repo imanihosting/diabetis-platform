@@ -57,16 +57,18 @@ def detect_all(user_id: UUID, start: datetime, end: datetime) -> list[Structured
             )
         ]
 
-    findings: list[StructuredFinding] = []
-    findings.append(_morning_glucose_pattern(glucose))
+    # A detector returns None when the signal it needs is absent entirely —
+    # distinct from returning an "insufficient data" finding, which is a real
+    # answer worth showing the user.
+    candidates: list[StructuredFinding | None] = [_morning_glucose_pattern(glucose)]
 
     if not meals.empty:
-        findings.append(_post_meal_response(glucose, meals))
-        findings.append(_late_meal_effect(glucose, meals))
+        candidates.append(_post_meal_response(glucose, meals))
+        candidates.append(_late_meal_effect(glucose, meals))
         if not activity.empty:
-            findings.append(_post_meal_walk_effect(glucose, meals, activity))
+            candidates.append(_post_meal_walk_effect(glucose, meals, activity))
 
-    return [f for f in findings if f is not None]
+    return [f for f in candidates if f is not None]
 
 
 def _post_meal_responses(

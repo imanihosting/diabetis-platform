@@ -48,7 +48,7 @@ def connection() -> Iterator[psycopg.Connection[Any]]:
 def fetch_all(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
     with connection() as conn, conn.cursor() as cur:
         cur.execute(sql, params)
-        return cur.fetchall()  # type: ignore[return-value]
+        return cur.fetchall()
 
 
 def ping() -> bool:

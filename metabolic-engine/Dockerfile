@@ -37,4 +37,6 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY tests ./tests
 RUN /opt/venv/bin/pip install -e ".[dev]"
-CMD ["python", "-m", "pytest", "-q"]
+# Type checking runs with the suite: strict mypy only stays clean if
+# something enforces it.
+CMD ["sh", "-c", "ruff check . && mypy && python -m pytest -q"]

@@ -60,3 +60,40 @@ export const glucoseSummarySchema = z.object({
   dataSufficient: z.boolean(),
 });
 export type GlucoseSummary = z.infer<typeof glucoseSummarySchema>;
+
+/**
+ * Query contract for the glucose summary endpoint.
+ *
+ * Defaults live in the schema rather than the controller so a single pipe can
+ * validate the whole query — no schema is parsed by hand, which is what let a
+ * bad `unit` surface as a 500.
+ */
+export const glucoseSummaryQuerySchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    unit: glucoseUnitSchema.default('mmol/L'),
+  })
+  .transform((v) => {
+    const to = v.to ?? new Date();
+    return {
+      to,
+      from: v.from ?? new Date(to.getTime() - 14 * 24 * 60 * 60 * 1000),
+      unit: v.unit,
+    };
+  })
+  .refine((v) => v.to > v.from, { message: '`from` must be before `to`' });
+export type GlucoseSummaryQuery = z.infer<typeof glucoseSummaryQuerySchema>;
+
+/** Same shape, without a unit — used for listing raw readings. */
+export const glucoseListQuerySchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .transform((v) => {
+    const to = v.to ?? new Date();
+    return { to, from: v.from ?? new Date(to.getTime() - 14 * 24 * 60 * 60 * 1000) };
+  })
+  .refine((v) => v.to > v.from, { message: '`from` must be before `to`' });
+export type GlucoseListQuery = z.infer<typeof glucoseListQuerySchema>;

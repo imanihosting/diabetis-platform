@@ -114,3 +114,32 @@ This is a route handler rather than a `next.config` rewrite on purpose:
 rewrites are resolved when the app is built, so a containerised frontend would
 carry a baked-in `localhost:4000` pointing at itself. The handler reads
 `BACKEND_URL` at run time, so one image works in every environment.
+
+## Security posture
+
+| Concern | How it is handled |
+|---|---|
+| Credentials in the repo | None. Everything is read from the gitignored root `.env`; the docs point at the password manager. |
+| Object storage access | A service account scoped to `medicaldata` alone, verified to be denied the other buckets on that shared MinIO. |
+| Refresh token | HttpOnly, Secure (in production), SameSite=Strict cookie scoped to `/api/auth`. Never in the response body, never in `localStorage`. |
+| Access token | In memory for the tab's lifetime. Not persisted anywhere. |
+| Refresh token reuse | Single-use. Rotated on every refresh; a replay is rejected and the cookie cleared. |
+| Session storage at rest | Only a SHA-256 hash of the refresh token is stored, so a database leak yields no usable sessions. |
+| Password storage | argon2id, in a table separate from the user record. |
+| Login timing | A dummy verification runs when the account does not exist, so a wrong password and an unknown account take comparable time. |
+| Route exposure | The JWT guard is global; opening a route needs an explicit `@Public()`. |
+| Cross-user access | Ownership is verified before any write that references another record, and a foreign id returns the same 404 as a missing one. |
+| Audit integrity | Append-only at the database level; writes commit in the same transaction as the data they describe. |
+| Engine authentication | Service-token auth may only be disabled when `ENVIRONMENT=development`; anywhere else a missing token fails startup. |
+| Dependency advisories | `npm audit` clean. Pinned minimums for transitives live in the root `overrides`. |
+
+### Still outstanding
+
+- **PostgreSQL TLS is unverified.** The VM presents its default self-signed
+  certificate. Issue a CA-signed one, set
+  `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and move the URL to
+  `sslmode=verify-full`.
+- **Shared infrastructure credentials.** The VM `support` login and the MinIO
+  root account are used by systems beyond this platform, so they are not
+  rotated from here. They appeared in this repository's early history and
+  should be rotated by whoever owns that infrastructure.
