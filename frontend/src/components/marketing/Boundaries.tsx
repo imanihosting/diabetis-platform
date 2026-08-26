@@ -33,7 +33,7 @@ export function Boundaries() {
               key={item}
               className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--brand-ink-2)]"
             >
-              <span aria-hidden className="text-[var(--below-range)]">
+              <span aria-hidden className="text-[var(--below-range-text)]">
                 &#215;
               </span>
               {item}
@@ -52,7 +52,7 @@ export function Boundaries() {
               key={item}
               className="flex gap-3 text-[0.95rem] leading-relaxed text-[var(--brand-ink-2)]"
             >
-              <span aria-hidden className="text-[var(--above-range)]">
+              <span aria-hidden className="text-[var(--above-range-text)]">
                 &#8213;
               </span>
               {item}

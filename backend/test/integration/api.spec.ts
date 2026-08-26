@@ -583,6 +583,88 @@ describe('API end to end', () => {
     });
   });
 
+  describe('contact', () => {
+    const valid = () => ({
+      email: `contact-${Date.now()}@test.local`,
+      topic: 'general' as const,
+      message: 'A message long enough to clear the minimum length.',
+    });
+
+    it('accepts a message without authentication', async () => {
+      const res = await http().post('/api/contact').send(valid()).expect(200);
+      expect(res.body.received).toBe(true);
+    });
+
+    it('rejects a message that is too short to act on', async () => {
+      await http()
+        .post('/api/contact')
+        .send({ ...valid(), message: 'help' })
+        .expect(400);
+    });
+
+    it('rejects an unrecognised topic', async () => {
+      await http()
+        .post('/api/contact')
+        .send({ ...valid(), topic: 'anything' })
+        .expect(400);
+    });
+
+    it('rejects a message beyond the length limit', async () => {
+      await http()
+        .post('/api/contact')
+        .send({ ...valid(), message: 'x'.repeat(5001) })
+        .expect(400);
+    });
+
+    it('keeps the message body and address out of the audit trail', async () => {
+      const input = { ...valid(), message: 'My secret medical detail goes here.' };
+      await http().post('/api/contact').send(input).expect(200);
+
+      const { rows } = await pool.query<{ metadata: Record<string, unknown> }>(
+        `select metadata from audit.events
+          where action = 'support.contact'
+          order by occurred_at desc limit 1`,
+      );
+      const recorded = JSON.stringify(rows[0].metadata);
+      // The audit table is append-only: anything written there cannot later be
+      // removed, so free text a person did not mean to send must never reach it.
+      expect(recorded).not.toContain('secret medical detail');
+      expect(recorded).not.toContain(input.email);
+      expect(rows[0].metadata.topic).toBe('general');
+    });
+
+    it('attributes the message when the sender is signed in', async () => {
+      const input = valid();
+      await http()
+        .post('/api/contact')
+        .set({ authorization: `Bearer ${accessToken}` })
+        .send(input)
+        .expect(200);
+
+      const { rows } = await pool.query<{ user_id: string | null }>(
+        'select user_id from support.contact_messages where email = $1',
+        [input.email],
+      );
+      expect(rows[0].user_id).toBeTruthy();
+    });
+
+    it('still accepts the message when the token is unusable', async () => {
+      const input = valid();
+      await http()
+        .post('/api/contact')
+        .set({ authorization: 'Bearer not-a-real-token' })
+        .send(input)
+        .expect(200);
+
+      const { rows } = await pool.query<{ user_id: string | null }>(
+        'select user_id from support.contact_messages where email = $1',
+        [input.email],
+      );
+      // A stale token means unattributed, not rejected.
+      expect(rows[0].user_id).toBeNull();
+    });
+  });
+
   describe('audit trail', () => {
     it('records every write the user made', async () => {
       const res = await http()

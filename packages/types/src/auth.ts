@@ -78,3 +78,24 @@ export const waitlistSignupResultSchema = z.object({
   subscribed: z.boolean(),
 });
 export type WaitlistSignupResult = z.infer<typeof waitlistSignupResultSchema>;
+
+/** Topics the contact form offers, so messages can be routed without triage. */
+export const contactTopicSchema = z.enum([
+  'general',
+  'account',
+  'data',
+  'clinician',
+  'press',
+]);
+export type ContactTopic = z.infer<typeof contactTopicSchema>;
+
+export const contactMessageSchema = z.object({
+  name: z.string().max(200).optional(),
+  email: z.string().email().max(320),
+  topic: contactTopicSchema.default('general'),
+  message: z.string().min(10, 'Tell us a little more').max(5000),
+});
+export type ContactMessageInput = z.infer<typeof contactMessageSchema>;
+
+export const contactMessageResultSchema = z.object({ received: z.boolean() });
+export type ContactMessageResult = z.infer<typeof contactMessageResultSchema>;

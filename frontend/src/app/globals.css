@@ -10,7 +10,7 @@
 :root {
   --ink: 23 26 33;
   --ink-muted: 92 99 112;
-  --ink-faint: 145 152 165;
+  --ink-faint: 108 115 128;
 
   --surface: 252 252 253;
   --surface-raised: 255 255 255;
@@ -36,7 +36,7 @@
   :root {
     --ink: 232 234 238;
     --ink-muted: 156 163 176;
-    --ink-faint: 110 117 130;
+    --ink-faint: 132 139 152;
 
     --surface: 16 18 22;
     --surface-raised: 24 27 33;
@@ -98,6 +98,13 @@ body {
   --above-range-wash: oklch(0.951 0.034 68);
   --below-range: oklch(0.545 0.152 26);
 
+  /* Same hues, darkened until they clear 4.5:1 as text.
+     The values above are tuned for filled shapes, where 3:1 is the bar; a
+     coloured glyph next to a sentence is text and has to meet the text bar. */
+  --in-range-text: oklch(0.505 0.125 152);
+  --above-range-text: oklch(0.505 0.115 68);
+  --below-range-text: oklch(0.505 0.150 26);
+
   background-color: var(--paper);
   color: var(--brand-ink);
   font-family: var(--font-hyperlegible), ui-sans-serif, system-ui, sans-serif;
@@ -122,6 +129,9 @@ body {
     --above-range: oklch(0.795 0.125 72);
     --above-range-wash: oklch(0.315 0.045 72);
     --below-range: oklch(0.705 0.145 26);
+    --in-range-text: oklch(0.785 0.125 152);
+    --above-range-text: oklch(0.815 0.115 72);
+    --below-range-text: oklch(0.745 0.140 26);
   }
 }
 

@@ -8,6 +8,7 @@ import { TimelineExcerpt } from '@/components/marketing/TimelineExcerpt';
 import { Boundaries } from '@/components/marketing/Boundaries';
 import { ClinicianBrief } from '@/components/marketing/ClinicianBrief';
 import { EmailCapture } from '@/components/marketing/EmailCapture';
+import { MarketingShell } from '@/components/marketing/MarketingShell';
 
 export const metadata: Metadata = {
   title: 'Diabetes Platform',
@@ -17,19 +18,7 @@ export const metadata: Metadata = {
 
 export default function LandingPage() {
   return (
-    <div className="brand min-h-dvh">
-      <header className="mx-auto flex max-w-6xl items-baseline justify-between px-7 py-5 sm:px-6">
-        <span className="text-sm font-semibold tracking-tight">
-          Diabetes Platform
-        </span>
-        <Link
-          href="/login"
-          className="text-sm text-[var(--brand-ink-2)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
-        >
-          Sign in
-        </Link>
-      </header>
-
+    <MarketingShell>
       {/* ---- Hero -------------------------------------------------------- */}
       <section className="mx-auto max-w-6xl px-7 pb-[clamp(1.75rem,3.5vw,3rem)] pt-[clamp(1.25rem,3vw,2.5rem)] sm:px-6">
         <Reveal>
@@ -104,7 +93,7 @@ export default function LandingPage() {
                 <p className="text-sm text-[var(--brand-ink-3)]">This says</p>
                 <p className="mt-3 text-[clamp(1.35rem,1rem+1vw,1.75rem)] leading-snug text-[var(--brand-ink)]">
                   Across 156 meals, walking afterwards was associated with a{' '}
-                  <span className="measure text-[var(--in-range)]">1.1</span>{' '}
+                  <span className="measure text-[var(--in-range-text)]">1.1</span>{' '}
                   mmol/L lower rise.
                 </p>
                 <p className="mt-4 text-sm leading-relaxed text-[var(--brand-ink-3)]">
@@ -185,7 +174,7 @@ export default function LandingPage() {
               <dl className="mt-8 space-y-4 border-t border-[var(--brand-rule)] pt-6 text-sm">
                 <div className="flex justify-between gap-6">
                   <dt className="text-[var(--brand-ink-3)]">Predicted difference</dt>
-                  <dd className="measure text-[var(--in-range)]">-1.3 mmol/L</dd>
+                  <dd className="measure text-[var(--in-range-text)]">-1.3 mmol/L</dd>
                 </div>
                 <div className="flex justify-between gap-6">
                   <dt className="text-[var(--brand-ink-3)]">Recorded before it starts</dt>
@@ -282,18 +271,6 @@ export default function LandingPage() {
           </Reveal>
         </div>
       </section>
-
-      <footer className="border-t border-[var(--brand-rule)] py-10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-7 text-xs sm:px-6 leading-relaxed text-[var(--brand-ink-3)] sm:flex-row sm:justify-between">
-          <p className="max-w-[62ch]">
-            For understanding your own patterns and preparing for appointments.
-            Not a medical device, and not a substitute for professional care.
-            Always speak to your clinician before changing anything about your
-            treatment.
-          </p>
-          <p className="shrink-0">&#169; {new Date().getFullYear()}</p>
-        </div>
-      </footer>
-    </div>
+    </MarketingShell>
   );
 }

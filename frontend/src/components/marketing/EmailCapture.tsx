@@ -42,7 +42,7 @@ export function EmailCapture() {
         role="status"
         className="flex items-baseline gap-2 text-lede text-[var(--brand-ink-2)]"
       >
-        <span aria-hidden className="text-[var(--in-range)]">
+        <span aria-hidden className="text-[var(--in-range-text)]">
           &#10003;
         </span>
         We have your address. Nothing else, and nothing until there is
@@ -83,7 +83,7 @@ export function EmailCapture() {
       </div>
 
       {(state === 'invalid' || state === 'failed') && (
-        <p id="waitlist-msg" role="alert" className="mt-2 text-sm text-[var(--below-range)]">
+        <p id="waitlist-msg" role="alert" className="mt-2 text-sm text-[var(--below-range-text)]">
           {state === 'invalid'
             ? 'That address does not look complete.'
             : 'That did not send. Try again in a moment.'}

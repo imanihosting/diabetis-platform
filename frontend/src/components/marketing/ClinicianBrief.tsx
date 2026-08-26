@@ -34,7 +34,7 @@ export function ClinicianBrief() {
               HbA1c
             </h4>
             <p className="text-xs text-[var(--brand-ink-3)]">
-              <span className="measure text-[var(--in-range)]">
+              <span className="measure text-[var(--in-range-text)]">
                 &#8722;{(first.value - latest.value).toFixed(1)}
               </span>{' '}
               across four measurements
@@ -101,7 +101,7 @@ export function ClinicianBrief() {
           </h4>
           <p className="mt-3 text-[0.95rem] leading-relaxed text-[var(--brand-ink)]">
             Walking after the evening meal, six days.{' '}
-            <span className="measure text-[var(--in-range)]">&#8722;1.3 mmol/L</span>{' '}
+            <span className="measure text-[var(--in-range-text)]">&#8722;1.3 mmol/L</span>{' '}
             <span className="text-[var(--brand-ink-2)]">
               against a predicted &#8722;1.3, recorded before the trial began.
             </span>

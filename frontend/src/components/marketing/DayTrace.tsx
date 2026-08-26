@@ -156,7 +156,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
             >
               {meal.label}
               {meal.walked && (
-                <span className="mt-0.5 block text-[var(--in-range)]">
+                <span className="mt-0.5 block text-[var(--in-range-text)]">
                   walked after
                 </span>
               )}

@@ -38,7 +38,7 @@ export function TimelineExcerpt() {
               <span
                 className={
                   entry.value
-                    ? `measure text-[0.95rem] ${entry.above ? 'text-[var(--above-range)]' : 'text-[var(--in-range)]'}`
+                    ? `measure text-[0.95rem] ${entry.above ? 'text-[var(--above-range-text)]' : 'text-[var(--in-range-text)]'}`
                     : 'text-[0.95rem] text-[var(--brand-ink)]'
                 }
               >

@@ -40,7 +40,7 @@ export function Finding() {
 
       <p className="mt-6 text-[clamp(1.5rem,1rem+1.6vw,2.25rem)] font-medium leading-[1.15] tracking-[-0.02em] text-balance">
         Meals followed by a walk were associated with a{' '}
-        <span className="measure whitespace-nowrap text-[var(--in-range)]">
+        <span className="measure whitespace-nowrap text-[var(--in-range-text)]">
           1.1 mmol/L
         </span>{' '}
         lower rise.
