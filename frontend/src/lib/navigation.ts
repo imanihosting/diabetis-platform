@@ -23,6 +23,17 @@ export const MARKETING_NAV: NavItem[] = [
   { href: '/contact', label: 'Contact', detail: 'Ask a question or report a problem' },
 ];
 
+/**
+ * Kept separate from MARKETING_NAV so it can sit in the footer on both
+ * surfaces without ever being promoted into the main row. Nobody navigates to
+ * a cookie policy; they go looking for it.
+ */
+export const LEGAL_NAV: NavItem[] = [
+  { href: '/privacy', label: 'Privacy', detail: 'What we hold, and what we do not' },
+  { href: '/terms', label: 'Terms', detail: 'What this service is, and is not' },
+  { href: '/cookies', label: 'Cookies', detail: 'One cookie, and what it does' },
+];
+
 export const APP_NAV: NavItem[] = [
   { href: '/timeline', label: 'Timeline' },
   { href: '/log', label: 'Log' },

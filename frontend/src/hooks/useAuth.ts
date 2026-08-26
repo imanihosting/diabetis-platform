@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import type { LoginInput, RegisterInput } from '@diabetes/types';
+import type { LoginInput, RegisterInput } from '@wellovue/types';
 import { api, ApiError, refreshSession, tokenStore } from '@/lib/api';
 
 /**

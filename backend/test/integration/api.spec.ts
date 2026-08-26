@@ -19,7 +19,7 @@ function setCookies(res: request.Response): string[] {
 
 /** The refresh cookie in `name=value` form, ready to send back. */
 function refreshCookie(res: request.Response): string {
-  const cookie = setCookies(res).find((c) => c.startsWith('diabetes_refresh='));
+  const cookie = setCookies(res).find((c) => c.startsWith('wellovue_refresh='));
   if (!cookie) throw new Error('No refresh cookie was set');
   return cookie.split(';')[0];
 }
@@ -124,7 +124,7 @@ describe('API end to end', () => {
         .send({ email, password })
         .expect(200);
 
-      const cookie = setCookies(res).find((c) => c.startsWith('diabetes_refresh='));
+      const cookie = setCookies(res).find((c) => c.startsWith('wellovue_refresh='));
       expect(cookie).toBeDefined();
       expect(cookie).toMatch(/HttpOnly/i);
       expect(cookie).toMatch(/SameSite=Strict/i);
@@ -162,8 +162,8 @@ describe('API end to end', () => {
         .expect(401);
 
       // Otherwise the browser keeps retrying a token that can never work.
-      const cleared = setCookies(replay).find((c) => c.startsWith('diabetes_refresh='));
-      expect(cleared).toMatch(/diabetes_refresh=;/);
+      const cleared = setCookies(replay).find((c) => c.startsWith('wellovue_refresh='));
+      expect(cleared).toMatch(/wellovue_refresh=;/);
     });
 
     it('refuses to refresh without a cookie', async () => {

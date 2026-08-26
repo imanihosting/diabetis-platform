@@ -23,7 +23,7 @@ WALK_PROXIMITY_MINUTES = 90
 def evidence_strength(sample_count: int, confidence: float) -> str:
     """Maps sample size and confidence onto the single word shown to the user.
 
-    Mirrors `evidenceStrength()` in @diabetes/types so the API, web app, and
+    Mirrors `evidenceStrength()` in @wellovue/types so the API, web app, and
     reports can never disagree about how strong a finding is.
     """
     if sample_count < MIN_SAMPLES_FOR_ANY_FINDING:

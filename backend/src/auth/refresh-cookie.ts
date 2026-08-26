@@ -12,7 +12,16 @@ import type { CookieOptions, Response } from 'express';
  * The short-lived access token stays out of storage entirely and lives only
  * in memory for the tab's lifetime.
  */
-export const REFRESH_COOKIE_NAME = 'diabetes_refresh';
+export const REFRESH_COOKIE_NAME = 'wellovue_refresh';
+
+/**
+ * Names this cookie has had before.
+ *
+ * Renaming a cookie does not remove the old one: it sits in the browser until
+ * it expires, doing nothing. Clearing it alongside the current one keeps the
+ * cookie policy page truthful about what is actually on someone's device.
+ */
+const LEGACY_COOKIE_NAMES = ['diabetes_refresh'];
 
 /** Scoped to the auth routes, so it is not attached to every API request. */
 const REFRESH_COOKIE_PATH = '/api/auth';
@@ -41,5 +50,7 @@ export function setRefreshCookie(
 export function clearRefreshCookie(response: Response, isProduction: boolean): void {
   // maxAge must be omitted when clearing, or the browser keeps the cookie.
   const { maxAge: _maxAge, ...options } = refreshCookieOptions(isProduction);
-  response.clearCookie(REFRESH_COOKIE_NAME, options);
+  for (const name of [REFRESH_COOKIE_NAME, ...LEGACY_COOKIE_NAMES]) {
+    response.clearCookie(name, options);
+  }
 }

@@ -1,4 +1,4 @@
-import type { DataSource } from '@diabetes/types';
+import type { DataSource } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 const SOURCE_LABELS: Record<DataSource, string> = {

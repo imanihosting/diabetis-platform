@@ -3,7 +3,7 @@ import type {
   CreateTimelineEventInput,
   TimelineEntry,
   TimelineQuery,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 

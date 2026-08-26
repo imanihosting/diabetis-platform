@@ -7,7 +7,7 @@ import type {
   RegisterInput,
   TimelineEntry,
   User,
-} from '@diabetes/types';
+} from '@wellovue/types';
 
 /**
  * Typed client for the backend.

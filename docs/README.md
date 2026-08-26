@@ -1,4 +1,4 @@
-# Diabetes Platform Work Pack
+# Wellovue Work Pack
 
 This folder contains the first build pack for the Type 2 diabetes platform.
 

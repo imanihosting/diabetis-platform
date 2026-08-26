@@ -1,6 +1,6 @@
-# Diabetes Platform
+# Wellovue
 
-A causal Type 2 diabetes platform. Most diabetes tools record what happened;
+Wellovue is a causal Type 2 diabetes platform. Most diabetes tools record what happened;
 this one is built to help a person work out what is likely true for their own
 body, what remains uncertain, and what safe next observation would reduce that
 uncertainty.
@@ -16,7 +16,7 @@ See [docs/](./docs) for the product thesis, architecture, data model, and roadma
 frontend/           Next.js 15 · React 19 · TypeScript · Tailwind · TanStack Query
 backend/            NestJS core API — identity, ingestion, timeline, audit
 metabolic-engine/   Python · FastAPI — pattern detection and scientific computation
-packages/types/     Shared API contract: Zod schemas + inferred TypeScript types
+packages/types/     Shared API contract (@wellovue/types): Zod schemas + inferred types
 infra/              Database migrations, provisioning notes, local Docker services
 scripts/            Migration runner, demo seeder, VM provisioning
 docs/               Product and technical documentation
@@ -49,7 +49,7 @@ node --env-file=.env scripts/seed-demo.mjs
 ```
 
 Seeds 60 days of plausible CGM readings, meals, walks, medication, and labs for
-`demo.patient@diabetes-platform.local` (password `demo-patient-password`).
+`demo.patient@wellovue.local` (password `demo-patient-password`).
 
 The data encodes a known ground truth — walking after a meal genuinely blunts
 the modelled rise by 1.3 mmol/L — so the pattern engine can be checked against

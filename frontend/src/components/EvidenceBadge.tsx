@@ -1,4 +1,4 @@
-import { evidenceStrength, type EvidenceStrength } from '@diabetes/types';
+import { evidenceStrength, type EvidenceStrength } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 const STYLES: Record<EvidenceStrength, string> = {

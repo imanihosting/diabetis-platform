@@ -81,7 +81,7 @@ short-lived presigned URLs, never raw keys.
 ## Containers
 
 Three images, all built from the repository root because the services share the
-`@diabetes/types` workspace:
+`@wellovue/types` workspace:
 
 | Image | Dockerfile | Notes |
 |---|---|---|
@@ -95,7 +95,7 @@ both compose files — otherwise the last stage in the file would be selected.
 
 ### Two compose files
 
-`docker-compose.yml` runs the platform against the provisioned VMs.
+`docker-compose.yml` runs Wellovue against the provisioned VMs.
 `docker-compose.test.yml` brings up its own throwaway PostgreSQL and MinIO for
 the test suites, and touches no shared infrastructure.
 

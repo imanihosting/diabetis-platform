@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { createMealSchema, type CreateMealInput } from '@diabetes/types';
+import { createMealSchema, type CreateMealInput } from '@wellovue/types';
 import { MealsService } from './meals.service';
 import { StorageService } from '../storage/storage.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';

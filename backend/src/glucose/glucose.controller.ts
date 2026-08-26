@@ -17,7 +17,7 @@ import {
   importGlucoseSchema,
   type GlucoseListQuery,
   type GlucoseSummaryQuery,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { GlucoseService } from './glucose.service';
 import { parseGlucoseCsv } from './csv-parser';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';

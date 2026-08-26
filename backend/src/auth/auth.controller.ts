@@ -17,7 +17,7 @@ import {
   type AuthResponse,
   type LoginInput,
   type RegisterInput,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { AuthService } from './auth.service';
 import {
   REFRESH_COOKIE_NAME,

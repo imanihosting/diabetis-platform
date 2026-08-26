@@ -37,7 +37,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       max: 20,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
-      application_name: 'diabetes-backend',
+      application_name: 'wellovue-backend',
     });
 
     this.pool.on('error', (err) => {

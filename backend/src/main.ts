@@ -29,7 +29,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
   // No global ValidationPipe: request validation is done per-route with
-  // ZodValidationPipe against the schemas in @diabetes/types, so the API
+  // ZodValidationPipe against the schemas in @wellovue/types, so the API
   // enforces exactly the contract the frontend compiles against.
   // ZodExceptionFilter is registered in AppModule.
   app.enableShutdownHooks();
@@ -38,7 +38,7 @@ async function bootstrap(): Promise<void> {
   // so they stay off outside development.
   if (env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('Diabetes Platform API')
+      .setTitle('Wellovue API')
       .setDescription(
         'Core API for the causal Type 2 diabetes platform. ' +
           'Every insight endpoint returns evidence strength, confidence, and limitations.',

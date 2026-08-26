@@ -5,8 +5,8 @@ import type {
   GlucoseSummary,
   GlucoseUnit,
   ImportGlucoseInput,
-} from '@diabetes/types';
-import { toMgDl, toMmolL } from '@diabetes/types';
+} from '@wellovue/types';
+import { toMgDl, toMmolL } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 

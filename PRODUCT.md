@@ -1,11 +1,11 @@
-# Product Context
+# Product Context — Wellovue
 
 ## Register
 
 **brand** for `/` and any marketing surface. **product** for `/timeline`, `/log`,
 `/evidence`, `/login`.
 
-The landing page is the brand surface: design is the product there. Everything
+Wellovue's landing page is the brand surface: design is the product there. Everything
 behind sign-in serves the data.
 
 ## Users & Purpose

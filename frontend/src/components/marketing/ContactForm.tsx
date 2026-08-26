@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import type { ContactTopic } from '@diabetes/types';
+import type { ContactTopic } from '@wellovue/types';
 
 type State = 'idle' | 'submitting' | 'done' | 'failed';
 

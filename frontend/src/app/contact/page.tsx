@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/marketing/PageHeader';
 import { ContactForm } from '@/components/marketing/ContactForm';
 
 export const metadata: Metadata = {
-  title: 'Contact · Diabetes Platform',
+  title: 'Contact · Wellovue',
   description:
     'Ask a question, report a problem, or request your data. Not for medical advice or anything urgent.',
 };

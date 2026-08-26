@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { User } from '@diabetes/types';
+import type { User } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import {
   CurrentUser,

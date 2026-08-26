@@ -1,5 +1,5 @@
 # Build context is the repository root — the backend depends on the
-# @diabetes/types workspace, so it cannot be built from its own directory.
+# @wellovue/types workspace, so it cannot be built from its own directory.
 #
 #   docker build -f backend/Dockerfile .
 
@@ -11,13 +11,13 @@ COPY packages/types/package.json ./packages/types/
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
 RUN npm ci --include-workspace-root \
-      --workspace @diabetes/types \
+      --workspace @wellovue/types \
       --workspace backend
 
 FROM deps AS build
 COPY packages/types ./packages/types
 COPY backend ./backend
-RUN npm run build --workspace @diabetes/types \
+RUN npm run build --workspace @wellovue/types \
  && npm run build --workspace backend
 
 FROM node:22-slim AS runtime
@@ -31,7 +31,7 @@ COPY packages/types/package.json ./packages/types/
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
 RUN npm ci --omit=dev --include-workspace-root \
-      --workspace @diabetes/types \
+      --workspace @wellovue/types \
       --workspace backend \
  && npm cache clean --force
 

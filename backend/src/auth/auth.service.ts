@@ -13,7 +13,7 @@ import type {
   LoginInput,
   RegisterInput,
   User,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { ENV, type Env } from '../config/env';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';

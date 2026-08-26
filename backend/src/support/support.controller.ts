@@ -6,7 +6,7 @@ import {
   contactMessageSchema,
   type ContactMessageInput,
   type ContactMessageResult,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { SupportService } from './support.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { Public } from '../common/decorators/public.decorator';

@@ -1,4 +1,4 @@
-import type { TimelineEntry } from '@diabetes/types';
+import type { TimelineEntry } from '@wellovue/types';
 
 const TARGET_LOW_MMOL = 3.9;
 const TARGET_HIGH_MMOL = 10.0;

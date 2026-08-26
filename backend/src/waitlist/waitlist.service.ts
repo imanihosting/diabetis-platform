@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { WaitlistSignupInput, WaitlistSignupResult } from '@diabetes/types';
+import type { WaitlistSignupInput, WaitlistSignupResult } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 

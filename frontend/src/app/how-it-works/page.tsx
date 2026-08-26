@@ -7,7 +7,7 @@ import { Finding } from '@/components/marketing/Finding';
 import { Boundaries } from '@/components/marketing/Boundaries';
 
 export const metadata: Metadata = {
-  title: 'How this works · Diabetes Platform',
+  title: 'How this works · Wellovue',
   description:
     'From a single reading to evidence you can check: the timeline, the pattern engine, safe experiments, and where a language model is and is not allowed near your data.',
 };

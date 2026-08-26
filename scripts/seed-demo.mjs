@@ -15,7 +15,7 @@
 import pg from 'pg';
 import * as argon2 from 'argon2';
 
-const DEMO_EMAIL = 'demo.patient@diabetes-platform.local';
+const DEMO_EMAIL = 'demo.patient@wellovue.local';
 /** Known password so the seeded account can actually be signed into locally. */
 const DEMO_PASSWORD = 'demo-patient-password';
 const DAYS = 60;

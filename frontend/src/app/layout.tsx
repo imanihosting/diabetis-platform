@@ -29,7 +29,7 @@ const mono = Atkinson_Hyperlegible_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Diabetes Platform',
+  title: 'Wellovue',
   description:
     'Most diabetes tools tell you what happened. This one helps you find out why.',
 };

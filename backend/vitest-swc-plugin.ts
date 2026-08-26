@@ -16,7 +16,7 @@ import type { Plugin } from 'vite';
  */
 export function swcTransform(): Plugin {
   return {
-    name: 'diabetes-swc-transform',
+    name: 'wellovue-swc-transform',
     // Must run before esbuild claims the file.
     enforce: 'pre',
     async transform(code: string, id: string) {

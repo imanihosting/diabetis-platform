@@ -1,6 +1,6 @@
 'use client';
 
-import type { TimelineEntry, TimelineEventType } from '@diabetes/types';
+import type { TimelineEntry, TimelineEventType } from '@wellovue/types';
 import { Provenance } from './Provenance';
 import { GlucoseValue } from './GlucoseValue';
 import { DayGlucoseStrip } from './DayGlucoseStrip';

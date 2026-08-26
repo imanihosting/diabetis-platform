@@ -5,7 +5,7 @@ import {
   timelineQueryInputSchema,
   type CreateTimelineEventInput,
   type TimelineQueryInput,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { TimelineService } from './timeline.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import {

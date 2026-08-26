@@ -18,15 +18,15 @@
 # (timescaledb 2.29.2, vector 0.8.6), so hypertables, vector indexes, and the
 # PL/pgSQL guard triggers are exercised for real rather than mocked.
 
-name: diabetes-platform-test
+name: wellovue-test
 
 services:
   postgres:
     image: timescale/timescaledb-ha:pg17
     environment:
-      POSTGRES_DB: diabetes_test
-      POSTGRES_USER: diabetes_test
-      POSTGRES_PASSWORD: diabetes_test
+      POSTGRES_DB: wellovue_test
+      POSTGRES_USER: wellovue_test
+      POSTGRES_PASSWORD: wellovue_test
     # The database is disposable, so durability is pure overhead here.
     # Turning off fsync and full page writes makes the suite noticeably
     # faster. Never do this anywhere the data matters.
@@ -48,7 +48,7 @@ services:
       # PostgreSQL, and `npm run test:integration` can run against it directly.
       - "55432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U diabetes_test -d diabetes_test"]
+      test: ["CMD-SHELL", "pg_isready -U wellovue_test -d wellovue_test"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -86,7 +86,7 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.migrate
     environment:
-      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+      DATABASE_URL: postgresql://wellovue_test:wellovue_test@postgres:5432/wellovue_test?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,7 +98,7 @@ services:
       target: test
     environment:
       NODE_ENV: test
-      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+      DATABASE_URL: postgresql://wellovue_test:wellovue_test@postgres:5432/wellovue_test?sslmode=disable
       DATABASE_SSL_REJECT_UNAUTHORIZED: "false"
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
@@ -122,7 +122,7 @@ services:
       dockerfile: Dockerfile
       target: test
     environment:
-      DATABASE_URL: postgresql://diabetes_test:diabetes_test@postgres:5432/diabetes_test?sslmode=disable
+      DATABASE_URL: postgresql://wellovue_test:wellovue_test@postgres:5432/wellovue_test?sslmode=disable
       ENVIRONMENT: test
     depends_on:
       migrate:

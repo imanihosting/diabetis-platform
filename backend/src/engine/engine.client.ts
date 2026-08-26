@@ -3,7 +3,7 @@ import {
   patternResponseSchema,
   type PatternRequest,
   type PatternResponse,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { ENV, type Env } from '../config/env';
 
 /**

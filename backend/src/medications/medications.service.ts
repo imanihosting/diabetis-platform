@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateMedicationRecordInput,
   MedicationRecord,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 

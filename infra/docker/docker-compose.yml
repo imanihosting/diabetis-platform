@@ -8,7 +8,7 @@
 # For an isolated stack with its own throwaway database and object storage,
 # use docker-compose.test.yml instead — see infra/README.md.
 
-name: diabetes-platform
+name: wellovue
 
 services:
   redis:

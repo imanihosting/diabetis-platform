@@ -7,7 +7,7 @@ import {
   evidenceStrength,
   toMgDl,
   toMmolL,
-} from '@diabetes/types';
+} from '@wellovue/types';
 
 describe('experiment safety classification', () => {
   it('classifies every allowed template as allowed', () => {

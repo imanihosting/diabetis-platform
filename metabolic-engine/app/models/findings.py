@@ -1,6 +1,6 @@
 """The structured-finding contract.
 
-Mirrors `insights.ts` in @diabetes/types. These two definitions are the same
+Mirrors `insights.ts` in @wellovue/types. These two definitions are the same
 contract in two languages and must be changed together.
 
 The rule this contract exists to enforce: a finding is produced by a

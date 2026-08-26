@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Disclosure } from '@/components/Disclosure';
-import { APP_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
+import { APP_NAV, LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
 import { useLogout } from '@/hooks/useAuth';
 
 /**
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6">
       <header className="flex items-center justify-between gap-4 border-b border-line py-5">
         <Link href="/timeline" className="text-sm font-medium tracking-tight text-ink">
-          Diabetes Platform
+          Wellovue
         </Link>
 
         <div className="flex items-center gap-6">
@@ -94,7 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-line py-5">
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
-          {MARKETING_NAV.map((item) => (
+          {[...MARKETING_NAV, ...LEGAL_NAV].map((item) => (
             <Link
               key={item.href}
               href={item.href}

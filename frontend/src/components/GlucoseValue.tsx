@@ -1,4 +1,4 @@
-import type { GlucoseUnit } from '@diabetes/types';
+import type { GlucoseUnit } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 const TARGET_LOW_MMOL = 3.9;

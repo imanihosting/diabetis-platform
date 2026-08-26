@@ -2,7 +2,7 @@ import { BadRequestException, PipeTransform } from '@nestjs/common';
 import type { ZodSchema } from 'zod';
 
 /**
- * Validates a request body/query against a Zod schema from `@diabetes/types`,
+ * Validates a request body/query against a Zod schema from `@wellovue/types`,
  * so the API enforces exactly the contract the frontend compiles against.
  */
 export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {

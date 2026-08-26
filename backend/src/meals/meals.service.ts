@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { CreateMealInput, Meal } from '@diabetes/types';
+import type { CreateMealInput, Meal } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { StorageService } from '../storage/storage.service';
 import { AuditService } from '../audit/audit.service';

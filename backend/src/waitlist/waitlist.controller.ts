@@ -4,7 +4,7 @@ import {
   waitlistSignupSchema,
   type WaitlistSignupInput,
   type WaitlistSignupResult,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { WaitlistService } from './waitlist.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { Public } from '../common/decorators/public.decorator';

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Disclosure } from '@/components/Disclosure';
-import { MARKETING_NAV, isCurrent } from '@/lib/navigation';
+import { LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
 
 /**
  * Header and footer for every public page.
@@ -23,7 +23,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           href="/"
           className="text-sm font-semibold tracking-tight text-[var(--brand-ink)]"
         >
-          Diabetes Platform
+          Wellovue
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-8 md:flex">
@@ -91,17 +91,31 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-[var(--brand-rule)] py-10">
         <div className="mx-auto max-w-6xl px-7 sm:px-6">
-          <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-3">
-            {MARKETING_NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-sm text-[var(--brand-ink-2)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <div className="flex flex-col gap-4 sm:flex-row sm:gap-x-14">
+            <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-3">
+              {MARKETING_NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="text-sm text-[var(--brand-ink-2)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+
+            <nav aria-label="Legal" className="flex flex-wrap gap-x-8 gap-y-3">
+              {LEGAL_NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="text-sm text-[var(--brand-ink-3)] underline-offset-4 hover:text-[var(--brand-ink)] hover:underline"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
 
           <div className="mt-8 flex flex-col gap-4 text-xs leading-relaxed text-[var(--brand-ink-3)] sm:flex-row sm:justify-between">
             <p className="max-w-[62ch]">

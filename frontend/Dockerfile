@@ -1,5 +1,5 @@
 # Build context is the repository root — the frontend depends on the
-# @diabetes/types workspace.
+# @wellovue/types workspace.
 #
 #   docker build -f frontend/Dockerfile .
 
@@ -10,7 +10,7 @@ COPY packages/types/package.json ./packages/types/
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
 RUN npm ci --include-workspace-root \
-      --workspace @diabetes/types \
+      --workspace @wellovue/types \
       --workspace frontend
 
 FROM deps AS build
@@ -18,7 +18,7 @@ COPY packages/types ./packages/types
 COPY frontend ./frontend
 # NEXT_PUBLIC_* values are inlined at build time, so anything the browser needs
 # must be present here rather than at run time.
-RUN npm run build --workspace @diabetes/types \
+RUN npm run build --workspace @wellovue/types \
  && npm run build --workspace frontend
 
 FROM node:22-slim AS runtime

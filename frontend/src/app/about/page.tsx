@@ -4,7 +4,7 @@ import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader, Prose } from '@/components/marketing/PageHeader';
 
 export const metadata: Metadata = {
-  title: 'About · Diabetes Platform',
+  title: 'About · Wellovue',
   description:
     'Why a diabetes tool built around evidence rather than tracking, who it is for, and what it deliberately will not do.',
 };

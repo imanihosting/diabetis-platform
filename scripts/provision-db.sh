@@ -42,8 +42,10 @@ timescaledb-tune --quiet --yes --pg-config "/usr/lib/postgresql/${PG_VERSION}/bi
 log "6/9 network + tuning config"
 CONF_D="/etc/postgresql/${PG_VERSION}/main/conf.d"
 install -d -m 0755 "$CONF_D"
-cat > "${CONF_D}/10-diabetes-platform.conf" <<'EOF'
-# Managed by diabetes-platform provisioning. Edit here, not postgresql.conf.
+# Remove the pre-rename file so its settings cannot linger alongside these.
+rm -f "${CONF_D}/10-diabetes-platform.conf"
+cat > "${CONF_D}/10-wellovue.conf" <<'EOF'
+# Managed by Wellovue provisioning. Edit here, not postgresql.conf.
 listen_addresses = '*'
 port = 5432
 max_connections = 200
@@ -63,10 +65,10 @@ EOF
 
 log "7/9 pg_hba"
 HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
-if ! grep -q 'diabetes-platform' "$HBA"; then
+if ! grep -q 'wellovue' "$HBA"; then
 cat >> "$HBA" <<'EOF'
 
-# --- diabetes-platform: application access from the private LAN ---
+# --- wellovue: application access from the private LAN ---
 host    all             all             10.10.0.0/16            scram-sha-256
 EOF
 fi

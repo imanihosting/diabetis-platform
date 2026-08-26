@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ContactMessageInput, ContactMessageResult } from '@diabetes/types';
+import type { ContactMessageInput, ContactMessageResult } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 

@@ -1,4 +1,4 @@
-import type { GlucoseSummary } from '@diabetes/types';
+import type { GlucoseSummary } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 /**

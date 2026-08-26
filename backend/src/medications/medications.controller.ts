@@ -11,7 +11,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   createMedicationRecordSchema,
   type CreateMedicationRecordInput,
-} from '@diabetes/types';
+} from '@wellovue/types';
 import { MedicationsService } from './medications.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import {

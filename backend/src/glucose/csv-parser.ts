@@ -1,4 +1,4 @@
-import type { CreateGlucoseSampleInput, DataSource, GlucoseUnit } from '@diabetes/types';
+import type { CreateGlucoseSampleInput, DataSource, GlucoseUnit } from '@wellovue/types';
 
 export interface CsvParseResult {
   samples: CreateGlucoseSampleInput[];

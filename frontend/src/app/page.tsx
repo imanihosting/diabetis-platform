@@ -11,7 +11,7 @@ import { EmailCapture } from '@/components/marketing/EmailCapture';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 
 export const metadata: Metadata = {
-  title: 'Diabetes Platform',
+  title: 'Wellovue',
   description:
     'Most diabetes tools tell you what happened. This one helps you find out why, and shows you how sure it is.',
 };
