@@ -82,7 +82,7 @@ export default function TimelinePage() {
         </div>
       )}
 
-      {timeline.isLoading && <p className="text-sm text-ink-faint">Loading timeline…</p>}
+      {timeline.isPending && <p className="text-sm text-ink-faint">Loading timeline…</p>}
 
       {timeline.isError && (
         <p className="text-sm text-range-below">
