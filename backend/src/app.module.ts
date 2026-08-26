@@ -15,6 +15,7 @@ import { MealsModule } from './meals/meals.module';
 import { MedicationsModule } from './medications/medications.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { HealthModule } from './health/health.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
@@ -36,6 +37,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     MedicationsModule,
     TimelineModule,
     HealthModule,
+    WaitlistModule,
   ],
   providers: [
     // Authentication is on by default. Opening a route requires an explicit

@@ -2,7 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
+import { testClientConfig } from './helpers';
 
 /**
  * End-to-end through the real application: real database, real object storage,
@@ -25,6 +27,7 @@ function refreshCookie(res: request.Response): string {
 describe('API end to end', () => {
   let app: INestApplication;
   let http: () => request.Agent;
+  let pool: Client;
 
   const email = `e2e-${Date.now()}@test.local`;
   const password = 'a-very-long-test-password';
@@ -39,9 +42,13 @@ describe('API end to end', () => {
     app.setGlobalPrefix('api');
     await app.init();
     http = () => request(app.getHttpServer());
+
+    pool = new Client(testClientConfig());
+    await pool.connect();
   });
 
   afterAll(async () => {
+    await pool?.end();
     await app?.close();
   });
 
@@ -522,6 +529,57 @@ describe('API end to end', () => {
         .get(`/api/glucose/summary?from=${from}&to=${to}`)
         .set(auth())
         .expect(400);
+    });
+  });
+
+  describe('waitlist', () => {
+    const address = () => `wl-${Date.now()}-${Math.random().toString(36).slice(2)}@test.local`;
+
+    it('accepts a signup without authentication', async () => {
+      const res = await http()
+        .post('/api/waitlist')
+        .send({ email: address() })
+        .expect(200);
+      expect(res.body.subscribed).toBe(true);
+    });
+
+    it('rejects a malformed address', async () => {
+      await http().post('/api/waitlist').send({ email: 'not-an-email' }).expect(400);
+      await http().post('/api/waitlist').send({}).expect(400);
+    });
+
+    it('answers identically for a repeat, so the list cannot be probed', async () => {
+      const email = address();
+      const first = await http().post('/api/waitlist').send({ email }).expect(200);
+      const second = await http().post('/api/waitlist').send({ email }).expect(200);
+
+      // Same body either way: a stranger must not be able to learn whether a
+      // given person already signed up.
+      expect(second.body).toEqual(first.body);
+    });
+
+    it('stores one row per address, regardless of case', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      await http().post('/api/waitlist').send({ email: email.toUpperCase() }).expect(200);
+
+      const { rows } = await pool.query<{ count: string }>(
+        'select count(*) from identity.waitlist_signups where lower(email) = lower($1)',
+        [email],
+      );
+      expect(Number(rows[0].count)).toBe(1);
+    });
+
+    it('does not record the address in the audit metadata', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+
+      const { rows } = await pool.query<{ metadata: Record<string, unknown> }>(
+        `select metadata from audit.events
+          where action = 'waitlist.signup'
+          order by occurred_at desc limit 1`,
+      );
+      expect(JSON.stringify(rows[0].metadata)).not.toContain(email);
     });
   });
 

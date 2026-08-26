@@ -60,3 +60,21 @@ export const clientAuthResponseSchema = z.object({
   tokens: clientAuthTokensSchema,
 });
 export type ClientAuthResponse = z.infer<typeof clientAuthResponseSchema>;
+
+/**
+ * Landing page email capture.
+ *
+ * Deliberately just an email: asking a stranger for more before they have seen
+ * anything is a poor trade, and this is health-adjacent data from someone who
+ * has not consented to anything yet.
+ */
+export const waitlistSignupSchema = z.object({
+  email: z.string().email().max(320),
+});
+export type WaitlistSignupInput = z.infer<typeof waitlistSignupSchema>;
+
+export const waitlistSignupResultSchema = z.object({
+  /** True whether the address is new or already present — see the service. */
+  subscribed: z.boolean(),
+});
+export type WaitlistSignupResult = z.infer<typeof waitlistSignupResultSchema>;
