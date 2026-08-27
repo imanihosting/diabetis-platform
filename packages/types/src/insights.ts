@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { confidenceSchema, uuidSchema } from './common';
+import { careModeSchema, safetyFlagSchema } from './diabetes';
 
 /**
  * The contract between the quantitative engine and everything downstream.
@@ -46,11 +47,29 @@ export function evidenceStrength(
   return 'strong';
 }
 
+/**
+ * What the engine is asked.
+ *
+ * Mirrors `PatternRequest` in `metabolic-engine/app/models/findings.py`. These
+ * two are the same contract in two languages and must be changed together.
+ */
 export const patternRequestSchema = z.object({
   userId: uuidSchema,
   from: z.coerce.date(),
   to: z.coerce.date(),
   patterns: z.array(z.string()).optional(),
+  /**
+   * Which model of a body the record should be read with.
+   *
+   * Derived by the API from the recorded diagnosis and the flags in force,
+   * never taken from a browser. The engine refuses any detector outside the
+   * care mode it declares support for, so this is what makes that refusal
+   * possible — and the engine defaults it to `unknown`, which nothing
+   * supports, so omitting it yields a refusal rather than the Type 2 analysis.
+   */
+  careMode: careModeSchema,
+  /** Safety flags in force. Some detectors are blocked by these whatever the care mode. */
+  activeFlags: z.array(safetyFlagSchema).default([]),
 });
 export type PatternRequest = z.infer<typeof patternRequestSchema>;
 

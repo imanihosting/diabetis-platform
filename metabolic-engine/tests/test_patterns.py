@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import pytest
 
-from app.engines import patterns
+from app.engines import patterns, registry
 from app.engines.thresholds import MIN_SAMPLES_FOR_ANY_FINDING, evidence_strength
 
 BASE = datetime(2026, 8, 1, tzinfo=UTC)
@@ -186,3 +186,61 @@ class TestEvidenceStrength:
         assert evidence_strength(20, 0.8) == "strong"
         assert evidence_strength(19, 0.8) == "moderate"
         assert evidence_strength(20, 0.79) == "moderate"
+
+
+# --- Detector registry ------------------------------------------------------
+#
+# The engine's own gate. These test that it refuses independently of whatever
+# the backend does, because the backend is not the only thing that can call
+# this service and a gate with one enforcement point is not a gate.
+
+
+class TestDetectorRegistry:
+    def test_type_2_detectors_declare_only_type_2_care_modes(self) -> None:
+        # Every detector implemented today models Type 2 physiology. If one
+        # ever declares support for another mode, that is a claim about the
+        # body it was written for and should not pass unnoticed.
+        for detector in patterns.DETECTORS:
+            assert detector.supported_care_modes == registry.TYPE_2_CARE_MODES
+
+    @pytest.mark.parametrize(
+        "care_mode",
+        [
+            registry.CARE_MODE_TYPE_1,
+            registry.CARE_MODE_GESTATIONAL,
+            registry.CARE_MODE_PREDIABETES,
+            registry.CARE_MODE_OTHER,
+            registry.CARE_MODE_UNKNOWN,
+        ],
+    )
+    def test_no_detector_runs_outside_its_care_modes(self, care_mode: str) -> None:
+        for detector in patterns.DETECTORS:
+            assert detector.allowed_for(care_mode, []) is False
+
+    def test_insulin_supported_type_2_is_still_read_the_same_way(self) -> None:
+        # Same physiology, same analysis. What insulin changes is which
+        # experiments may be proposed, and that gate is elsewhere. Withholding
+        # a correct analysis from these people would be the wrong caution.
+        for detector in patterns.DETECTORS:
+            assert detector.allowed_for(registry.CARE_MODE_TYPE_2_INSULIN, []) is True
+
+    def test_a_blocked_flag_stops_a_detector_its_care_mode_allows(self) -> None:
+        for detector in patterns.DETECTORS:
+            assert detector.allowed_for(registry.CARE_MODE_TYPE_2_STANDARD, []) is True
+            assert (
+                detector.allowed_for(registry.CARE_MODE_TYPE_2_STANDARD, ["pregnancy"])
+                is False
+            )
+
+    def test_an_unrecognised_care_mode_is_refused_rather_than_defaulted(self) -> None:
+        for detector in patterns.DETECTORS:
+            assert detector.allowed_for("something_invented", []) is False
+
+    def test_refusal_is_a_finding_and_says_why(self) -> None:
+        finding = registry.unsupported_finding(registry.CARE_MODE_TYPE_1)
+        assert finding.finding_type == "care_mode_unsupported"
+        assert finding.effect_estimate is None
+        assert finding.sample_count == 0
+        # Never an unqualified refusal, for the same reason a finding is never
+        # an unqualified claim.
+        assert finding.limitations

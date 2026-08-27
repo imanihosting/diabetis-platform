@@ -41,6 +41,22 @@ class PatternRequest(BaseModel):
     to: datetime
     patterns: list[str] | None = None
 
+    care_mode: str = Field(default="unknown", validation_alias="careMode")
+    """Which model of a body this record should be read with.
+
+    Derived by the backend from the recorded diagnosis and the flags in force,
+    never taken from a browser. The engine does not read the profile itself:
+    care mode arrives here so there is one source of truth for it.
+
+    Defaults to `unknown`, which no detector supports. A caller that forgets to
+    send it therefore gets nothing rather than the Type 2 analysis, which is
+    the safe direction for an omission to fail in.
+    """
+
+    active_flags: list[str] = Field(default_factory=list, validation_alias="activeFlags")
+    """Safety flags currently in force. Some detectors are blocked by these
+    regardless of care mode."""
+
     model_config = {"populate_by_name": True}
 
 

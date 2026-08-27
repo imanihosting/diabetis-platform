@@ -205,6 +205,9 @@ reintroduces a specific failure.
 | New accounts are `unknown`/`unanswered`, not `type_2`/`assumed` | There is now a way to ask, so guessing is a choice rather than a constraint, and guessing wrong means reading someone's data with the wrong model of their body. |
 | `unanswered` is a separate source from `assumed` | The absence of a claim is not a weaker version of a claim that could be wrong. Collapsing them loses the only signal that says whether anyone was ever asked. |
 | Safety flags may be deleted by account erasure, never otherwise | Refusing every DELETE made an account with any flag impossible to erase. The guarantee is that history cannot be rewritten while the person has an account. |
+| The engine gate does not replace the NestJS gate | One enforcement point opens the moment something new calls the service. The two are redundant on purpose. |
+| The engine never reads the diabetes profile | Care mode arrives in the request, so there is one source of truth for the value that decides which analysis runs. |
+| `careMode` defaults to `unknown` in the engine, not to Type 2 | An omitted field must fail closed. The caller that forgets it is the one least likely to have considered whose record it is analysing. |
 
 ## Shared Type Changes
 
@@ -486,8 +489,23 @@ finding, so it currently renders through the ordinary finding card.
 
 ### Phase B: Setup Flow, Then Capability Gates
 
-Steps 1 to 3 are **shipped**: migrations `0014` and `0015`, `/profile`, and the
-`UnsupportedCareMode` surface. Steps 4 to 6 remain.
+**Phase B is complete.** Steps 1 to 3: migrations `0014` and `0015`,
+`/profile`, and the `UnsupportedCareMode` surface. Steps 4 to 6: the detector
+registry in `metabolic-engine/app/engines/registry.py`, `careMode` and
+`activeFlags` on `PatternRequest` in both languages, and the direct-path tests
+in `backend/test/integration/engine-gate.spec.ts`.
+
+Enforcement is now genuinely two-layer. NestJS refuses to *ask* for an analysis
+it should not request; the engine refuses to *run* one it should not perform.
+Neither defers to the other, which is what makes the second one worth having:
+the request the engine refuses is one the backend never sends, so testing
+through the API proves nothing about the engine. The direct-path tests call it
+over HTTP the way a future service, a background job, or a mistake would.
+
+The engine defaults `careMode` to `unknown`, which no detector supports, so a
+caller that omits the field gets a refusal rather than the Type 2 analysis —
+and that caller is the one most likely to be pointing at a record nobody
+thought about.
 
 In this order. Steps 1 and 2 had to land together: switching the default to
 `unknown` before there is a way to answer the question strands every new
@@ -505,15 +523,15 @@ account on a screen that refuses to help them.
    the support level plainly and points at the profile. Currently it falls
    through the ordinary card, which reads acceptably and was not designed for
    it.
-4. **Add `careMode` to `PatternRequest`** — and not before the engine registry
+4. **Add `careMode` to `PatternRequest`** — SHIPPED. — and not before the engine registry
    exists to act on it. The contract is mirrored in `packages/types/src/insights.ts`
    and `metabolic-engine/app/models/findings.py`, and those two are the same
    contract in two languages: change them together.
-5. **Move the gate into the engine's detector registry.** Each detector
+5. **Move the gate into the engine's detector registry.** — SHIPPED. Each detector
    declares the care modes it supports and the flags that block it. NestJS
    stays the workflow gate: the engine refuses to run a detector, the backend
    refuses to ask. Two independent refusals, not one moved.
-6. **Keep the current Type 2 findings as the regression test.** The demo
+6. **Keep the current Type 2 findings as the regression test.** — SHIPPED. The demo
    record's four findings, their order and their effect estimates are the
    contract for "nothing broke". If they change, something did.
 
@@ -646,28 +664,28 @@ release:
 
 ## Next Implementation Ticket
 
-Phase B steps 1 to 3 are shipped. The next ticket is steps 4 and 5, which have
-to land together:
+Phase B is complete. The next work is Phase C, and the first ticket is the one
+the data model was deliberately left incomplete for:
 
-> Move detector selection into the engine, and tell it which care mode it is
-> analysing.
+> Unify the target range behind one shared constant, then let a profile
+> override it.
+
+3.9 and 10.0 mmol/L are hardcoded in five places:
+`frontend/src/components/GlucoseValue.tsx`,
+`frontend/src/components/DayGlucoseStrip.tsx`,
+`frontend/src/components/marketing/data.ts`, and
+`metabolic-engine/app/engines/thresholds.py`. Migration 0013 left
+`target_low` / `target_high` off `clinical.diabetes_profiles` because a column
+nothing reads is worse than no column.
 
 Acceptance criteria:
 
-- The engine exposes a detector registry. Each detector declares the care modes
-  it supports and the safety flags that block it.
-- `careMode` is added to `PatternRequest` in **both**
-  `packages/types/src/insights.ts` and `metabolic-engine/app/models/findings.py`.
-  They are the same contract in two languages and their docstrings say so.
-- The engine refuses to run a detector outside its declared care modes, and the
-  backend refuses to ask. Two independent refusals, not one moved: NestJS stays
-  the workflow gate.
-- The engine never reads the diabetes profile itself. Care mode arrives in the
-  request, so there is one source of truth for it.
-- Engine tests cover registry filtering by care mode and by blocked flag.
-- The demo record's four Type 2 findings, their order and their effect
-  estimates are unchanged.
+- One shared constant in `@wellovue/types`, and the frontend sites read it.
+- The engine's `thresholds.py` names the shared contract as the source and
+  matches it. Two languages, so it cannot import — but it can be checked.
+- Only then, an additive migration adding nullable `target_low` / `target_high`.
+- The value actually reaches both the analysis and the display, and a test
+  proves a non-default range changes a finding rather than only a label.
 
-Do not do step 4 without step 5. A `careMode` field the engine cannot act on is
-an unused field, which is the trap the target-range columns were left out to
-avoid.
+After that, Phase C proper: prediabetes detectors, and the language and safety
+boundaries for insulin-treated Type 2.

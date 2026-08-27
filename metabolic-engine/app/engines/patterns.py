@@ -11,6 +11,7 @@ Design rules this module follows:
   that is what the Living Trials experiments exist to test.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -18,7 +19,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from app.engines import glucose_data
+from app.engines import glucose_data, registry
 from app.engines.thresholds import (
     MIN_SAMPLES_FOR_ANY_FINDING,
     POST_MEAL_WINDOW_MINUTES,
@@ -30,8 +31,27 @@ from app.models.findings import StructuredFinding
 MODEL_VERSION = "pattern-engine-v1.0.0"
 
 
-def detect_all(user_id: UUID, start: datetime, end: datetime) -> list[StructuredFinding]:
-    """Runs every pattern detector and returns whatever each could support."""
+def detect_all(
+    user_id: UUID,
+    start: datetime,
+    end: datetime,
+    care_mode: str = registry.CARE_MODE_UNKNOWN,
+    active_flags: Sequence[str] = (),
+) -> list[StructuredFinding]:
+    """Runs the detectors permitted for this care mode, and no others.
+
+    The permission check happens before any data is loaded. Refusing after
+    reading somebody's glucose would still be a refusal, but it would mean the
+    engine had gone and fetched a record it had already decided it could not
+    interpret.
+
+    `care_mode` defaults to `unknown`, which nothing supports. A caller that
+    omits it gets a refusal rather than the Type 2 analysis.
+    """
+    permitted = [d for d in DETECTORS if d.allowed_for(care_mode, active_flags)]
+    if not permitted:
+        return [registry.unsupported_finding(care_mode)]
+
     glucose = glucose_data.load_glucose(user_id, start, end)
     meals = glucose_data.load_meals(user_id, start, end)
     activity = glucose_data.load_events(
@@ -60,13 +80,9 @@ def detect_all(user_id: UUID, start: datetime, end: datetime) -> list[Structured
     # A detector returns None when the signal it needs is absent entirely —
     # distinct from returning an "insufficient data" finding, which is a real
     # answer worth showing the user.
-    candidates: list[StructuredFinding | None] = [_morning_glucose_pattern(glucose)]
-
-    if not meals.empty:
-        candidates.append(_post_meal_response(glucose, meals))
-        candidates.append(_late_meal_effect(glucose, meals))
-        if not activity.empty:
-            candidates.append(_post_meal_walk_effect(glucose, meals, activity))
+    candidates: list[StructuredFinding | None] = [
+        detector.run(glucose, meals, activity) for detector in permitted
+    ]
 
     return [f for f in candidates if f is not None]
 
@@ -365,3 +381,50 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
             "Record evening meal times and medication timing",
         ],
     )
+
+
+# --- Registry wiring --------------------------------------------------------
+#
+# The detectors above take the frames they actually need. The registry hands
+# every detector all three, so these adapters bridge the two and keep the
+# emptiness guards that used to live inline in `detect_all`.
+#
+# Those guards are behaviour, not tidiness. `_post_meal_response` called with no
+# meals returns a real "insufficient data" finding saying zero meals had paired
+# readings, which is true and which nobody asked: a person who has never logged
+# a meal has not failed to log enough of them. Dropping the guard would put two
+# new findings on the screen of every user who only records glucose.
+
+
+def _morning_detector(
+    glucose: pd.DataFrame, _meals: pd.DataFrame, _activity: pd.DataFrame
+) -> StructuredFinding | None:
+    return _morning_glucose_pattern(glucose)
+
+
+def _post_meal_detector(
+    glucose: pd.DataFrame, meals: pd.DataFrame, _activity: pd.DataFrame
+) -> StructuredFinding | None:
+    return None if meals.empty else _post_meal_response(glucose, meals)
+
+
+def _late_meal_detector(
+    glucose: pd.DataFrame, meals: pd.DataFrame, _activity: pd.DataFrame
+) -> StructuredFinding | None:
+    return None if meals.empty else _late_meal_effect(glucose, meals)
+
+
+def _walk_detector(
+    glucose: pd.DataFrame, meals: pd.DataFrame, activity: pd.DataFrame
+) -> StructuredFinding | None:
+    if meals.empty or activity.empty:
+        return None
+    return _post_meal_walk_effect(glucose, meals, activity)
+
+
+DETECTORS = registry.build_registry(
+    morning=_morning_detector,
+    post_meal=_post_meal_detector,
+    late_meal=_late_meal_detector,
+    walk_effect=_walk_detector,
+)

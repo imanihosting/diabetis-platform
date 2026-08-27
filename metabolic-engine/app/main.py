@@ -80,8 +80,16 @@ async def ready() -> dict[str, object]:
 async def detect_patterns(request: PatternRequest) -> PatternResponse:
     """Runs the pattern engine over a user's data for a time window.
 
-    Always returns findings — including "insufficient data" findings, which are
-    a real answer and are shown to the user as such rather than hidden.
+    Always returns findings — including "insufficient data" findings and
+    refusals, which are real answers and are shown to the user as such rather
+    than hidden.
+
+    The care mode in the request decides which detectors may run, and this
+    service enforces that independently of whoever called it. The backend has
+    its own gate and refuses to ask for an analysis it should not request; this
+    one refuses to perform one. Neither defers to the other, because a gate
+    with a single enforcement point opens the moment something new calls the
+    service.
     """
     if request.to <= request.from_:
         raise HTTPException(
@@ -89,7 +97,17 @@ async def detect_patterns(request: PatternRequest) -> PatternResponse:
             detail="`to` must be after `from`",
         )
 
-    findings = patterns.detect_all(request.user_id, request.from_, request.to)
+    # Care mode arrives in the request and is not looked up here. The backend
+    # derives it from the recorded diagnosis and the flags in force, and a
+    # second lookup in this service would be a second source of truth for the
+    # value that decides which analysis a person's data is put through.
+    findings = patterns.detect_all(
+        request.user_id,
+        request.from_,
+        request.to,
+        care_mode=request.care_mode,
+        active_flags=request.active_flags,
+    )
 
     return PatternResponse(
         user_id=request.user_id,
