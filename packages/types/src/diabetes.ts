@@ -279,3 +279,40 @@ function unsupportedReason(careMode: CareMode): string {
       return 'Wellovue does not yet produce findings for this care mode.';
   }
 }
+
+/**
+ * What the platform will not do about insulin, said where insulin is involved.
+ *
+ * Not a disclaimer. A screen that shows "meals followed by a walk were
+ * associated with a 1.1 mmol/L lower rise" to somebody who doses insulin is one
+ * short inferential step from being read as "so take less insulin", and the
+ * step is one the reader makes, not one the product wrote. Saying the boundary
+ * beside the finding rather than in a footer is the difference between stating
+ * it and having stated it.
+ *
+ * Shown only where it applies. On a screen belonging to someone who takes no
+ * insulin it would be noise, and a boundary that appears everywhere is read
+ * nowhere.
+ */
+export const INSULIN_BOUNDARY_NOTICE = {
+  title: 'What this is not',
+  body:
+    'These findings describe associations in your own records. They are not ' +
+    'instructions about insulin. Wellovue does not calculate doses, does not ' +
+    'suggest changing one, and cannot see enough to do either safely. Any ' +
+    'change to insulin is a conversation with your clinician, and these ' +
+    'findings are something to take into it.',
+} as const;
+
+/** Whether the insulin boundary applies to this person. */
+export function requiresInsulinBoundary(
+  careMode: CareMode,
+  activeFlags: readonly SafetyFlag[],
+): boolean {
+  return (
+    careMode === 'type_2_insulin_supported' ||
+    careMode === 'type_1_cgm_insulin' ||
+    activeFlags.includes('insulin_therapy') ||
+    activeFlags.includes('pump_or_automated_insulin_delivery')
+  );
+}

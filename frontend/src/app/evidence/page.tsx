@@ -4,12 +4,14 @@ import { useState } from 'react';
 import {
   findingStrength,
   profileNeedsSetup,
+  requiresInsulinBoundary,
   type PatternResponse,
   type StructuredFinding,
 } from '@wellovue/types';
 import { AppShell } from '@/components/AppShell';
 import { FindingCard } from '@/components/FindingCard';
 import { UnsupportedCareMode } from '@/components/UnsupportedCareMode';
+import { InsulinBoundary } from '@/components/InsulinBoundary';
 import { useEvidence } from '@/hooks/useEvidence';
 import { useDiabetesProfile } from '@/hooks/useDiabetesProfile';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -112,6 +114,14 @@ export default function EvidencePage() {
           needsSetup={
             profile.data ? profileNeedsSetup(profile.data.profile) : false
           }
+          insulinBoundary={
+            profile.data
+              ? requiresInsulinBoundary(
+                  profile.data.profile.careMode,
+                  profile.data.activeFlags,
+                )
+              : false
+          }
         />
       )}
     </AppShell>
@@ -122,10 +132,12 @@ function Findings({
   response,
   days,
   needsSetup,
+  insulinBoundary,
 }: {
   response: PatternResponse;
   days: number;
   needsSetup: boolean;
+  insulinBoundary: boolean;
 }) {
   // The gate answers with exactly one finding and nothing else, so this is the
   // whole screen rather than a card among others.
@@ -158,6 +170,10 @@ function Findings({
 
   return (
     <div className="space-y-10">
+      {/* Before the findings, so it frames them rather than qualifying a
+          conclusion the reader has already drawn. */}
+      {insulinBoundary && <InsulinBoundary />}
+
       {supported.length > 0 && (
         <Group findings={supported} />
       )}

@@ -212,6 +212,10 @@ reintroduces a specific failure.
 | Lab test names are matched case-insensitively | A lab import writes whatever the source called the test. An exact match told a demo record with eight HbA1c results that it had none. |
 | A lab's unit comes from the data, never from the detector | HbA1c is reported in % and in mmol/mol. Assuming one labels the other's numbers wrongly, on scales an order of magnitude apart. |
 | Prediabetes detectors are not offered to Type 2 | They would likely be useful there, which is exactly why switching them on by assumption would make "Type 2 is unchanged" untestable. |
+| `classifyTemplate` requires a profile context, and there is no second entry point | A safety classifier with a permissive default is one forgotten argument from allowing what it exists to stop, and one with two ways in will eventually be called through the wrong one. |
+| Every rule in the classifier can only tighten | A clause added later cannot grant a permission, so none can accidentally unblock insulin dosing. |
+| `safetyFlags` carries the flags in force, not the stored history | The flag table is append-only, so filtering the history on `status === 'active'` resurrects flags that ended. That derivation happens once, in SQL. |
+| The insulin boundary appears only where insulin is involved | A boundary that appears everywhere is read nowhere. |
 
 ## Shared Type Changes
 
@@ -561,11 +565,24 @@ has nothing to say inside thirty days, and reporting "not enough results" to
 somebody with four years of them would be false. The finding says it looked
 further back than the screen is showing.
 
-**Insulin-treated Type 2 remains.** The detectors already run for it — same
-physiology, same analysis. What is left is the copy and the experiment
-boundaries: `classifyTemplate` blocks `insulin_dosing` and gates
-`medication_timing` today, and making it profile-aware must keep it failing
-closed. The 11 tests in `backend/test/safety.spec.ts` are the contract.
+**Insulin-treated Type 2 is shipped, as a safety and language layer only.**
+`classifyTemplate` now requires a `SafetyProfileContext` — care mode plus the
+flags in force — and every rule in it can only tighten the answer, so no clause
+added later can accidentally unblock insulin dosing. `medication_dose` becomes
+`blocked` wherever insulin is involved; `medication_timing` stays
+`clinician_gated`, because moving a dose earlier or later is a real question a
+clinician can supervise and blocking it pushes that conversation out of the
+product. The Evidence screen carries an explicit boundary above the findings
+for anyone on insulin, and nowhere else.
+
+No insulin-specific detectors, deliberately. The analysis is the same
+physiology read the same way; what needed hardening was the safety primitive
+and the language around it.
+
+**This does not ship experiment safety end to end.** Nothing calls
+`classifyTemplate` — there is no experiments endpoint. It is the contract the
+database's check constraints mirror, hardened now so that experiment work
+starts from the right primitive rather than retrofitting one.
 
 
 
@@ -688,25 +705,27 @@ release:
 
 ## Next Implementation Ticket
 
-Prediabetes is shipped. The next ticket is the other half of Phase C:
+Phase C is complete. Phase D is gestational, and it is the first care mode that
+should not be built without clinical review — the guide's own release checklist
+says so, and nothing in the platform yet satisfies it.
 
-> Make the safety classifier profile-aware, and tighten the language for
-> insulin-treated Type 2.
+Before that, two smaller pieces of debt are worth clearing, both created by
+work that shipped correctly:
 
-Acceptance criteria:
+> Give `classifyTemplate` a caller.
 
-- `classifyTemplate` takes the care mode and active flags alongside the
-  template, and still gates anything it does not recognise. The 11 existing
-  tests in `backend/test/safety.spec.ts` pass unchanged.
-- Insulin-treated Type 2 receives the same findings it does now, and no
-  experiment template that implies a dose or timing change.
-- Findings shown to someone on insulin carry the stricter language: what the
-  platform will not do about insulin belongs beside the finding, not in a
-  footer.
-- Nothing about the Type 2 detector output changes.
+Nothing invokes it. The database's check constraints enforce the same
+invariants independently, so the contract is not unenforced — but a safety
+function with no caller is one nobody notices breaking. An experiments endpoint
+is the natural caller and is Phase D-sized; a smaller step is to surface the
+classification on the Evidence screen, so a person can see which experiments
+their profile would permit before any of them exist.
 
-After that, Phase D: gestational, as a clinician-supported workflow only.
+> Let people record sleep.
 
-Per-user target ranges still wait. The shared range in
-`packages/types/src/glucose.ts` is where they will plug in, so adding them is
-now a controlled change rather than a hunt through the codebase.
+`metabolic.sleep_sessions` exists with no write path. Two findings currently
+name sleep in their limitations and cannot suggest recording it, because
+the suggestion catalogue only holds things the product can capture. Adding the
+write path would let a real limitation become an actionable suggestion.
+
+Per-user target ranges still wait.
