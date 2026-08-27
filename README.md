@@ -139,9 +139,11 @@ shows both. A person deciding what to trust about their own body should not
 have to hunt for the difference between a measurement and an estimate.
 
 **The database enforces the safety rules, not just the application.** Predictions
-are immutable, the audit trail is append-only, and a clinician-gated experiment
-cannot be marked active without review — all enforced by triggers and check
-constraints. See [infra/README.md](./infra/README.md).
+are immutable, outcomes are written once and never edited, the audit trail is
+append-only, a clinician-gated experiment cannot be marked active without
+review, an experiment cannot start without a prediction attached, and it cannot
+be completed without an outcome recorded against that prediction — all enforced
+by triggers and check constraints. See [infra/README.md](./infra/README.md).
 
 **A finding is produced by a model, never by a language model.** The engine
 returns structured findings with an effect estimate, a confidence, a sample
@@ -204,18 +206,21 @@ fails closed: an unrecognised template is gated, never allowed.
       activity consistency, meal timing
 - [x] Experiment safety: every proposal is classified against the care profile,
       persisted with its decision, and re-checked by database constraints
+- [x] Proposing an experiment from the finding it would settle
+- [x] Prediction accountability: starting an experiment writes down what is
+      expected of it in the same transaction, immutably, attributed to the
+      engine build that decided it
+- [x] Measuring the result: recording what happened is what finishes an
+      experiment, and `/experiments/[id]` shows predicted beside observed
 - [x] Rate limiting on public endpoints, and CI on every push
 - [x] Containerised stack and an isolated Docker test environment
 
-**Not built.** The loop the product promises is not closed yet: findings exist,
-and the steps that turn one into a tested answer do not.
+**Not built.** The loop closes; what it produces for somebody else does not.
 
-- [ ] Proposing an experiment from a finding — the endpoint exists, no screen
-      calls it
-- [ ] Prediction accountability: tables and immutability guards exist, no
-      endpoints, so nothing is recorded before an experiment runs
-- [ ] Measuring an experiment against the prediction that preceded it
-- [ ] Clinician evidence packet
+- [ ] Clinician evidence packet — thirty and ninety days of findings,
+      experiments, predictions and outcomes on one readable page
+- [ ] Weighing competing explanations for a pattern against each other
+- [ ] Recording a clinician's agreement, so a gated experiment can proceed
 - [ ] Gestational and Type 1 workflows, both of which need clinical review first
 
 ## Open decisions

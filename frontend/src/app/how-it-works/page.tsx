@@ -86,8 +86,9 @@ export default function HowItWorksPage() {
         <p>
           Experiments are classified before they can be started. Anything
           touching medication, fasting, or a major change is gated behind
-          clinician review, and anything in the refused list cannot be created
-          at all.
+          clinician review. Anything in the refused list can never run: asking
+          for one is answered, and kept as a record of what was asked and why
+          it was declined, but nothing about it is a matter of timing.
         </p>
         <p>
           These are database constraints, not copy. An unrecognised experiment

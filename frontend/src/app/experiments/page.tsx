@@ -1,41 +1,23 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import type { Experiment, SafetyStatus } from '@wellovue/types';
+import type { Experiment } from '@wellovue/types';
 import { AppShell } from '@/components/AppShell';
+import { ExperimentState } from '@/components/ExperimentState';
 import { useCurrentUser, useSession } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
-import { cn } from '@/lib/cn';
 
 /**
- * Experiments proposed, and what the safety rules said about each.
+ * Experiments proposed, what the safety rules said about each, and where each
+ * one got to.
  *
- * Read-only, and deliberately so. The endpoint that proposes one exists and
- * applies the safety decision; nothing in the app calls it yet. Shipping the
- * surface that shows the decision before the surface that asks for it is the
- * right order: the thing worth getting right first is what a refusal looks
- * like, and a refusal is the one outcome a person cannot argue with and should
- * still understand.
+ * A list and nothing more. Starting one and recording its result both live on
+ * the experiment's own page, because starting is the first irreversible thing
+ * anybody does here — the trial cannot afterwards be deleted, and neither can
+ * the prediction written when it begins. That belongs on the screen that shows
+ * what follows from it, not behind a button in a row.
  */
-
-const LABELS: Record<SafetyStatus, string> = {
-  allowed: 'Ready to start',
-  clinician_gated: 'Needs a clinician',
-  blocked: 'Wellovue will not run this',
-};
-
-/**
- * The same reasoning as EvidenceBadge: the colour is never the only signal,
- * and the words carry the meaning on their own in print and in greyscale.
- */
-const STYLES: Record<SafetyStatus, string> = {
-  allowed:
-    'border-[color-mix(in_oklch,var(--evidence-strong)_45%,transparent)] text-evidence-strong',
-  clinician_gated:
-    'border-[color-mix(in_oklch,var(--evidence-weak)_45%,transparent)] text-evidence-weak',
-  blocked:
-    'border-[color-mix(in_oklch,var(--below-range-text)_45%,transparent)] text-zone-belowText',
-};
 
 export default function ExperimentsPage() {
   const user = useCurrentUser();
@@ -89,11 +71,18 @@ export default function ExperimentsPage() {
         <div className="mt-8 border border-dashed border-rule px-6 py-10">
           <p className="text-sm text-ink">You have not proposed an experiment yet.</p>
           <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
-            Proposing one from here is still being built. When it arrives, every
-            proposal will be checked against your care profile before anything
-            starts, and some will be refused outright — changing an insulin dose
-            is not something Wellovue will ever help plan.
+            They start on the Evidence screen: a finding that a week of
+            alternating behaviour could settle offers a test for itself. Every
+            proposal is checked against your care profile before anything
+            starts, and some are refused outright — changing an insulin dose is
+            not something Wellovue will ever help plan.
           </p>
+          <Link
+            href="/evidence"
+            className="mt-4 inline-block text-sm text-ink underline underline-offset-4"
+          >
+            See what your data supports
+          </Link>
         </div>
       )}
 
@@ -110,28 +99,30 @@ export default function ExperimentsPage() {
 
 function ExperimentRow({ experiment }: { experiment: Experiment }) {
   return (
-    <li className="border border-rule bg-paper-raised p-5">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <p className="max-w-md text-sm text-ink">{experiment.title}</p>
-        <span
-          className={cn(
-            'inline-flex items-center border px-2 py-0.5 text-xs font-medium',
-            STYLES[experiment.safetyStatus],
-          )}
-        >
-          {LABELS[experiment.safetyStatus]}
-        </span>
-      </div>
+    <li>
+      {/* The whole card is the link. A refused experiment leads somewhere too:
+          the page is where the refusal is explained, and an unclickable row
+          would leave the one answer people most want a reason for as a badge
+          and nothing else. */}
+      <Link
+        href={`/experiments/${experiment.id}`}
+        className="block border border-rule bg-paper-raised p-5 transition-colors hover:bg-paper-sunk"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <p className="max-w-md text-sm text-ink">{experiment.title}</p>
+          <ExperimentState experiment={experiment} />
+        </div>
 
-      <p className="mt-3 max-w-prose text-sm leading-relaxed text-ink-muted">
-        {experiment.question}
-      </p>
-
-      {experiment.clinicianReviewRequired && (
-        <p className="mt-4 border-t border-rule pt-4 text-sm text-ink-muted">
-          Waiting on a clinician to look at it. Nothing starts until they do.
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-ink-muted">
+          {experiment.question}
         </p>
-      )}
+
+        {experiment.clinicianReviewRequired && (
+          <p className="mt-4 border-t border-rule pt-4 text-sm text-ink-muted">
+            Waiting on a clinician to look at it. Nothing starts until they do.
+          </p>
+        )}
+      </Link>
     </li>
   );
 }

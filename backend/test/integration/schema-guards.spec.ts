@@ -245,6 +245,146 @@ describe('database safety guarantees', () => {
       );
       expect(error).toBeNull();
     });
+
+    it('refuses a second prediction for the same experiment', async () => {
+      // Added by migration 0019. Two expectations attached to one trial makes
+      // "what was predicted" a question with two answers, and whichever a
+      // screen shows was chosen after the fact.
+      const { rows: created } = await db.query<{ id: string }>(
+        `insert into experiments.experiments
+           (user_id, title, question, protocol, safety_status,
+            clinician_review_required, status)
+         values ($1, 'T', 'Q', '{}', 'allowed', false, 'draft')
+         returning id`,
+        [userId],
+      );
+      const { rows: model } = await db.query<{ id: string }>(
+        `insert into ai.model_versions (model_name, version)
+         values ('pattern-engine', 'schema-guard-probe')
+         on conflict (model_name, version) do update set model_name = excluded.model_name
+         returning id`,
+      );
+      const predict = () =>
+        db.query(
+          `insert into ai.predictions
+             (user_id, model_version_id, experiment_id, prediction_type,
+              input_snapshot, prediction)
+           values ($1, $2, $3, 'probe', '{}'::jsonb, '{}'::jsonb)`,
+          [userId, model[0].id, created[0].id],
+        );
+
+      expect(await captureError(predict)).toBeNull();
+      expect((await captureError(predict))?.message).toMatch(
+        /predictions_one_per_experiment|duplicate key/i,
+      );
+    });
+  });
+
+  describe('an outcome is recorded once, and completion requires one', () => {
+    /** A safe experiment, running, with its prediction attached. */
+    async function running() {
+      const { rows: created } = await db.query<{ id: string }>(
+        `insert into experiments.experiments
+           (user_id, title, question, protocol, safety_status,
+            clinician_review_required, status)
+         values ($1, 'T', 'Q', '{}', 'allowed', false, 'draft')
+         returning id`,
+        [userId],
+      );
+      const { rows: model } = await db.query<{ id: string }>(
+        `insert into ai.model_versions (model_name, version)
+         values ('pattern-engine', 'schema-guard-probe')
+         on conflict (model_name, version) do update set model_name = excluded.model_name
+         returning id`,
+      );
+      const { rows: prediction } = await db.query<{ id: string }>(
+        `insert into ai.predictions
+           (user_id, model_version_id, experiment_id, prediction_type,
+            input_snapshot, prediction)
+         values ($1, $2, $3, 'probe', '{}'::jsonb, '{"expectedEffect": -1.3}'::jsonb)
+         returning id`,
+        [userId, model[0].id, created[0].id],
+      );
+      await db.query("update experiments.experiments set status = 'active' where id = $1", [
+        created[0].id,
+      ]);
+      return { experimentId: created[0].id, predictionId: prediction[0].id };
+    }
+
+    const measure = (predictionId: string, value: number) =>
+      db.query(
+        `insert into ai.prediction_outcomes (prediction_id, observed_at, outcome)
+         values ($1, now(), $2::jsonb)`,
+        [predictionId, JSON.stringify({ observedEffect: value })],
+      );
+
+    it('refuses to complete an experiment that was never measured', async () => {
+      // The mirror of the prediction guard. A loop that can write down what it
+      // expects and then finish without saying what happened keeps only the
+      // flattering half of its own record.
+      const { experimentId } = await running();
+
+      const error = await captureError(() =>
+        db.query("update experiments.experiments set status = 'completed' where id = $1", [
+          experimentId,
+        ]),
+      );
+      expect(error?.message).toMatch(/without an outcome recorded/i);
+    });
+
+    it('still allows an unmeasured experiment to be abandoned', async () => {
+      // Giving up is an honest end and the status says so. Completion is the
+      // status that asserts there is an answer.
+      const { experimentId } = await running();
+
+      const error = await captureError(() =>
+        db.query("update experiments.experiments set status = 'abandoned' where id = $1", [
+          experimentId,
+        ]),
+      );
+      expect(error).toBeNull();
+    });
+
+    it('completes once the measurement exists', async () => {
+      const { experimentId, predictionId } = await running();
+      await measure(predictionId, -0.9);
+
+      const error = await captureError(() =>
+        db.query("update experiments.experiments set status = 'completed' where id = $1", [
+          experimentId,
+        ]),
+      );
+      expect(error).toBeNull();
+    });
+
+    it('refuses to rewrite or remove what was observed', async () => {
+      const { predictionId } = await running();
+      await measure(predictionId, -0.9);
+
+      const rewritten = await captureError(() =>
+        db.query(
+          `update ai.prediction_outcomes set outcome = '{"observedEffect": -1.3}'::jsonb
+            where prediction_id = $1`,
+          [predictionId],
+        ),
+      );
+      expect(rewritten?.message).toMatch(/immutable/i);
+
+      const removed = await captureError(() =>
+        db.query('delete from ai.prediction_outcomes where prediction_id = $1', [
+          predictionId,
+        ]),
+      );
+      expect(removed?.message).toMatch(/immutable and cannot be deleted/i);
+    });
+
+    it('refuses a second measurement of the same prediction', async () => {
+      const { predictionId } = await running();
+      await measure(predictionId, -0.9);
+
+      const second = await captureError(() => measure(predictionId, -1.3));
+      expect(second?.message).toMatch(/duplicate key|prediction_id/i);
+    });
   });
 
   describe('measurement integrity', () => {

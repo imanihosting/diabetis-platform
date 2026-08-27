@@ -33,14 +33,12 @@ const STEPS = [
   {
     n: 5,
     title: 'Propose a safe test',
-    body: 'Where uncertainty is worth resolving, a small experiment you can run in a week, with a prediction recorded before it starts. The safety rules that decide what may be proposed are built and enforced; the screen that proposes one is not.',
-    building: true,
+    body: 'Where uncertainty is worth resolving, a small experiment you can run in a week. Every proposal is checked against your care profile first, and some are refused outright. Starting one writes down what is expected of it in the same moment, and that cannot be edited afterwards.',
   },
   {
     n: 6,
     title: 'Measure the result',
-    body: 'What happened, compared against what was predicted. The database already refuses to let a prediction be edited after the fact; nothing writes one yet.',
-    building: true,
+    body: 'What happened, beside what was predicted, and the gap between them. Neither side can be revised once written — the database refuses it — so the record of how often this was right about you is the one thing here nobody can improve after the fact.',
   },
   {
     n: 7,

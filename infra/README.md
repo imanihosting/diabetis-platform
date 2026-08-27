@@ -53,9 +53,19 @@ rejects violations directly:
 | Predictions cannot be deleted | trigger `predictions_immutable` |
 | The audit trail cannot be rewritten or deleted | trigger `audit_events_append_only` |
 | Audit rows can be anonymised for erasure, never reassigned | migration `0010` |
+| An outcome cannot be rewritten or deleted | trigger `prediction_outcomes_immutable` |
+| An experiment has at most one prediction | unique index `predictions_one_per_experiment` |
+| A prediction has at most one outcome | unique constraint on `prediction_id` |
 | A clinician-gated experiment cannot skip review | check `experiments_gate_chk` |
 | A blocked experiment can never be active | check `experiments_blocked_chk` |
+| An experiment cannot become active without a prediction | trigger `experiments_active_requires_prediction` |
+| An experiment cannot be completed without an outcome | trigger `experiments_completed_requires_outcome` |
 | Confidence values stay within 0–1 | check constraints on every table carrying one |
+
+Immutability here means "cannot be revised while it belongs to somebody", not
+"can never be removed". Predictions and outcomes leave with the account they
+describe; the triggers tell erasure from tampering by checking whether the
+parent row still resolves, since PostgreSQL removes a parent before cascading.
 
 ## TLS
 

@@ -505,6 +505,316 @@ describe('experiments', () => {
     });
   });
 
+  describe('finishing', () => {
+    /** An account with enough data for the walk finding to exist. */
+    async function running() {
+      const theirEmail = `finish-${Date.now()}-${Math.random().toString(36).slice(2)}@test.local`;
+      const registered = await http()
+        .post('/api/auth/register')
+        .send({ email: theirEmail, password })
+        .expect(201);
+      const theirAuth = {
+        authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
+      };
+
+      const { rows } = await pool.query<{ id: string }>(
+        'select id from identity.users where email = $1',
+        [theirEmail],
+      );
+      const id = rows[0].id;
+
+      await http()
+        .put('/api/diabetes-profile')
+        .set(theirAuth)
+        .send({ diabetesType: 'type_2' })
+        .expect(200);
+
+      for (let day = 0; day < 24; day += 1) {
+        const mealAt = new Date(Date.now() - (24 - day) * 24 * 60 * 60 * 1000);
+        mealAt.setUTCHours(12, 30, 0, 0);
+        const walked = day % 2 === 0;
+        await pool.query(
+          `insert into nutrition.meals (user_id, started_at, meal_type, description, source)
+           values ($1, $2, 'lunch', 'Test meal', 'manual')`,
+          [id, mealAt.toISOString()],
+        );
+        if (walked) {
+          await pool.query(
+            `insert into metabolic.events (user_id, occurred_at, event_type, source, confidence, payload)
+             values ($1, $2, 'exercise_started', 'manual', 1.0, '{"kind":"walk"}'::jsonb)`,
+            [id, new Date(mealAt.getTime() + 20 * 60 * 1000).toISOString()],
+          );
+        }
+        for (const [offset, value] of [
+          [-10, 6.0],
+          [60, walked ? 7.6 : 9.0],
+        ] as [number, number][]) {
+          await pool.query(
+            `insert into metabolic.glucose_samples (user_id, measured_at, glucose_value, unit, source)
+             values ($1, $2, $3, 'mmol/L', 'cgm_device') on conflict do nothing`,
+            [id, new Date(mealAt.getTime() + offset * 60 * 1000).toISOString(), value],
+          );
+        }
+      }
+
+      const proposed = await http()
+        .post('/api/experiments')
+        .set(theirAuth)
+        .send({
+          template: 'post_meal_walk',
+          title: 'Walking after a meal',
+          question: 'Does it help?',
+          protocol: { days: 6 },
+        })
+        .expect(201);
+      const experimentId = proposed.body.experiment.id as string;
+
+      await http()
+        .post(`/api/experiments/${experimentId}/start`)
+        .set(theirAuth)
+        .expect(201);
+
+      return { id, auth: theirAuth, experimentId };
+    }
+
+    it('records the outcome and finishes, scoring it against what was expected', async () => {
+      const account = await running();
+      const observedAt = new Date();
+
+      const res = await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send({ observedAt: observedAt.toISOString(), observedEffect: -0.9 })
+        .expect(201);
+
+      expect(res.body.experiment.status).toBe('completed');
+      expect(res.body.experiment.endedAt).toBeTruthy();
+      // The prediction advances to matched, and its content is untouched.
+      expect(res.body.prediction.status).toBe('matched');
+      expect(res.body.prediction.prediction.expectedEffect).toBeLessThan(0);
+
+      const summary = res.body.outcome.errorSummary as {
+        expectedEffect: number;
+        observedEffect: number;
+        error: number;
+        absoluteError: number;
+      };
+      expect(summary.observedEffect).toBe(-0.9);
+      expect(summary.error).toBeCloseTo(-0.9 - summary.expectedEffect, 6);
+      expect(summary.absoluteError).toBe(Math.abs(summary.error));
+    });
+
+    it('ends the experiment when it was measured, not when the form was sent', async () => {
+      // Somebody recording Friday's result on Sunday is the ordinary case, and
+      // an end date disagreeing with the measurement it holds makes the record
+      // unusable later.
+      const account = await running();
+      const observedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+
+      await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send({ observedAt: observedAt.toISOString(), observedEffect: -1.1 })
+        .expect(201);
+
+      const { rows } = await pool.query<{ ended_at: Date }>(
+        'select ended_at from experiments.experiments where id = $1',
+        [account.experimentId],
+      );
+      expect(rows[0].ended_at.getTime()).toBe(observedAt.getTime());
+    });
+
+    it('records a result once', async () => {
+      // A second attempt is refused rather than replacing a disappointing
+      // result with a better one.
+      const account = await running();
+      const body = { observedAt: new Date().toISOString(), observedEffect: -0.9 };
+
+      await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send(body)
+        .expect(201);
+
+      const second = await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send({ ...body, observedEffect: -1.3 })
+        .expect(409);
+      expect(second.body.message).toMatch(/already finished/i);
+
+      const { rows } = await pool.query<{ outcome: { observedEffect: number } }>(
+        `select o.outcome from ai.prediction_outcomes o
+           join ai.predictions p on p.id = o.prediction_id
+          where p.experiment_id = $1`,
+        [account.experimentId],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].outcome.observedEffect).toBe(-0.9);
+    });
+
+    it('refuses to measure an experiment that never ran', async () => {
+      const account = await running();
+      const draft = await http()
+        .post('/api/experiments')
+        .set(account.auth)
+        .send({
+          template: 'post_meal_walk',
+          title: 'Not started',
+          question: 'Does it help?',
+          protocol: { days: 6 },
+        })
+        .expect(201);
+
+      const res = await http()
+        .post(`/api/experiments/${draft.body.experiment.id}/complete`)
+        .set(account.auth)
+        .send({ observedAt: new Date().toISOString(), observedEffect: -0.9 })
+        .expect(409);
+      expect(res.body.message).toMatch(/no run to measure/i);
+    });
+
+    it('refuses someone else’s experiment', async () => {
+      const mine = await running();
+      const theirs = await running();
+
+      await http()
+        .post(`/api/experiments/${mine.experimentId}/complete`)
+        .set(theirs.auth)
+        .send({ observedAt: new Date().toISOString(), observedEffect: -0.9 })
+        .expect(404);
+    });
+
+    it('is refused by the database independently of the API', async () => {
+      // The second line, and the mirror of 0018. A future caller that finishes
+      // an experiment without measuring it is stopped here rather than
+      // trusted: a loop that can write down what it expects and then end
+      // without saying what happened keeps only the flattering half.
+      const account = await running();
+
+      const finished = await captureError(() =>
+        pool.query(
+          "update experiments.experiments set status = 'completed' where id = $1",
+          [account.experimentId],
+        ),
+      );
+      expect(finished?.message).toMatch(/without an outcome recorded/i);
+    });
+
+    it('still allows an experiment to be abandoned unmeasured', async () => {
+      // Giving up without measuring is an honest end, and the status says so.
+      // It is completion specifically that asserts there is an answer.
+      const account = await running();
+
+      const abandoned = await captureError(() =>
+        pool.query(
+          "update experiments.experiments set status = 'abandoned' where id = $1",
+          [account.experimentId],
+        ),
+      );
+      expect(abandoned).toBeNull();
+    });
+
+    it('rolls the completion back when the outcome cannot be written', async () => {
+      // The failure this design is for, approached from the other side: the
+      // outcome write is refused because one already exists, and the
+      // experiment must not be left in a state that says otherwise.
+      const account = await running();
+      const body = { observedAt: new Date().toISOString(), observedEffect: -0.9 };
+
+      await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send(body)
+        .expect(201);
+
+      // Put it back to active over SQL, so the service's own status check is
+      // not what refuses, and the outcome write is reached a second time.
+      await pool.query(
+        "update experiments.experiments set status = 'active' where id = $1",
+        [account.experimentId],
+      );
+
+      const res = await http()
+        .post(`/api/experiments/${account.experimentId}/complete`)
+        .set(account.auth)
+        .send({ ...body, observedEffect: -1.3 })
+        .expect(400);
+      expect(res.body.message).toMatch(/written once/i);
+
+      const { rows } = await pool.query<{ status: string }>(
+        'select status from experiments.experiments where id = $1',
+        [account.experimentId],
+      );
+      expect(rows[0].status).toBe('active');
+    });
+  });
+
+  describe('reading one', () => {
+    it('returns the experiment, the prediction and the outcome together', async () => {
+      const account = await (async () => {
+        const theirEmail = `detail-${Date.now()}@test.local`;
+        const registered = await http()
+          .post('/api/auth/register')
+          .send({ email: theirEmail, password })
+          .expect(201);
+        return {
+          auth: {
+            authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
+          },
+        };
+      })();
+
+      const proposed = await http()
+        .post('/api/experiments')
+        .set(account.auth)
+        .send({
+          template: 'insulin_dosing',
+          title: 'No',
+          question: 'No',
+          protocol: {},
+        })
+        .expect(201);
+
+      const res = await http()
+        .get(`/api/experiments/${proposed.body.experiment.id}`)
+        .set(account.auth)
+        .expect(200);
+
+      expect(res.body.experiment.safetyStatus).toBe('blocked');
+      // A blocked experiment never gets either, and both come back as null
+      // rather than being absent — the screen has to distinguish "not yet"
+      // from "never".
+      expect(res.body.prediction).toBeNull();
+      expect(res.body.outcome).toBeNull();
+    });
+
+    it('refuses someone else’s experiment, and an unauthenticated caller', async () => {
+      const mine = await http()
+        .post('/api/experiments')
+        .set(auth())
+        .send({
+          template: 'post_meal_walk',
+          title: 'Mine',
+          question: 'Does it help?',
+          protocol: {},
+        })
+        .expect(201);
+      const id = mine.body.experiment.id as string;
+
+      const other = await http()
+        .post('/api/auth/register')
+        .send({ email: `other-detail-${Date.now()}@test.local`, password })
+        .expect(201);
+
+      await http()
+        .get(`/api/experiments/${id}`)
+        .set({ authorization: `Bearer ${other.body.tokens.accessToken}` })
+        .expect(404);
+      await http().get(`/api/experiments/${id}`).expect(401);
+    });
+  });
+
   describe('listing', () => {
     it('returns what was proposed, and refuses an unauthenticated caller', async () => {
       const mine = await http().get('/api/experiments').set(auth()).expect(200);

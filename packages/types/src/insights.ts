@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { confidenceSchema, uuidSchema } from './common';
 import { careModeSchema, safetyFlagSchema } from './diabetes';
+import { experimentSchema } from './experiments';
 
 /**
  * The contract between the quantitative engine and everything downstream.
@@ -275,6 +276,16 @@ export function proposableTemplates(): string[] {
 export const predictionSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
+  /**
+   * The experiment this expectation is about.
+   *
+   * Null only for rows written before migration 0018 gave the link a column of
+   * its own. Exposed because a screen showing predicted against observed has to
+   * pair the two, and pairing them by reading `inputSnapshot` would mean
+   * trusting the shape of a jsonb blob for something the database already
+   * enforces as a foreign key.
+   */
+  experimentId: uuidSchema.nullable(),
   predictionType: z.string(),
   madeAt: z.coerce.date(),
   targetAt: z.coerce.date().nullable(),
@@ -288,12 +299,30 @@ export const predictionSchema = z.object({
 });
 export type Prediction = z.infer<typeof predictionSchema>;
 
-/** All the client chooses: which experiment, and when it should be judged. */
-export const createPredictionSchema = z.object({
-  experimentId: uuidSchema,
-  targetAt: z.coerce.date().optional(),
+/**
+ * What a prediction actually says, once it is read rather than stored.
+ *
+ * `prediction` is jsonb because the shape belongs to whatever made it, and a
+ * column per field would have to change every time a new kind of prediction
+ * arrives. Reading it back through a schema rather than a cast is the other
+ * half of that bargain: a row this does not recognise comes back as null and
+ * is shown as unreadable, instead of rendering `undefined mmol/L` at somebody
+ * who is trying to find out whether the platform was right about them.
+ */
+export const expectationSchema = z.object({
+  expectedEffect: z.number(),
+  unit: z.string().nullable(),
+  statement: z.string(),
+  basisFindingType: z.string(),
 });
-export type CreatePredictionInput = z.infer<typeof createPredictionSchema>;
+export type Expectation = z.infer<typeof expectationSchema>;
+
+export function expectationFrom(
+  prediction: Pick<Prediction, 'prediction'>,
+): Expectation | null {
+  const parsed = expectationSchema.safeParse(prediction.prediction);
+  return parsed.success ? parsed.data : null;
+}
 
 /**
  * What was actually observed.
@@ -301,6 +330,11 @@ export type CreatePredictionInput = z.infer<typeof createPredictionSchema>;
  * Separate from the prediction, in its own table, written once. Attaching an
  * outcome is the only thing that ever touches a prediction, and even then it
  * only advances the status: the expectation itself stays exactly as written.
+ *
+ * There is one way to send this, and it is completing the experiment. An
+ * outcome that could be recorded on its own would leave the experiment running
+ * forever with its answer already known, and a second door into the same write
+ * is how the two eventually disagree.
  */
 export const attachOutcomeSchema = z.object({
   observedAt: z.coerce.date(),
@@ -310,12 +344,51 @@ export const attachOutcomeSchema = z.object({
 });
 export type AttachOutcomeInput = z.infer<typeof attachOutcomeSchema>;
 
+/**
+ * The scoring, computed once on the server when the outcome is written.
+ *
+ * Stored rather than derived on read, because it is part of the record: a
+ * figure recomputed at display time is a figure that changes when the code
+ * that computes it changes, and the whole point of these rows is that they do
+ * not move.
+ *
+ * `expectedEffect` is nullable for the same reason the engine's own estimates
+ * are — a prediction whose expectation could not be read as a number is scored
+ * as unscoreable rather than as zero.
+ */
+export const errorSummarySchema = z.object({
+  expectedEffect: z.number().nullable(),
+  observedEffect: z.number(),
+  /** Signed. Whether the platform over- or under-estimated is the interesting half. */
+  error: z.number().nullable(),
+  absoluteError: z.number().nullable(),
+});
+export type ErrorSummary = z.infer<typeof errorSummarySchema>;
+
 export const predictionOutcomeSchema = z.object({
   id: uuidSchema,
   predictionId: uuidSchema,
   observedAt: z.coerce.date(),
-  outcome: z.record(z.unknown()),
-  errorSummary: z.record(z.unknown()).nullable(),
+  outcome: z.object({
+    observedEffect: z.number(),
+    notes: z.string().nullable(),
+  }),
+  errorSummary: errorSummarySchema.nullable(),
   createdAt: z.coerce.date(),
 });
 export type PredictionOutcome = z.infer<typeof predictionOutcomeSchema>;
+
+/**
+ * An experiment with the expectation written before it ran and, once it is
+ * finished, what actually happened.
+ *
+ * One response rather than three requests, because the screen it exists for is
+ * meaningless in pieces: predicted without observed is a promise, and observed
+ * without predicted is a measurement of nothing in particular.
+ */
+export const experimentDetailSchema = z.object({
+  experiment: experimentSchema,
+  prediction: predictionSchema.nullable(),
+  outcome: predictionOutcomeSchema.nullable(),
+});
+export type ExperimentDetail = z.infer<typeof experimentDetailSchema>;

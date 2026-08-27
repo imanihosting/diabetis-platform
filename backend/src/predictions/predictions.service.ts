@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import {
   proposalFromFinding,
   type AttachOutcomeInput,
-  type CreatePredictionInput,
+  type ErrorSummary,
   type PatternResponse,
   type Prediction,
   type PredictionOutcome,
@@ -36,12 +36,6 @@ export class PredictionsService {
     private readonly evidence: EvidenceService,
     private readonly profiles: DiabetesProfileService,
   ) {}
-
-  async create(userId: string, input: CreatePredictionInput): Promise<Prediction> {
-    return this.db.transaction((client) =>
-      this.createWithin(client, userId, input.experimentId, input.targetAt ?? null),
-    );
-  }
 
   /**
    * The prediction write, on a caller's transaction.
@@ -78,6 +72,18 @@ export class PredictionsService {
         'This experiment predates the template being recorded, so there is nothing to predict about.',
       );
     }
+    const already = await client.query(
+      'select 1 from ai.predictions where experiment_id = $1',
+      [experimentId],
+    );
+    if (already.rowCount && already.rowCount > 0) {
+      // Migration 0019 refuses this independently. Answering here means a
+      // caller gets a sentence rather than a unique-violation 500.
+      throw new BadRequestException(
+        'This experiment already has a prediction. What was expected of it is recorded once.',
+      );
+    }
+
     if (experiment.safety_status === 'blocked') {
       // Nothing the product refuses to run gets a prediction. Writing one would
       // put an immutable expectation about an experiment that can never happen
@@ -170,22 +176,31 @@ export class PredictionsService {
   }
 
   /**
-   * Records what happened, once.
+   * Records what happened, once, on a caller's transaction.
+   *
+   * Only reachable by completing the experiment. There is no endpoint that
+   * writes an outcome on its own, deliberately: one that did would leave the
+   * experiment running with its answer already known, and the second door into
+   * the same write is how the two eventually disagree about whether a trial
+   * finished.
    *
    * The outcome lives in its own table with a unique constraint on the
    * prediction, so a second attempt is refused rather than overwriting the
-   * first. The prediction itself is only advanced from `pending` to `matched`,
-   * which is the one change its trigger permits.
+   * first, and since migration 0019 the row cannot be edited afterwards
+   * either. The prediction itself is only advanced from `pending` to
+   * `matched`, which is the one change its trigger permits.
    */
-  async attachOutcome(
+  async attachOutcomeWithin(
+    client: PoolClient,
     userId: string,
     predictionId: string,
     input: AttachOutcomeInput,
   ): Promise<PredictionOutcome> {
-    const prediction = await this.db.queryOne<PredictionRow>(
+    const found = await client.query<PredictionRow>(
       'select * from ai.predictions where id = $1 and user_id = $2',
       [predictionId, userId],
     );
+    const prediction = found.rows[0];
     if (!prediction) throw new NotFoundException('No such prediction');
 
     const expected = Number(
@@ -193,60 +208,58 @@ export class PredictionsService {
     );
     const error = Number.isFinite(expected) ? input.observedEffect - expected : null;
 
-    return this.db.transaction(async (client) => {
-      const existing = await client.query(
-        'select 1 from ai.prediction_outcomes where prediction_id = $1',
-        [predictionId],
+    const existing = await client.query(
+      'select 1 from ai.prediction_outcomes where prediction_id = $1',
+      [predictionId],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      throw new BadRequestException(
+        'This prediction already has an outcome. An outcome is written once.',
       );
-      if (existing.rowCount && existing.rowCount > 0) {
-        throw new BadRequestException(
-          'This prediction already has an outcome. An outcome is written once.',
-        );
-      }
+    }
 
-      const { rows } = await client.query<OutcomeRow>(
-        `insert into ai.prediction_outcomes
-           (prediction_id, observed_at, outcome, error_summary)
-         values ($1, $2, $3, $4)
-         returning *`,
-        [
-          predictionId,
-          input.observedAt,
-          JSON.stringify({
-            observedEffect: input.observedEffect,
-            notes: input.notes ?? null,
-          }),
-          JSON.stringify({
-            expectedEffect: Number.isFinite(expected) ? expected : null,
-            observedEffect: input.observedEffect,
-            // Signed, not absolute. Whether the platform over- or
-            // under-estimated is the interesting half.
-            error,
-            absoluteError: error === null ? null : Math.abs(error),
-          }),
-        ],
-      );
-
-      // The only update the trigger permits, and the only one this service
-      // ever makes.
-      await client.query("update ai.predictions set status = 'matched' where id = $1", [
+    const { rows } = await client.query<OutcomeRow>(
+      `insert into ai.prediction_outcomes
+         (prediction_id, observed_at, outcome, error_summary)
+       values ($1, $2, $3, $4)
+       returning *`,
+      [
         predictionId,
-      ]);
+        input.observedAt,
+        JSON.stringify({
+          observedEffect: input.observedEffect,
+          notes: input.notes ?? null,
+        }),
+        JSON.stringify({
+          expectedEffect: Number.isFinite(expected) ? expected : null,
+          observedEffect: input.observedEffect,
+          // Signed, not absolute. Whether the platform over- or
+          // under-estimated is the interesting half.
+          error,
+          absoluteError: error === null ? null : Math.abs(error),
+        }),
+      ],
+    );
 
-      await this.audit.record(
-        {
-          actorUserId: userId,
-          subjectUserId: userId,
-          action: 'prediction.outcome',
-          resourceType: 'prediction',
-          resourceId: predictionId,
-          metadata: { absoluteError: error === null ? null : Math.abs(error) },
-        },
-        client,
-      );
+    // The only update the trigger permits, and the only one this service
+    // ever makes.
+    await client.query("update ai.predictions set status = 'matched' where id = $1", [
+      predictionId,
+    ]);
 
-      return toOutcome(rows[0]);
-    });
+    await this.audit.record(
+      {
+        actorUserId: userId,
+        subjectUserId: userId,
+        action: 'prediction.outcome',
+        resourceType: 'prediction',
+        resourceId: predictionId,
+        metadata: { absoluteError: error === null ? null : Math.abs(error) },
+      },
+      client,
+    );
+
+    return toOutcome(rows[0]);
   }
 
   async list(userId: string): Promise<Prediction[]> {
@@ -259,6 +272,53 @@ export class PredictionsService {
       [userId],
     );
     return rows.map((r) => this.toPrediction(r));
+  }
+
+  /**
+   * The expectation recorded for an experiment, and what came of it.
+   *
+   * One query rather than two round trips, and read here rather than in the
+   * experiments service so every prediction the API returns is mapped by the
+   * same function. `left join` on the outcome: a prediction with no outcome is
+   * the ordinary state of a trial still running, not a missing row.
+   */
+  async forExperiment(
+    userId: string,
+    experimentId: string,
+    client?: PoolClient,
+  ): Promise<{ prediction: Prediction; outcome: PredictionOutcome | null } | null> {
+    const sql = `select p.*, m.version,
+              o.id as outcome_id, o.observed_at, o.outcome, o.error_summary,
+              o.created_at as outcome_created_at
+         from ai.predictions p
+         join ai.model_versions m on m.id = p.model_version_id
+         left join ai.prediction_outcomes o on o.prediction_id = p.id
+        where p.experiment_id = $1 and p.user_id = $2
+        order by p.made_at asc
+        limit 1`;
+    const params = [experimentId, userId];
+
+    // Optional client, for the same reason `audit.record` takes one: a caller
+    // mid-transaction has to read what it has just written, and the pool would
+    // hand it a different connection that cannot see any of it.
+    const row = client
+      ? ((await client.query<PredictionRow & OutcomeJoin>(sql, params)).rows[0] ?? null)
+      : await this.db.queryOne<PredictionRow & OutcomeJoin>(sql, params);
+    if (!row) return null;
+
+    return {
+      prediction: this.toPrediction(row),
+      outcome: row.outcome_id
+        ? toOutcome({
+            id: row.outcome_id,
+            prediction_id: row.id,
+            observed_at: row.observed_at,
+            outcome: row.outcome,
+            error_summary: row.error_summary,
+            created_at: row.outcome_created_at,
+          })
+        : null,
+    };
   }
 
   async outcomeFor(userId: string, predictionId: string): Promise<PredictionOutcome | null> {
@@ -307,6 +367,10 @@ export class PredictionsService {
     return {
       id: row.id,
       userId: row.user_id,
+      // Null only for rows written before migration 0018. Everything this
+      // service writes carries the link, because a prediction that cannot be
+      // paired with the experiment it was about cannot be shown to anybody.
+      experimentId: row.experiment_id ?? null,
       predictionType: row.prediction_type,
       madeAt: row.made_at,
       targetAt: row.target_at,
@@ -325,6 +389,7 @@ export class PredictionsService {
 interface PredictionRow {
   id: string;
   user_id: string;
+  experiment_id: string | null;
   model_version_id: string;
   prediction_type: string;
   made_at: Date;
@@ -336,12 +401,21 @@ interface PredictionRow {
   version?: string;
 }
 
+/** The outcome columns as they arrive from `forExperiment`'s left join. */
+interface OutcomeJoin {
+  outcome_id: string | null;
+  observed_at: Date;
+  outcome: PredictionOutcome['outcome'];
+  error_summary: ErrorSummary | null;
+  outcome_created_at: Date;
+}
+
 interface OutcomeRow {
   id: string;
   prediction_id: string;
   observed_at: Date;
-  outcome: Record<string, unknown>;
-  error_summary: Record<string, unknown> | null;
+  outcome: PredictionOutcome['outcome'];
+  error_summary: ErrorSummary | null;
   created_at: Date;
 }
 

@@ -109,11 +109,14 @@ describe('predictions', () => {
 
   describe('creating', () => {
     it('derives everything predicted from the evidence, not from the request', async () => {
-      const res = await http()
-        .post('/api/predictions')
+      // Starting is the only way a prediction is written, and it is written in
+      // the same transaction as the start. There is no endpoint that records
+      // one on its own: an expectation attached to an experiment that never
+      // ran could never be measured against anything.
+      const started = await http()
+        .post(`/api/experiments/${experimentId}/start`)
         .set(auth())
         .send({
-          experimentId,
           // None of these are inputs. If any were honoured, the accountability
           // record would be dictated by the thing being held accountable.
           prediction: { expectedEffect: 0 },
@@ -123,6 +126,7 @@ describe('predictions', () => {
         })
         .expect(201);
 
+      const res = { body: started.body.prediction };
       predictionId = res.body.id;
       expect(res.body.status).toBe('pending');
       expect(res.body.modelVersion).toMatch(/^pattern-engine-/);
@@ -176,11 +180,34 @@ describe('predictions', () => {
         .expect(201);
 
       const res = await http()
-        .post('/api/predictions')
+        .post(`/api/experiments/${blocked.body.experiment.id}/start`)
         .set(auth())
-        .send({ experimentId: blocked.body.experiment.id })
         .expect(400);
-      expect(res.body.message).toMatch(/blocked/i);
+      expect(res.body.message).toMatch(/never run/i);
+
+      const { rows } = await pool.query(
+        'select 1 from ai.predictions where experiment_id = $1',
+        [blocked.body.experiment.id],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it('records what was expected exactly once for an experiment', async () => {
+      // Two expectations attached to one trial makes "what was predicted" a
+      // question with two answers, and any screen showing one of them is
+      // choosing which — after the fact.
+      const duplicate = await captureError(() =>
+        pool.query(
+          `insert into ai.predictions
+             (user_id, model_version_id, experiment_id, prediction_type,
+              input_snapshot, prediction)
+           select user_id, model_version_id, experiment_id, prediction_type,
+                  input_snapshot, prediction
+             from ai.predictions where id = $1`,
+          [predictionId],
+        ),
+      );
+      expect(duplicate?.message).toMatch(/predictions_one_per_experiment|duplicate key/i);
     });
 
     it('refuses when no current finding supports the experiment', async () => {
@@ -199,9 +226,8 @@ describe('predictions', () => {
       // that no longer holds has nothing to predict, and inventing a number
       // would be the exact failure this table exists to prevent.
       const res = await http()
-        .post('/api/predictions')
+        .post(`/api/experiments/${unsupported.body.experiment.id}/start`)
         .set(auth())
-        .send({ experimentId: unsupported.body.experiment.id })
         .expect(400);
       expect(res.body.message).toMatch(/no current finding/i);
     });
@@ -213,8 +239,18 @@ describe('predictions', () => {
         .expect(201);
 
       await http()
-        .post('/api/predictions')
+        .post(`/api/experiments/${experimentId}/start`)
         .set({ authorization: `Bearer ${other.body.tokens.accessToken}` })
+        .expect(404);
+    });
+
+    it('offers no endpoint that writes a prediction on its own', async () => {
+      // The first line of defence, as with revising one: the route does not
+      // exist. Recording an expectation without starting the trial it belongs
+      // to produced only rows nothing could ever measure.
+      await http()
+        .post('/api/predictions')
+        .set(auth())
         .send({ experimentId })
         .expect(404);
     });
@@ -330,13 +366,16 @@ describe('predictions', () => {
 
   describe('outcomes', () => {
     it('records what happened and scores it against what was expected', async () => {
+      // Through the experiment, which is the only door. An outcome recorded
+      // against a prediction on its own would leave the trial it settles
+      // running with its answer already known.
       const res = await http()
-        .post(`/api/predictions/${predictionId}/outcome`)
+        .post(`/api/experiments/${experimentId}/complete`)
         .set(auth())
         .send({ observedAt: new Date().toISOString(), observedEffect: -0.9 })
         .expect(201);
 
-      const summary = res.body.errorSummary as {
+      const summary = res.body.outcome.errorSummary as {
         expectedEffect: number;
         observedEffect: number;
         error: number;
@@ -359,17 +398,26 @@ describe('predictions', () => {
       expect((rows[0].prediction as { expectedEffect: number }).expectedEffect).toBeLessThan(0);
     });
 
-    it('writes an outcome once', async () => {
-      // A second attempt is refused rather than overwriting the first, or a
-      // disappointing result could be quietly replaced with a better one.
+    it('offers no endpoint that writes an outcome on its own', async () => {
       await http()
         .post(`/api/predictions/${predictionId}/outcome`)
         .set(auth())
         .send({ observedAt: new Date().toISOString(), observedEffect: -1.05 })
-        .expect(400);
+        .expect(404);
+    });
+
+    it('reads the outcome back', async () => {
+      const res = await http()
+        .get(`/api/predictions/${predictionId}/outcome`)
+        .set(auth())
+        .expect(200);
+      expect(res.body.outcome.observedEffect).toBe(-0.9);
     });
 
     it('refuses to let the recorded outcome be rewritten over SQL', async () => {
+      // The gap this test used to record as open. A prediction that cannot be
+      // edited beside an outcome that can is an accountability chain with one
+      // link missing, and it is the link holding the answer.
       const rewrite = await captureError(() =>
         pool.query(
           `update ai.prediction_outcomes set outcome = '{"observedEffect": -1.3}'::jsonb
@@ -377,10 +425,20 @@ describe('predictions', () => {
           [predictionId],
         ),
       );
-      // No trigger guards this table today. If that changes the assertion
-      // below should tighten; recorded here so the gap is visible rather than
-      // assumed closed.
-      expect(rewrite).toBeNull();
+      expect(rewrite?.message).toMatch(/immutable/i);
+
+      const removed = await captureError(() =>
+        pool.query('delete from ai.prediction_outcomes where prediction_id = $1', [
+          predictionId,
+        ]),
+      );
+      expect(removed?.message).toMatch(/immutable and cannot be deleted/i);
+
+      const { rows } = await pool.query<{ outcome: { observedEffect: number } }>(
+        'select outcome from ai.prediction_outcomes where prediction_id = $1',
+        [predictionId],
+      );
+      expect(rows[0].outcome.observedEffect).toBe(-0.9);
     });
   });
 

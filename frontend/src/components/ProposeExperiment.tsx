@@ -17,10 +17,10 @@ import { ApiError } from '@/lib/api';
  * findings describe something no week of alternating behaviour could settle,
  * and a button on those would imply the product had a plan it does not have.
  *
- * Proposing is the whole action. Nothing here starts an experiment, schedules
- * one, or records a prediction — those need machinery that does not exist yet,
- * and a button that appeared to start something would be the worst possible
- * place to overstate what the product does.
+ * Proposing is the whole action here, and deliberately still is. Nothing on
+ * this screen starts an experiment or records a prediction: starting is the
+ * first irreversible thing anybody does in this product, and it belongs on the
+ * experiment's own page, next to what it commits you to. This one leads there.
  */
 export function ProposeExperiment({ finding }: { finding: StructuredFinding }) {
   const proposal = proposalFromFinding(finding);
@@ -29,7 +29,12 @@ export function ProposeExperiment({ finding }: { finding: StructuredFinding }) {
   if (!proposal) return null;
 
   if (propose.data) {
-    return <Decision decision={propose.data.decision} />;
+    return (
+      <Decision
+        decision={propose.data.decision}
+        experimentId={propose.data.experiment.id}
+      />
+    );
   }
 
   return (
@@ -66,7 +71,13 @@ export function ProposeExperiment({ finding }: { finding: StructuredFinding }) {
  * question and declined it, and dressing that in alarm colour would make it
  * read as something having gone wrong rather than as the product working.
  */
-function Decision({ decision }: { decision: ExperimentDecision }) {
+function Decision({
+  decision,
+  experimentId,
+}: {
+  decision: ExperimentDecision;
+  experimentId: string;
+}) {
   const heading =
     decision.status === 'allowed'
       ? 'Proposed, and you can start it'
@@ -83,16 +94,18 @@ function Decision({ decision }: { decision: ExperimentDecision }) {
 
       {decision.canStart && (
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-faint">
-          Starting it, and measuring what happens against a prediction recorded
-          beforehand, is still being built. For now it is saved as a draft.
+          It is saved as a draft. Starting it writes down what Wellovue expects
+          to happen before you begin, and that cannot be edited afterwards —
+          which is why the button for it sits on the experiment’s own page,
+          beside what it commits you to.
         </p>
       )}
 
       <Link
-        href="/experiments"
+        href={`/experiments/${experimentId}`}
         className="mt-3 inline-block text-sm text-ink underline underline-offset-4"
       >
-        See it with your other experiments
+        {decision.canStart ? 'Open it and read what starting does' : 'Open it'}
       </Link>
     </section>
   );

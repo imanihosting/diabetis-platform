@@ -221,6 +221,12 @@ reintroduces a specific failure.
 | A blocked experiment gets no prediction | It will never run, and an immutable expectation about something that cannot happen is noise in the accountability record. |
 | An experiment cannot become active without a prediction | Enforced by trigger, not only by the service that starts one. An invariant held up by the code currently calling is an invariant until somebody writes different code. |
 | `ai.predictions.experiment_id` is frozen like the rest of the row | Reassignment is the same failure as editing: the expectation ends up attached to a question it was not made about. |
+| An outcome is written once and never edited | A prediction that cannot be revised beside an outcome that can is an accountability chain missing the link that holds the answer. Enforced by trigger since 0019, on top of the unique constraint that stops a second row. |
+| An experiment cannot be completed without an outcome | The mirror of the prediction guard. A loop that writes down what it expects and then finishes without saying what happened keeps only the flattering half of its own record. `abandoned` is deliberately not guarded: giving up unmeasured is an honest end. |
+| One experiment, one prediction | Two expectations attached to one trial makes "what was predicted" a question with two answers, and whichever a screen shows was chosen after the fact. |
+| An outcome can only be recorded by completing the experiment | An outcome written on its own leaves the trial it settles running with its answer already known — a state nothing clears. Two doors into the same write are how the two eventually disagree. |
+| A prediction can only be written by starting an experiment | The endpoint that wrote one on its own produced only rows nothing could measure: finishing a trial requires it to have run, so an expectation recorded against one that never started could never be scored. |
+| Predicted and observed are shown in the same ink, uncoloured | Colour in this product means where a glucose value sits relative to target, or how far a finding can be trusted. A green number for "we were right" is a third meaning invented to flatter the platform. |
 | An experiment that has been started cannot be deleted | Its prediction cascades from it and refuses to go while the account exists. Removing the record of what was expected by deleting the thing it was about is the loophole that would make every accuracy figure optional. Erasing the account still works. |
 
 ## Shared Type Changes
@@ -711,28 +717,33 @@ release:
 
 ## Next Implementation Ticket
 
-Ticket 3 is shipped. `POST /api/experiments/:id/start` records the prediction
-and activates the experiment in one transaction, in that order, and migration
-0018 makes the database refuse any transition to `active` without a prediction
-attached to that experiment. The landing page's claim now rests on something
-other than the code that happens to be calling.
+Ticket 4 is shipped, and with it the loop closes. `POST
+/api/experiments/:id/complete` records the measurement and finishes the
+experiment in one transaction, in that order — the mirror of `start` — and
+migration 0019 makes the database refuse the transition to `completed` without
+an outcome attached, refuse a second prediction for the same experiment, and
+refuse any edit or deletion of an outcome once written.
+
+Two endpoints went away with it, and both removals are the point. A prediction
+is now written only by starting an experiment, and an outcome only by
+completing one. The standalone `POST /predictions` produced expectations
+attached to trials that never ran, which nothing could ever measure; the
+standalone `POST /predictions/:id/outcome` left the trial it settled running
+with its answer already known. One door each.
+
+`/experiments/[id]` is the screen: the question, the protocol, what was
+expected of it and when that was written down, and — once it is over —
+predicted beside observed with the gap between them in words. Starting lives
+there too, next to what it commits somebody to, rather than as a button in a
+list.
 
 Remaining:
 
-> **Ticket 4: measure the result.** The outcome endpoint exists and scores
-> observed against expected. What is missing is completing the experiment
-> alongside it, and the screen showing predicted against observed. That screen
-> is the first place a person sees whether the platform was right about them,
-> which makes it worth designing carefully rather than quickly.
-
 > **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
 > experiments, predictions, outcomes, limitations. Web first, export later.
+> It is the last step of the loop still labelled "Being built" on the public
+> pages, and the last component on the landing page that is a design rather
+> than real output.
 
-There is also no frontend for starting an experiment. `/experiments` lists them
-read-only and the endpoint exists. That is a deliberate hold: starting one is
-the first irreversible thing a person can do in this product — the experiment
-cannot afterwards be deleted, by design — so it should land with the screen
-that shows what happens next rather than before it.
-
-Gestational and Type 1 stay parked until the loop is closed. Per-user target
-ranges still wait.
+Gestational and Type 1 stay parked until clinical review. Per-user target
+ranges still wait. Neither go-live blocker has moved, and neither is code.

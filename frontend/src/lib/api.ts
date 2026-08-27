@@ -1,5 +1,6 @@
 import { clearSessionHint } from '@/hooks/useSessionHint';
 import type {
+  AttachOutcomeInput,
   CareModeCapabilities,
   ClientAuthResponse,
   GlucoseSummary,
@@ -10,6 +11,9 @@ import type {
   DiabetesProfile,
   Experiment,
   ExperimentDecision,
+  ExperimentDetail,
+  Prediction,
+  PredictionOutcome,
   DiabetesSafetyFlag,
   LabResult,
   MedicationRecord,
@@ -216,6 +220,8 @@ export const api = {
 
   experiments: {
     list: () => request<Experiment[]>('/experiments'),
+    /** One experiment with what was predicted of it and what came of it. */
+    get: (id: string) => request<ExperimentDetail>(`/experiments/${id}`),
     /**
      * Always resolves for a well-formed proposal, including when the answer is
      * no: a refusal comes back as a decision, not as a thrown error, because
@@ -223,6 +229,36 @@ export const api = {
      */
     propose: (body: CreateExperimentInput) =>
       request<{ experiment: Experiment; decision: ExperimentDecision }>('/experiments', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    /**
+     * Starts an experiment, and returns the prediction written in the same
+     * transaction as the start.
+     *
+     * Nothing about the prediction is sent. What the platform expects is
+     * derived on the server from the evidence as it stands, because a record
+     * of how often it was right is worth nothing if the browser could choose
+     * the answer.
+     */
+    start: (id: string) =>
+      request<{ experiment: Experiment; prediction: Prediction }>(
+        `/experiments/${id}/start`,
+        { method: 'POST' },
+      ),
+    /**
+     * Finishes an experiment by recording what actually happened.
+     *
+     * The only way an outcome reaches the server, and it is written once: a
+     * second attempt is refused rather than replacing a disappointing result
+     * with a better one.
+     */
+    complete: (id: string, body: AttachOutcomeInput) =>
+      request<{
+        experiment: Experiment;
+        prediction: Prediction;
+        outcome: PredictionOutcome;
+      }>(`/experiments/${id}/complete`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),

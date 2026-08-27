@@ -166,14 +166,13 @@ export default function LandingPage() {
         aside={
           <Reveal>
             <div className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-                <p className="text-sm text-[var(--ink-faint)]">Proposed trial</p>
-                {/* Every other panel on this page renders real components
-                    against real seeded data. This one cannot: it is a design
-                    for something unbuilt, and leaving it unlabelled would make
-                    it the one screenshot the product faked. */}
-                <p className="text-sm text-[var(--ink-faint)]">Being built</p>
-              </div>
+              {/* This one carried a "Being built" label until the loop closed
+                  around it. Proposing, starting and measuring all exist now,
+                  and the figures below are the seeded scenario's own: -1.3 is
+                  the walk effect the demo data encodes and the engine
+                  recovers. The label came off when the claim became true,
+                  which is the only reason it should ever come off. */}
+              <p className="text-sm text-[var(--ink-faint)]">Proposed trial</p>
               <p className="mt-4 text-[clamp(1.25rem,1rem+0.9vw,1.6rem)] leading-snug">
                 The same breakfast for six days. Walk after three of them,
                 chosen at random.
@@ -192,22 +191,26 @@ export default function LandingPage() {
                   <dt className="text-[var(--ink-faint)]">Clinician sign-off</dt>
                   <dd className="text-[var(--ink-muted)]">Not required</dd>
                 </div>
+                <div className="flex justify-between gap-6">
+                  <dt className="text-[var(--ink-faint)]">Scored against</dt>
+                  <dd className="text-[var(--ink-muted)]">The number above</dd>
+                </div>
               </dl>
             </div>
           </Reveal>
         }
       >
         <p>
-          The prediction will be written down before the trial begins and will
-          not be editable afterwards. When the six days are up, what happened
-          gets measured against what was predicted.
+          The prediction is written down before the trial begins, in the same
+          moment it starts, and cannot be edited afterwards. When the six days
+          are up, you record what happened and it is scored against that
+          number.
         </p>
         <p>
-          This part is not finished. The safety rules that decide which
-          experiments may be proposed are built and enforced twice over, and
-          the database already refuses to let a prediction be altered after the
-          fact. What is missing is the screen that proposes one and the step
-          that scores it.
+          Neither side of the comparison can be revised once written. That is
+          not a promise about how we behave — the database refuses the edit,
+          and refuses to let a trial start without an expectation or finish
+          without a measurement.
         </p>
         <p>
           Over time that produces something unusual: a record of how often this

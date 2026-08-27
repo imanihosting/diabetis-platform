@@ -1,6 +1,6 @@
 # Handover
 
-State of Wellovue as of 27 August 2026, at commit `975a468`.
+State of Wellovue as of 27 August 2026, at commit `bb880fe` plus Ticket 4.
 
 Read this before changing anything. Several decisions below look arbitrary and
 are not, and a few traps in this repo will cost you an hour if you meet them
@@ -53,7 +53,7 @@ Python engine owns scientific computation.** Neither reaches into the other.
 The loop the product promises is: collect data, build one timeline, find
 patterns, propose a safe test, **write down the prediction before it runs**,
 measure the result against it, and turn that into something a clinician can
-read. Six of seven steps exist. The last two are Tickets 4 and 5.
+read. All of it exists except the last step, which is Ticket 5.
 
 **Built and working.**
 
@@ -67,20 +67,24 @@ read. Six of seven steps exist. The last two are Tickets 4 and 5.
 - Evidence for Type 2 and prediabetes, refused for every other care mode
 - Experiment safety: proposals classified against the care profile, persisted
   with the decision, re-checked by database constraints
-- Predictions: immutable, server-generated, attributed to an engine version
+- Predictions: immutable, server-generated, attributed to an engine version,
+  one per experiment
 - Starting an experiment, with its prediction written in the same transaction
+- Finishing one by recording what happened, in one transaction, scored against
+  the expectation — and the screen showing predicted beside observed
+- Outcomes: written once, never edited, and the only way to complete a trial
 - Rate limiting on public endpoints; CI on every push
 - Public site: landing, About, How this works, Contact, and the policy pages
 
 **Not built.** Named plainly on the public pages too, which matters — see §7.
 
-- Measuring a result against its prediction (the outcome endpoint exists; the
-  screen and experiment completion do not)
-- The clinician evidence packet
-- Any frontend for *starting* an experiment. `/experiments` lists them
-  read-only. This is a deliberate hold: starting one is the first irreversible
-  thing a person can do here, and it should arrive with the screen that shows
-  what happens next
+- The clinician evidence packet. The last loop step still labelled "Being
+  built", and the last landing-page component that is a design rather than
+  real output
+- Weighing competing explanations for a pattern. Step four of the loop, also
+  still labelled
+- Recording a clinician's agreement. A gated experiment therefore waits
+  forever, and says so rather than implying a queue
 - Gestational and Type 1 workflows. Both need clinical review before either
   starts
 - Sleep capture. `metabolic.sleep_sessions` exists with no write path
@@ -134,9 +138,9 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 |---|---|---|
 | `backend/test/*.spec.ts` | 71 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
-| `backend/test/integration/experiments.spec.ts` | 18 | yes |
-| `backend/test/integration/schema-guards.spec.ts` | 19 | yes |
-| `backend/test/integration/predictions.spec.ts` | 16 | yes |
+| `backend/test/integration/experiments.spec.ts` | 28 | yes |
+| `backend/test/integration/schema-guards.spec.ts` | 25 | yes |
+| `backend/test/integration/predictions.spec.ts` | 19 | yes |
 | `backend/test/integration/diabetes-profile.spec.ts` | 14 | yes |
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
@@ -171,11 +175,12 @@ A few suites are worth knowing about by name:
 reversal causes. The load-bearing ones:
 
 **The database enforces the safety rules, not the application.** Predictions
-are immutable, the audit trail is append-only, safety flags cannot be
-rewritten, a clinician-gated experiment cannot skip review, a blocked one can
-never run, and an experiment cannot become active without a prediction attached
-to it. All triggers and check constraints, all tested by attacking them
-directly over SQL.
+are immutable, outcomes are written once and never edited, the audit trail is
+append-only, safety flags cannot be rewritten, a clinician-gated experiment
+cannot skip review, a blocked one can never run, an experiment cannot become
+active without a prediction attached to it, and it cannot become completed
+without an outcome recorded against that prediction. All triggers and check
+constraints, all tested by attacking them directly over SQL.
 
 **Two independent gates, neither trusting the other.** NestJS refuses to *ask*
 the engine for an analysis it should not request; the engine refuses to *run*
@@ -207,6 +212,14 @@ having.
 in one transaction with the audit row describing it. `recordBestEffort` exists
 for the rare deliberate exception and is named so you can grep for it.
 
+**One door in for each half of the record.** A prediction is written only by
+starting an experiment; an outcome only by completing one. The standalone
+endpoints for both were removed in Ticket 4 because each produced a state
+nothing could resolve — an expectation attached to a trial that never ran and
+so can never be measured, and a measurement that leaves its trial running with
+the answer already known. One experiment has exactly one prediction, by unique
+index.
+
 **A finding comes from a model, never from a language model.** Every finding
 carries an effect estimate, confidence, sample count and explicit limitations.
 When data is thin the answer is "not enough data" plus what to log.
@@ -229,7 +242,10 @@ ready to honour them.
 
 **Colour is reserved for meaning.** One palette across both surfaces: warm
 paper, warm ink, and colour only for glucose relative to target and for
-evidence strength. No teal or blue anywhere, deliberately. `-text` variants
+evidence strength. Predicted and observed are therefore shown in the same ink,
+uncoloured: a green number for "we were right" would be a third meaning
+invented to flatter the platform, and for half of all findings a lower number
+is not an improvement anyway. No teal or blue anywhere, deliberately. `-text` variants
 exist because a coloured glyph beside a sentence is text and must clear 4.5:1,
 while a filled shape only needs 3:1.
 
@@ -245,11 +261,15 @@ The mono cut is reserved for measured values.
 faking its own screenshots has already told you something. That is enforced by
 convention rather than by code, so it needs watching.
 
-Four of the seven loop steps on `/how-it-works` are marked **"Being built"**.
-The proposed-trial panel and the clinician packet on the landing page are
-labelled the same way, because they are designs for things that do not exist
-while every other component there renders real output against real seeded data.
-The landing page's finding quotes the strings the engine actually emits.
+Two of the seven loop steps on `/how-it-works` are marked **"Being built"**:
+weighing competing explanations, and turning what held up into something a
+clinician can read. The clinician packet on the landing page carries the same
+label, because it is a design for something that does not exist while every
+other component there renders real output against real seeded data. The landing
+page's finding quotes the strings the engine actually emits.
+
+The proposed-trial panel lost its label in Ticket 4, when the thing it depicts
+started existing. That is the only reason a label should ever come off.
 
 If you build one of those, remove its label. If you add a claim, check it is
 true first.
@@ -280,6 +300,13 @@ backfill automatically. `npm run db:repair` is the escape hatch for a file
 already edited before any of this existed; it verifies nothing, because the
 original contents are gone, and says so.
 
+**A read inside a transaction needs that transaction's connection.**
+`DatabaseService.queryOne` goes to the pool and will hand back a different
+connection, which cannot see uncommitted writes. `PredictionsService.forExperiment`
+takes an optional `PoolClient` for exactly this reason, the same way
+`audit.record` does — completing an experiment reads the prediction back to
+report the `matched` status it has just written.
+
 **A BEFORE trigger fires ahead of check constraints.** Migration 0018's
 invariant was written as BEFORE and started answering for rows the 0006
 constraints were going to refuse anyway — so an active blocked experiment was
@@ -297,6 +324,17 @@ works with space-separated RGB triplets. Use `color-mix(in oklch, ...)`.
 **SVG dash animation needs screen-space length.** `getTotalLength()` returns
 user units while `vector-effect: non-scaling-stroke` makes `stroke-dasharray`
 screen units. `DayTrace` sums the length per segment against the measured box.
+
+**Open, unexplained: one 401 in the integration suite, seen once.** On the
+first full run of the Ticket 4 suite, `experiments.spec.ts` failed at a helper's
+`PUT /api/diabetes-profile` with 401 on the *second* account it registered in a
+single test — register returned 201, so the token existed and the guard rejected
+it anyway. Four subsequent full runs of the same suite passed, as did the same
+file run alone. Not reproduced, not diagnosed, and deliberately not written off:
+the suspects are refresh/session state or `throttle.spec.ts` leaving mutated
+`process.env` behind for files that run after it, since `fileParallelism` is off
+and every spec shares one process. If it reappears, capture the response body at
+the failing call before assuming it is the same thing.
 
 **Vitest cannot emit decorator metadata.** esbuild does not support it, so
 NestJS DI resolves every constructor parameter as `undefined`.
@@ -324,7 +362,7 @@ every accuracy figure optional. Erasing the account still works.
 
 | | Where | Notes |
 |---|---|---|
-| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 18 migrations. Four guard triggers: `audit_events_append_only`, `predictions_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction` |
+| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 19 migrations. Six guard triggers: `audit_events_append_only`, `predictions_immutable`, `prediction_outcomes_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction`, `experiments_completed_requires_outcome` |
 | MinIO | `10.10.5.240:9000` | Bucket `medicaldata`, scoped service account |
 | Redis | local Docker | queues and cache, **not yet used in anger** |
 
@@ -400,15 +438,17 @@ in front, have it overwrite `X-Forwarded-For`, then set `TRUST_PROXY=true`.
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** is kept
 current and is the answer to "what now". At this commit it is:
 
-> **Ticket 4: measure the result.** The outcome endpoint exists and scores
-> observed against expected. What is missing is completing the experiment
-> alongside it, and the screen showing predicted against observed.
+> **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
+> experiments, predictions, outcomes, limitations. Web first, export later.
 
-That screen is the first place a person sees whether the platform was right
-about them, which makes it worth designing carefully rather than quickly. It is
-also the natural home for the missing "start an experiment" action, since
-starting one is irreversible and should arrive with the screen that shows what
-follows.
+Everything it needs now exists: findings carry their own limitations,
+experiments carry the safety decision that let them run, and a completed one
+carries an expectation written before it began beside the measurement that
+settled it. `ExperimentDetail` on `GET /api/experiments/:id` is the shape a
+packet page would aggregate.
 
-Then Ticket 5, the clinician packet. Then the go-live blockers in §10, neither
-of which is code.
+It is also the last component on the landing page that is a design rather than
+real output, and the last loop step but one still labelled "Being built" — so
+finishing it is what lets both labels come off. See §7 before touching either.
+
+Then the go-live blockers in §10, neither of which is code.

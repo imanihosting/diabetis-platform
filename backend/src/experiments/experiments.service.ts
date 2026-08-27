@@ -2,9 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import {
   experimentDecision,
+  type AttachOutcomeInput,
   type CreateExperimentInput,
   type Experiment,
+  type ExperimentDetail,
   type Prediction,
+  type PredictionOutcome,
   type ExperimentDecision,
   type ExperimentStatus,
   type SafetyStatus,
@@ -22,6 +25,12 @@ export interface CreatedExperiment {
 export interface StartedExperiment {
   experiment: Experiment;
   prediction: Prediction;
+}
+
+export interface CompletedExperiment {
+  experiment: Experiment;
+  prediction: Prediction;
+  outcome: PredictionOutcome;
 }
 
 /**
@@ -196,6 +205,144 @@ export class ExperimentsService {
 
       return { experiment: toExperiment(started.rows[0]), prediction };
     });
+  }
+
+  /**
+   * Finishes an experiment by recording what actually happened.
+   *
+   * The mirror of `start`, and deliberately the same shape: the measurement is
+   * written first, the status changes second, both in one transaction, and the
+   * database refuses the transition independently if the measurement is
+   * missing. Migration 0019 is that refusal.
+   *
+   * This is the only way an outcome can be written. An endpoint that recorded
+   * one against a prediction on its own would leave the experiment running
+   * with its answer already known — a state nothing would ever clear, and one
+   * that would quietly make the list of running trials a lie.
+   *
+   * The result is scored against an expectation that was frozen before the
+   * trial began, which is the whole point: neither the prediction nor, from
+   * 0019, the outcome can be revised once written, so the accuracy record is
+   * the one thing here nobody can improve after the fact.
+   */
+  async complete(
+    userId: string,
+    experimentId: string,
+    input: AttachOutcomeInput,
+  ): Promise<CompletedExperiment> {
+    return this.db.transaction(async (client) => {
+      const { rows } = await client.query<ExperimentRow>(
+        `select * from experiments.experiments
+          where id = $1 and user_id = $2
+          for update`,
+        [experimentId, userId],
+      );
+      const existing = rows[0];
+      if (!existing) throw new NotFoundException('No such experiment');
+
+      if (existing.status !== 'active') {
+        throw new ConflictException(
+          existing.status === 'completed'
+            ? 'This experiment is already finished, and its result cannot be recorded twice.'
+            : `This experiment is ${existing.status}, so there is no run to measure.`,
+        );
+      }
+
+      // An active experiment always has one: nothing can reach `active`
+      // without a prediction, and 0018 enforces that in the database. Missing
+      // here means a row predating that guarantee, which is worth saying
+      // plainly rather than failing on an undefined id.
+      const attached = await client.query<{ id: string }>(
+        `select id from ai.predictions
+          where experiment_id = $1 and user_id = $2
+          order by made_at asc
+          limit 1`,
+        [experimentId, userId],
+      );
+      const predictionId = attached.rows[0]?.id;
+      if (!predictionId) {
+        throw new BadRequestException(
+          'This experiment has no prediction attached, so there is nothing to measure it against.',
+        );
+      }
+
+      // First, and in this transaction. A rollback here must leave the
+      // experiment running rather than finished-without-an-answer.
+      const outcome = await this.predictions.attachOutcomeWithin(
+        client,
+        userId,
+        predictionId,
+        input,
+      );
+
+      const completed = await client.query<ExperimentRow>(
+        `update experiments.experiments
+            set status = 'completed', ended_at = $2
+          where id = $1
+          returning *`,
+        // The observation's own time, not the moment the form was submitted.
+        // Somebody recording Friday's result on Sunday is the ordinary case,
+        // and an end date that disagrees with the measurement it holds is the
+        // kind of small dishonesty that makes a record unusable later.
+        [experimentId, input.observedAt],
+      );
+
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'experiment.complete',
+          resourceType: 'experiment',
+          resourceId: experimentId,
+          metadata: {
+            predictionId,
+            template: existing.template,
+            absoluteError: outcome.errorSummary?.absoluteError ?? null,
+          },
+        },
+        client,
+      );
+
+      // Read back on this transaction's own connection, so the status it
+      // carries is the `matched` just written rather than the `pending` a
+      // pooled connection would still be seeing.
+      const recorded = await this.predictions.forExperiment(
+        userId,
+        experimentId,
+        client,
+      );
+
+      return {
+        experiment: toExperiment(completed.rows[0]),
+        // Non-null by construction: the prediction was found above and this is
+        // the same transaction.
+        prediction: recorded!.prediction,
+        outcome,
+      };
+    });
+  }
+
+  /**
+   * One experiment, with what was expected of it and what came of it.
+   *
+   * Together in one response because the screen this serves is meaningless in
+   * pieces: predicted without observed is a promise, and observed without
+   * predicted is a measurement of nothing in particular.
+   */
+  async detail(userId: string, experimentId: string): Promise<ExperimentDetail> {
+    const row = await this.db.queryOne<ExperimentRow>(
+      'select * from experiments.experiments where id = $1 and user_id = $2',
+      [experimentId, userId],
+    );
+    if (!row) throw new NotFoundException('No such experiment');
+
+    const recorded = await this.predictions.forExperiment(userId, experimentId);
+
+    return {
+      experiment: toExperiment(row),
+      prediction: recorded?.prediction ?? null,
+      outcome: recorded?.outcome ?? null,
+    };
   }
 
   async list(userId: string): Promise<Experiment[]> {
