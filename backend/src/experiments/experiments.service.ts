@@ -56,13 +56,18 @@ export class ExperimentsService {
     const experiment = await this.db.transaction(async (client) => {
       const { rows } = await client.query<ExperimentRow>(
         `insert into experiments.experiments
-           (user_id, hypothesis_id, title, question, protocol,
+           (user_id, hypothesis_id, template, title, question, protocol,
             safety_status, clinician_review_required, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          returning *`,
         [
           userId,
           input.hypothesisId ?? null,
+          // Stored, so the row records what the safety decision was about and
+          // not only what it was. Anything downstream that needs to know what
+          // this experiment tests reads it here rather than guessing from the
+          // title.
+          input.template,
           input.title,
           input.question,
           JSON.stringify(input.protocol),
@@ -119,6 +124,7 @@ interface ExperimentRow {
   id: string;
   user_id: string;
   hypothesis_id: string | null;
+  template: string | null;
   title: string;
   question: string;
   protocol: Record<string, unknown>;
@@ -135,6 +141,7 @@ function toExperiment(row: ExperimentRow): Experiment {
     id: row.id,
     userId: row.user_id,
     hypothesisId: row.hypothesis_id,
+    template: row.template,
     title: row.title,
     question: row.question,
     protocol: row.protocol,

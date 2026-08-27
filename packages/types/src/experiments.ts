@@ -300,6 +300,8 @@ export const experimentSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
   hypothesisId: uuidSchema.nullable(),
+  /** Null only for rows written before migration 0016. */
+  template: z.string().nullable(),
   title: z.string(),
   question: z.string(),
   protocol: z.record(z.unknown()),

@@ -15,6 +15,7 @@ import { GlucoseModule } from './glucose/glucose.module';
 import { MealsModule } from './meals/meals.module';
 import { LabsModule } from './labs/labs.module';
 import { ExperimentsModule } from './experiments/experiments.module';
+import { PredictionsModule } from './predictions/predictions.module';
 import { MedicationsModule } from './medications/medications.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { EvidenceModule } from './evidence/evidence.module';
@@ -70,6 +71,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     MealsModule,
     LabsModule,
     ExperimentsModule,
+    PredictionsModule,
     MedicationsModule,
     TimelineModule,
     EvidenceModule,

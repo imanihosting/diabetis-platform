@@ -216,6 +216,9 @@ reintroduces a specific failure.
 | Every rule in the classifier can only tighten | A clause added later cannot grant a permission, so none can accidentally unblock insulin dosing. |
 | `safetyFlags` carries the flags in force, not the stored history | The flag table is append-only, so filtering the history on `status === 'active'` resurrects flags that ended. That derivation happens once, in SQL. |
 | The insulin boundary appears only where insulin is involved | A boundary that appears everywhere is read nowhere. |
+| A prediction's body and snapshot are generated server-side | A record of how often the platform was right is worth nothing if the platform chose the answer after seeing the question. |
+| Immutable means "cannot be revised while it belongs to somebody" | Read as "can never be deleted", it made accounts that had made a prediction impossible to erase. Twice: the trigger and a `restrict` foreign key. |
+| A blocked experiment gets no prediction | It will never run, and an immutable expectation about something that cannot happen is noise in the accountability record. |
 
 ## Shared Type Changes
 
@@ -705,42 +708,33 @@ release:
 
 ## Next Implementation Ticket
 
-Ticket 1 of the loop is shipped: a finding that a week of alternating behaviour
-could settle now carries an action that proposes exactly one safe experiment,
-posts it through the endpoint that classifies it, and shows what the safety
-rules said. Nothing starts or measures anything.
+Ticket 2 is shipped. `POST /api/predictions` writes an expectation derived
+entirely on the server from the evidence as it stands, attributed to the engine
+version that produced it, with a snapshot holding the finding itself rather
+than a reference to one that may since have moved. There is no endpoint that
+can revise a prediction, and the trigger refuses anyway.
 
-The map from finding type to template lives in `packages/types/src/insights.ts`
-and is deliberately narrow. Most finding types have no entry, which is the
-correct answer rather than a gap: a morning glucose average has no one-week
-test a person can run alone, and an HbA1c trend moves over quarters. A test
-asserts every template the map can produce is in
-`ALLOWED_EXPERIMENT_TEMPLATES`, so the map can never be the thing that surfaces
-a gated or blocked protocol — while the classifier still decides who may run
-it, so the same finding proposes a runnable test for one reader and a clinician
-conversation for another.
+Two defects surfaced, both older than this ticket and both invisible until
+something wrote to these tables. `experiments.experiments` never stored the
+template its safety decision was made about (fixed in 0016), and `ai.predictions`
+could not be erased at all: the immutability trigger refused every DELETE while
+the row cascades from `identity.users`, and `prediction_outcomes` was
+`on delete restrict` behind it (both fixed in 0017).
 
-Remaining, in order:
-
-> **Ticket 2: the prediction API.** Immutable creation and outcome attachment.
-> The body is server-generated, the model version and input snapshot are
-> enforced, and the tests attack immutability through both the API and SQL.
-> `ai.predictions` already refuses UPDATE and DELETE by trigger; nothing writes
-> to it.
+Remaining:
 
 > **Ticket 3: start an allowed experiment.** Draft to active for `allowed`
-> only, refusing blocked outright and gated until reviewed, with the prediction
-> recorded before the status changes. That ordering is the product's whole
-> claim about accountability, so the write that records it and the write that
-> starts the experiment belong in one transaction.
+> only, refusing blocked outright and gated until reviewed. The prediction is
+> recorded before the status changes, in the same transaction, because "the
+> prediction was written first" is the product's whole claim and a claim that
+> depends on two writes landing in order needs them to be one write.
 
-> **Ticket 4: measure the result.** Attach the outcome, complete the
-> experiment, show predicted against observed.
+> **Ticket 4: measure the result.** The outcome endpoint exists; what is
+> missing is completing the experiment alongside it and showing predicted
+> against observed.
 
 > **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
 > experiments, predictions, outcomes, limitations. Web first, export later.
 
-Gestational and Type 1 stay parked until the loop is closed, and both need
-clinical review before either starts.
-
-Per-user target ranges still wait.
+Gestational and Type 1 stay parked until the loop is closed. Per-user target
+ranges still wait.

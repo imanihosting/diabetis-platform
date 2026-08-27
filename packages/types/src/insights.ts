@@ -257,3 +257,65 @@ export function proposalFromFinding(
 export function proposableTemplates(): string[] {
   return [...new Set(Object.values(FINDING_EXPERIMENTS).map((e) => e.template))];
 }
+
+/**
+ * A prediction made before an experiment runs.
+ *
+ * The point of the platform, and the one record it must never be able to
+ * revise. A system that scores itself after the fact can always be right; a
+ * system that writes down what it expects, then cannot touch it, produces the
+ * only number worth anything — how often it was right about this person
+ * specifically.
+ *
+ * `prediction` and `inputSnapshot` are both generated on the server. Nothing a
+ * browser sends decides what was expected, because the accountability is
+ * meaningless if the thing being held accountable chose its own answer after
+ * seeing the question.
+ */
+export const predictionSchema = z.object({
+  id: uuidSchema,
+  userId: uuidSchema,
+  predictionType: z.string(),
+  madeAt: z.coerce.date(),
+  targetAt: z.coerce.date().nullable(),
+  modelVersion: z.string(),
+  /** What was expected, in the engine's own terms. */
+  prediction: z.record(z.unknown()),
+  /** Everything needed to replay the reasoning: the finding, the window, the care mode. */
+  inputSnapshot: z.record(z.unknown()),
+  confidence: confidenceSchema.nullable(),
+  status: z.enum(['pending', 'matched', 'expired', 'unmatchable']),
+});
+export type Prediction = z.infer<typeof predictionSchema>;
+
+/** All the client chooses: which experiment, and when it should be judged. */
+export const createPredictionSchema = z.object({
+  experimentId: uuidSchema,
+  targetAt: z.coerce.date().optional(),
+});
+export type CreatePredictionInput = z.infer<typeof createPredictionSchema>;
+
+/**
+ * What was actually observed.
+ *
+ * Separate from the prediction, in its own table, written once. Attaching an
+ * outcome is the only thing that ever touches a prediction, and even then it
+ * only advances the status: the expectation itself stays exactly as written.
+ */
+export const attachOutcomeSchema = z.object({
+  observedAt: z.coerce.date(),
+  /** The measured value, in the unit the prediction named. */
+  observedEffect: z.number(),
+  notes: z.string().max(1000).optional(),
+});
+export type AttachOutcomeInput = z.infer<typeof attachOutcomeSchema>;
+
+export const predictionOutcomeSchema = z.object({
+  id: uuidSchema,
+  predictionId: uuidSchema,
+  observedAt: z.coerce.date(),
+  outcome: z.record(z.unknown()),
+  errorSummary: z.record(z.unknown()).nullable(),
+  createdAt: z.coerce.date(),
+});
+export type PredictionOutcome = z.infer<typeof predictionOutcomeSchema>;

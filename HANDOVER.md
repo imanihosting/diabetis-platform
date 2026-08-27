@@ -165,6 +165,16 @@ clinician-gated experiment cannot be marked active without review, and a
 blocked one can never run. All triggers and check constraints, all tested by
 attacking them directly over SQL in `schema-guards.spec.ts`.
 
+**Immutable does not mean undeletable.** `ai.predictions` and
+`clinical.diabetes_safety_flags` both refuse UPDATE, and both refuse DELETE only
+while the row still belongs to a user. Written the other way — refusing every
+DELETE — they made an account impossible to erase, because both cascade from
+`identity.users`. That was live in `ai.predictions` from migration 0007 and
+went unnoticed until the first code that wrote one. `ai.prediction_outcomes`
+blocked it a second time with `on delete restrict`. PostgreSQL removes the
+parent before cascading, so the triggers tell erasure from rewriting by asking
+whether the user still exists.
+
 **Erasure unlinks identity; it does not delete history.** Migration `0010`
 permits exactly one kind of update to `audit.events`: clearing the actor and
 subject. Everything else, including reassignment, is refused. This is what lets
