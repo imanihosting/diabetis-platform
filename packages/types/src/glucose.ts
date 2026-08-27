@@ -1,6 +1,52 @@
 import { z } from 'zod';
 import { dataSourceSchema, glucoseUnitSchema, uuidSchema } from './common';
 
+/**
+ * The target range, in mmol/L.
+ *
+ * The one declaration. It used to be four: the backend's time-in-range
+ * calculation, two frontend components, the landing page's chart data, and the
+ * Python engine's thresholds — each with its own copy of 3.9 and 10.0, each
+ * free to drift. Nothing had ever drifted, which is exactly why it was worth
+ * fixing before something did: a clinician reading a time-in-range percentage
+ * computed against one boundary, beside a chart drawn against another, has no
+ * way to see the disagreement.
+ *
+ * These are population defaults, not this person's targets. Per-user ranges are
+ * deliberately not stored yet (see migration 0013): a column nothing reads is
+ * worse than no column. When they arrive, this is what they override, and this
+ * is where the fallback stays.
+ *
+ * `thresholds.py` in the metabolic engine carries the same two numbers because
+ * it cannot import TypeScript. It is not trusted to stay correct on its own:
+ * `backend/test/target-range.spec.ts` reads that file and fails if it disagrees
+ * with these.
+ */
+export const TARGET_LOW_MMOL = 3.9;
+export const TARGET_HIGH_MMOL = 10.0;
+
+/** Where a reading sits relative to target. Paired with a label, never colour alone. */
+export type GlucoseZone = 'below' | 'in' | 'above';
+
+/**
+ * Both bounds are inclusive: 3.9 and 10.0 are in range.
+ *
+ * This matches what all four sites already did, so unifying them changed no
+ * behaviour. It is stated here because it is the detail that would otherwise
+ * be re-decided by whoever writes the fifth caller, and a reading exactly on
+ * the boundary is the one a person is most likely to be looking at when they
+ * care about the answer.
+ */
+export function glucoseZone(mmol: number): GlucoseZone {
+  if (mmol < TARGET_LOW_MMOL) return 'below';
+  if (mmol > TARGET_HIGH_MMOL) return 'above';
+  return 'in';
+}
+
+export function isInTargetRange(mmol: number): boolean {
+  return glucoseZone(mmol) === 'in';
+}
+
 export const glucoseTrendSchema = z.enum([
   'rising_fast',
   'rising',

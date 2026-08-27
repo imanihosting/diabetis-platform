@@ -321,6 +321,43 @@ describe('API end to end', () => {
       expect(res.body.timeInRange).toBeLessThanOrEqual(1);
     });
 
+    it('counts a reading exactly on either bound as in range', async () => {
+      // The boundary is where the layers would disagree without noticing.
+      // 3.9 and 10.0 are in range everywhere in this product; a summary that
+      // used `>` where a chart used `>=` would report a different
+      // time-in-range from the band drawn beside it, and a clinician reading
+      // the percentage would have no way to see the disagreement.
+      const day = '2026-09-15';
+      const readings: [string, number][] = [
+        [`${day}T01:00:00Z`, 3.9], // low bound, in
+        [`${day}T02:00:00Z`, 10.0], // high bound, in
+        [`${day}T03:00:00Z`, 3.8], // just below
+        [`${day}T04:00:00Z`, 10.1], // just above
+      ];
+      for (const [at, value] of readings) {
+        await http()
+          .post('/api/glucose')
+          .set(auth())
+          .send({ measuredAt: at, value, unit: 'mmol/L', source: 'manual' })
+          .expect(201);
+      }
+
+      const res = await http()
+        .get(`/api/glucose/summary?from=${day}T00:00:00Z&to=${day}T23:59:59Z`)
+        .set(auth())
+        .expect(200);
+
+      expect(res.body.sampleCount).toBe(4);
+      expect(res.body.timeInRange).toBeCloseTo(0.5, 5);
+      expect(res.body.timeAboveRange).toBeCloseTo(0.25, 5);
+      expect(res.body.timeBelowRange).toBeCloseTo(0.25, 5);
+      // The three shares must account for every reading, or the percentage is
+      // quietly wrong rather than visibly missing.
+      expect(
+        res.body.timeInRange + res.body.timeAboveRange + res.body.timeBelowRange,
+      ).toBeCloseTo(1, 5);
+    });
+
     it('converts the summary to mg/dL without changing what was stored', async () => {
       const to = new Date('2026-06-02T00:00:00Z').toISOString();
       const from = new Date('2026-06-01T00:00:00Z').toISOString();

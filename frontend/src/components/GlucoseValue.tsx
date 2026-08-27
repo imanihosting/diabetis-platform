@@ -1,8 +1,6 @@
-import type { GlucoseUnit } from '@wellovue/types';
+import { glucoseZone, type GlucoseUnit } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
-const TARGET_LOW_MMOL = 3.9;
-const TARGET_HIGH_MMOL = 10.0;
 
 /**
  * A glucose reading, coloured by where it sits relative to the target range.
@@ -23,7 +21,7 @@ export function GlucoseValue({
 }) {
   const mmol = unit === 'mmol/L' ? value : value / 18.0182;
   const band =
-    mmol < TARGET_LOW_MMOL ? 'below': mmol > TARGET_HIGH_MMOL ?'above':'in';
+    glucoseZone(mmol);
 
   const bandStyles = {
     below: 'text-zone-belowText',

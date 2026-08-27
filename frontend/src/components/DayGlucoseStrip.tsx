@@ -1,7 +1,9 @@
-import type { TimelineEntry } from '@wellovue/types';
-
-const TARGET_LOW_MMOL = 3.9;
-const TARGET_HIGH_MMOL = 10.0;
+import {
+  isInTargetRange,
+  TARGET_HIGH_MMOL,
+  TARGET_LOW_MMOL,
+  type TimelineEntry,
+} from '@wellovue/types';
 
 interface Reading {
   at: Date;
@@ -36,9 +38,7 @@ export function DayGlucoseStrip({ entries }: { entries: TimelineEntry[] }) {
     .map((r, i) => `${i === 0 ? 'M':'L'} ${x(r.at).toFixed(2)} ${y(r.mmol).toFixed(2)}`)
     .join(' ');
 
-  const inRange = values.filter(
-    (v) => v >= TARGET_LOW_MMOL && v <= TARGET_HIGH_MMOL,
-  ).length;
+  const inRange = values.filter(isInTargetRange).length;
 
   return (
     <figure className="mb-2 border border-rule bg-paper-raised px-4 py-3">

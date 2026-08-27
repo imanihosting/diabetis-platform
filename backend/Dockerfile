@@ -51,4 +51,9 @@ CMD ["node", "backend/dist/main.js"]
 # sources. Used by infra/docker/docker-compose.test.yml.
 FROM build AS test
 ENV NODE_ENV=test
+
+# The engine's copy of the target range, so target-range.spec.ts can check that
+# it still agrees with the shared contract. One file, not the engine: this image
+# has no business running Python, only reading two numbers out of it.
+COPY metabolic-engine/app/engines/thresholds.py ./metabolic-engine/app/engines/thresholds.py
 CMD ["npm", "run", "test", "--workspace", "backend"]

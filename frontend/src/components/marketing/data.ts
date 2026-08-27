@@ -5,13 +5,18 @@
  * and does not shift under the reader on hydration. The shape is the point:
  * a dawn rise, three meals, and one of them followed by a walk.
  */
+import { TARGET_HIGH_MMOL, TARGET_LOW_MMOL } from '@wellovue/types';
+
 export interface Reading {
   minutes: number;
   mmol: number;
 }
 
-export const TARGET_LOW = 3.9;
-export const TARGET_HIGH = 10.0;
+// Re-exported from the shared contract rather than restated. The landing page
+// draws the same band the product draws, which is the whole claim it makes
+// about showing the real thing.
+export const TARGET_LOW = TARGET_LOW_MMOL;
+export const TARGET_HIGH = TARGET_HIGH_MMOL;
 
 interface Meal {
   atMinutes: number;

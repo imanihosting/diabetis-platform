@@ -10,6 +10,16 @@ MIN_SAMPLES_FOR_ANY_FINDING = 5
 MIN_SAMPLES_FOR_MODERATE = 10
 MIN_SAMPLES_FOR_STRONG = 20
 
+# The target range, in mmol/L.
+#
+# NOT the source of truth. `TARGET_LOW_MMOL` / `TARGET_HIGH_MMOL` in
+# packages/types/src/glucose.ts are, and these exist only because Python cannot
+# import TypeScript. Both bounds are inclusive there and must be here.
+#
+# This copy is not trusted to stay correct by good intentions:
+# backend/test/target-range.spec.ts reads this file and fails if these numbers
+# disagree with the contract. Changing one side alone breaks the build, which is
+# the only kind of "keep in sync" comment worth writing.
 TARGET_LOW_MMOL = 3.9
 TARGET_HIGH_MMOL = 10.0
 

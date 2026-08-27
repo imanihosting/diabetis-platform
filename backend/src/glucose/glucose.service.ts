@@ -6,7 +6,7 @@ import type {
   GlucoseUnit,
   ImportGlucoseInput,
 } from '@wellovue/types';
-import { toMgDl, toMmolL } from '@wellovue/types';
+import { glucoseZone, toMgDl, toMmolL } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -15,8 +15,6 @@ import { AuditService } from '../audit/audit.service';
  * Used only to describe data, never to advise. Per-user targets belong to
  * the clinician and will replace these constants when that workflow exists.
  */
-const TARGET_LOW_MMOL = 3.9;
-const TARGET_HIGH_MMOL = 10.0;
 
 /** Below this, a summary is described as provisional rather than representative. */
 const MIN_SAMPLES_FOR_SUMMARY = 14;
@@ -175,11 +173,14 @@ export class GlucoseService {
       };
     }
 
-    const inRange = values.filter(
-      (v) => v >= TARGET_LOW_MMOL && v <= TARGET_HIGH_MMOL,
-    ).length;
-    const above = values.filter((v) => v > TARGET_HIGH_MMOL).length;
-    const below = values.filter((v) => v < TARGET_LOW_MMOL).length;
+    // Classified by the shared contract rather than by three comparisons
+    // written here. This figure is the one a clinician is most likely to read
+    // out of the product, so it must agree with the band the charts draw and
+    // with the threshold the engine flags mornings against.
+    const zones = values.map(glucoseZone);
+    const inRange = zones.filter((z) => z === 'in').length;
+    const above = zones.filter((z) => z === 'above').length;
+    const below = zones.filter((z) => z === 'below').length;
 
     const display = (mmol: number) =>
       unit === 'mmol/L' ? round(mmol, 1) : round(toMgDl(mmol, 'mmol/L'), 0);

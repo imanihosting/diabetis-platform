@@ -76,14 +76,17 @@ create trigger diabetes_profiles_set_updated_at
 
 -- NO target_low / target_high COLUMNS YET.
 --
--- 3.9 and 10.0 mmol/L are currently hardcoded in five places across the
--- frontend and the Python engine. Adding per-user targets here before those are
--- unified would produce a column that looks authoritative and that nothing
--- reads, which is worse than no column: the next person sets it, sees no
--- change, and cannot tell whether the feature is broken or absent. Unify the
--- five sites behind one shared constant first, then add these as a nullable
--- override. Adding a column later is an ALTER; removing one that has been
--- lying to people is not.
+-- Superseded in part: the four separate declarations of 3.9 and 10.0 (the
+-- backend summary, two frontend components, and the Python engine) are now one
+-- constant in packages/types/src/glucose.ts, checked across the language
+-- boundary by backend/test/target-range.spec.ts.
+--
+-- The columns still do not exist, and that part stands. Nothing reads a
+-- per-user target yet, and a column that looks authoritative while nothing
+-- reads it is worse than no column: the next person sets it, sees no change,
+-- and cannot tell whether the feature is broken or absent. Add them as a
+-- nullable override when something is ready to honour them. Adding a column
+-- later is an ALTER; removing one that has been lying to people is not.
 
 -- Product safety context, not diagnoses.
 --
