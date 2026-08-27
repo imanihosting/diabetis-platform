@@ -287,6 +287,224 @@ describe('experiments', () => {
     });
   });
 
+  describe('starting', () => {
+    /** An account with enough data for the walk finding to exist. */
+    async function readyAccount() {
+      const theirEmail = `start-${Date.now()}-${Math.random().toString(36).slice(2)}@test.local`;
+      const registered = await http()
+        .post('/api/auth/register')
+        .send({ email: theirEmail, password })
+        .expect(201);
+      const token = registered.body.tokens.accessToken as string;
+      const theirAuth = { authorization: `Bearer ${token}` };
+
+      const { rows } = await pool.query<{ id: string }>(
+        'select id from identity.users where email = $1',
+        [theirEmail],
+      );
+      const id = rows[0].id;
+
+      await http()
+        .put('/api/diabetes-profile')
+        .set(theirAuth)
+        .send({ diabetesType: 'type_2' })
+        .expect(200);
+
+      for (let day = 0; day < 24; day += 1) {
+        const mealAt = new Date(Date.now() - (24 - day) * 24 * 60 * 60 * 1000);
+        mealAt.setUTCHours(12, 30, 0, 0);
+        const walked = day % 2 === 0;
+        await pool.query(
+          `insert into nutrition.meals (user_id, started_at, meal_type, description, source)
+           values ($1, $2, 'lunch', 'Test meal', 'manual')`,
+          [id, mealAt.toISOString()],
+        );
+        if (walked) {
+          await pool.query(
+            `insert into metabolic.events (user_id, occurred_at, event_type, source, confidence, payload)
+             values ($1, $2, 'exercise_started', 'manual', 1.0, '{"kind":"walk"}'::jsonb)`,
+            [id, new Date(mealAt.getTime() + 20 * 60 * 1000).toISOString()],
+          );
+        }
+        for (const [offset, value] of [
+          [-10, 6.0],
+          [60, walked ? 7.6 : 9.0],
+        ] as [number, number][]) {
+          await pool.query(
+            `insert into metabolic.glucose_samples (user_id, measured_at, glucose_value, unit, source)
+             values ($1, $2, $3, 'mmol/L', 'cgm_device') on conflict do nothing`,
+            [id, new Date(mealAt.getTime() + offset * 60 * 1000).toISOString(), value],
+          );
+        }
+      }
+      return { id, auth: theirAuth };
+    }
+
+    const proposeAs = (
+      headers: Record<string, string>,
+      template: string,
+      title = 'Walking after a meal',
+    ) =>
+      http()
+        .post('/api/experiments')
+        .set(headers)
+        .send({ template, title, question: 'Does it help?', protocol: { days: 6 } });
+
+    it('records the prediction and activates, in that order', async () => {
+      const account = await readyAccount();
+      const proposed = await proposeAs(account.auth, 'post_meal_walk').expect(201);
+      const id = proposed.body.experiment.id as string;
+
+      const res = await http()
+        .post(`/api/experiments/${id}/start`)
+        .set(account.auth)
+        .expect(201);
+
+      expect(res.body.experiment.status).toBe('active');
+      expect(res.body.experiment.startedAt).toBeTruthy();
+      expect(res.body.prediction.status).toBe('pending');
+      expect(res.body.prediction.prediction.expectedEffect).toBeLessThan(0);
+
+      // The order is the claim. `made_at` defaults to the moment of insert and
+      // `started_at` is set afterwards in the same transaction, so the
+      // prediction cannot be later than the start.
+      const { rows } = await pool.query<{ made_at: Date; started_at: Date }>(
+        `select p.made_at, e.started_at
+           from ai.predictions p join experiments.experiments e on e.id = p.experiment_id
+          where e.id = $1`,
+        [id],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].made_at.getTime()).toBeLessThanOrEqual(rows[0].started_at.getTime());
+    });
+
+    it('refuses a blocked experiment outright', async () => {
+      const account = await readyAccount();
+      const blocked = await proposeAs(account.auth, 'insulin_dosing', 'No').expect(201);
+
+      const res = await http()
+        .post(`/api/experiments/${blocked.body.experiment.id}/start`)
+        .set(account.auth)
+        .expect(400);
+      expect(res.body.message).toMatch(/never run/i);
+    });
+
+    it('leaves a clinician-gated experiment waiting', async () => {
+      const account = await readyAccount();
+      const gated = await proposeAs(account.auth, 'fasting_protocol', 'Fasting').expect(
+        201,
+      );
+
+      const res = await http()
+        .post(`/api/experiments/${gated.body.experiment.id}/start`)
+        .set(account.auth)
+        .expect(400);
+      // No review workflow exists, so the message must not imply a queue.
+      expect(res.body.message).toMatch(/no way to record that agreement yet/i);
+    });
+
+    it('refuses to start the same experiment twice', async () => {
+      const account = await readyAccount();
+      const proposed = await proposeAs(account.auth, 'post_meal_walk').expect(201);
+      const id = proposed.body.experiment.id as string;
+
+      await http().post(`/api/experiments/${id}/start`).set(account.auth).expect(201);
+      await http().post(`/api/experiments/${id}/start`).set(account.auth).expect(409);
+
+      // And exactly one prediction exists for it.
+      const { rows } = await pool.query(
+        'select 1 from ai.predictions where experiment_id = $1',
+        [id],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('rolls the start back when the prediction cannot be written', async () => {
+      // The failure this whole design is for. `hydration_logging` is allowed,
+      // so the safety gate lets it through, but no current finding supports it
+      // — so the prediction cannot be made. The experiment must not be left
+      // running with no record of what was expected.
+      const account = await readyAccount();
+      const unsupported = await proposeAs(
+        account.auth,
+        'hydration_logging',
+        'Water',
+      ).expect(201);
+      const id = unsupported.body.experiment.id as string;
+
+      await http().post(`/api/experiments/${id}/start`).set(account.auth).expect(400);
+
+      const { rows } = await pool.query<{ status: string; started_at: Date | null }>(
+        'select status, started_at from experiments.experiments where id = $1',
+        [id],
+      );
+      expect(rows[0].status).toBe('draft');
+      expect(rows[0].started_at).toBeNull();
+    });
+
+    it('refuses someone else’s experiment', async () => {
+      const mine = await readyAccount();
+      const theirs = await readyAccount();
+      const proposed = await proposeAs(mine.auth, 'post_meal_walk').expect(201);
+
+      await http()
+        .post(`/api/experiments/${proposed.body.experiment.id}/start`)
+        .set(theirs.auth)
+        .expect(404);
+    });
+
+    it('is refused by the database independently of the API', async () => {
+      // The second line. A future caller that flips the status without writing
+      // a prediction first is stopped here rather than trusted.
+      const account = await readyAccount();
+      const proposed = await proposeAs(account.auth, 'post_meal_walk').expect(201);
+      const id = proposed.body.experiment.id as string;
+
+      const activated = await captureError(() =>
+        pool.query(
+          "update experiments.experiments set status = 'active' where id = $1",
+          [id],
+        ),
+      );
+      expect(activated?.message).toMatch(/without a prediction recorded first/i);
+
+      // And an experiment inserted straight into `active` is refused too, so
+      // the transition cannot simply be skipped.
+      const inserted = await captureError(() =>
+        pool.query(
+          `insert into experiments.experiments
+             (user_id, template, title, question, protocol, safety_status,
+              clinician_review_required, status)
+           values ($1, 'post_meal_walk', 'x', 'x', '{}'::jsonb, 'allowed', false, 'active')`,
+          [account.id],
+        ),
+      );
+      expect(inserted?.message).toMatch(/without a prediction recorded first/i);
+    });
+
+    it('refuses to let a prediction be moved onto another experiment', async () => {
+      const account = await readyAccount();
+      const first = await proposeAs(account.auth, 'post_meal_walk').expect(201);
+      const second = await proposeAs(account.auth, 'post_meal_walk', 'Another').expect(
+        201,
+      );
+      await http()
+        .post(`/api/experiments/${first.body.experiment.id}/start`)
+        .set(account.auth)
+        .expect(201);
+
+      // Reassignment is the same failure as editing: the expectation would end
+      // up attached to a question it was not made about.
+      const moved = await captureError(() =>
+        pool.query(
+          'update ai.predictions set experiment_id = $2 where experiment_id = $1',
+          [first.body.experiment.id, second.body.experiment.id],
+        ),
+      );
+      expect(moved?.message).toMatch(/immutable/i);
+    });
+  });
+
   describe('listing', () => {
     it('returns what was proposed, and refuses an unauthenticated caller', async () => {
       const mine = await http().get('/api/experiments').set(auth()).expect(200);

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { createExperimentSchema, type CreateExperimentInput } from '@wellovue/types';
 import { ExperimentsService } from './experiments.service';
@@ -29,6 +29,22 @@ export class ExperimentsController {
     @Body(new ZodValidationPipe(createExperimentSchema)) body: CreateExperimentInput,
   ) {
     return this.experiments.create(user.id, body);
+  }
+
+  @Post(':id/start')
+  @ApiOperation({
+    summary: 'Start an allowed experiment, recording its prediction first',
+    description:
+      'The prediction and the status change are one transaction, and the ' +
+      'database refuses the transition to active without a prediction ' +
+      'attached. Blocked experiments are refused outright; clinician-gated ' +
+      'ones stay waiting, because there is no way to record a review yet.',
+  })
+  start(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.experiments.start(user.id, id);
   }
 
   @Get()

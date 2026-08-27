@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import {
   proposalFromFinding,
   type AttachOutcomeInput,
@@ -37,7 +38,28 @@ export class PredictionsService {
   ) {}
 
   async create(userId: string, input: CreatePredictionInput): Promise<Prediction> {
-    const experiment = await this.db.queryOne<{
+    return this.db.transaction((client) =>
+      this.createWithin(client, userId, input.experimentId, input.targetAt ?? null),
+    );
+  }
+
+  /**
+   * The prediction write, on a caller's transaction.
+   *
+   * Exists so starting an experiment can record the prediction and flip the
+   * status in one transaction. "The prediction was written first" is the
+   * product's whole accountability claim, and a claim resting on two writes
+   * landing in the right order needs them to be one write — otherwise the
+   * failure mode is an active experiment with no record of what was expected,
+   * which is precisely the state the platform exists to make impossible.
+   */
+  async createWithin(
+    client: PoolClient,
+    userId: string,
+    experimentId: string,
+    targetAt: Date | null,
+  ): Promise<Prediction> {
+    const found = await client.query<{
       id: string;
       template: string | null;
       title: string;
@@ -46,8 +68,9 @@ export class PredictionsService {
       `select id, template, title, safety_status
          from experiments.experiments
         where id = $1 and user_id = $2`,
-      [input.experimentId, userId],
+      [experimentId, userId],
     );
+    const experiment = found.rows[0];
     if (!experiment) throw new NotFoundException('No such experiment');
 
     if (!experiment.template) {
@@ -87,7 +110,7 @@ export class PredictionsService {
     // second copy of the version string in TypeScript would be one more thing
     // that can disagree with the engine, and this is the field that says which
     // model to credit or blame.
-    const modelVersionId = await this.resolveModelVersion(evidence.modelVersion);
+    const modelVersionId = await this.resolveModelVersion(client, evidence.modelVersion);
 
     const prediction = {
       expectedEffect: basis.effectEstimate,
@@ -106,45 +129,44 @@ export class PredictionsService {
       recordedAt: new Date().toISOString(),
     };
 
-    const row = await this.db.transaction(async (client) => {
-      const { rows } = await client.query<PredictionRow>(
-        `insert into ai.predictions
-           (user_id, model_version_id, prediction_type, target_at,
-            input_snapshot, prediction, confidence, status)
-         values ($1, $2, $3, $4, $5, $6, $7, 'pending')
-         returning *`,
-        [
-          userId,
-          modelVersionId,
-          `experiment:${experiment.template}`,
-          input.targetAt ?? null,
-          JSON.stringify(inputSnapshot),
-          JSON.stringify(prediction),
-          basis.confidence,
-        ],
-      );
+    const { rows } = await client.query<PredictionRow>(
+      `insert into ai.predictions
+         (user_id, model_version_id, experiment_id, prediction_type, target_at,
+          input_snapshot, prediction, confidence, status)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+       returning *`,
+      [
+        userId,
+        modelVersionId,
+        // A first-class link, so the database can check that an experiment
+        // never becomes active without one.
+        experiment.id,
+        `experiment:${experiment.template}`,
+        targetAt,
+        JSON.stringify(inputSnapshot),
+        JSON.stringify(prediction),
+        basis.confidence,
+      ],
+    );
 
-      await this.audit.record(
-        {
-          actorUserId: userId,
-          subjectUserId: userId,
-          action: 'prediction.create',
-          resourceType: 'prediction',
-          resourceId: rows[0].id,
-          metadata: {
-            experimentId: experiment.id,
-            basisFindingType: basis.findingType,
-          },
+    await this.audit.record(
+      {
+        actorUserId: userId,
+        subjectUserId: userId,
+        action: 'prediction.create',
+        resourceType: 'prediction',
+        resourceId: rows[0].id,
+        metadata: {
+          experimentId: experiment.id,
+          basisFindingType: basis.findingType,
         },
-        client,
-      );
-
-      return rows[0];
-    });
+      },
+      client,
+    );
 
     // The version is joined in `list` but not present on `returning *`, so it
     // is carried through explicitly rather than falling back to a placeholder.
-    return this.toPrediction({ ...row, version: evidence.modelVersion });
+    return this.toPrediction({ ...rows[0], version: evidence.modelVersion });
   }
 
   /**
@@ -265,17 +287,20 @@ export class PredictionsService {
    * the version a prediction was made under cannot be changed by editing the
    * prediction.
    */
-  private async resolveModelVersion(engineVersion: string): Promise<string> {
-    await this.db.query(
+  private async resolveModelVersion(
+    client: PoolClient,
+    engineVersion: string,
+  ): Promise<string> {
+    await client.query(
       `insert into ai.model_versions (model_name, version)
        values ('pattern-engine', $1) on conflict (model_name, version) do nothing`,
       [engineVersion],
     );
-    const row = await this.db.queryOne<{ id: string }>(
+    const { rows } = await client.query<{ id: string }>(
       "select id from ai.model_versions where model_name = 'pattern-engine' and version = $1",
       [engineVersion],
     );
-    return row!.id;
+    return rows[0].id;
   }
 
   private toPrediction(row: PredictionRow): Prediction {

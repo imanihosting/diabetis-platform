@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import {
   experimentDecision,
   type CreateExperimentInput,
   type Experiment,
+  type Prediction,
   type ExperimentDecision,
   type ExperimentStatus,
   type SafetyStatus,
@@ -10,10 +12,16 @@ import {
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
+import { PredictionsService } from '../predictions/predictions.service';
 
 export interface CreatedExperiment {
   experiment: Experiment;
   decision: ExperimentDecision;
+}
+
+export interface StartedExperiment {
+  experiment: Experiment;
+  prediction: Prediction;
 }
 
 /**
@@ -37,6 +45,7 @@ export class ExperimentsService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly profiles: DiabetesProfileService,
+    private readonly predictions: PredictionsService,
   ) {}
 
   async create(
@@ -107,6 +116,86 @@ export class ExperimentsService {
         canStart: decision.canStart,
       },
     };
+  }
+
+  /**
+   * Starts an experiment, and records what is expected of it first.
+   *
+   * Both writes are one transaction, and the order inside it is the point. The
+   * platform's claim is that the prediction was written down before the trial
+   * began; if these were two calls, the failure mode is an experiment running
+   * with no record of what was expected, which is exactly the state that makes
+   * every accuracy figure downstream a lie.
+   *
+   * The database enforces the same thing independently. Migration 0018 adds a
+   * trigger refusing any transition to `active` without a prediction attached
+   * to that experiment, so a future caller that gets the order wrong is
+   * stopped rather than trusted.
+   */
+  async start(userId: string, experimentId: string): Promise<StartedExperiment> {
+    return this.db.transaction(async (client) => {
+      const { rows } = await client.query<ExperimentRow>(
+        `select * from experiments.experiments
+          where id = $1 and user_id = $2
+          for update`,
+        [experimentId, userId],
+      );
+      const existing = rows[0];
+      if (!existing) throw new NotFoundException('No such experiment');
+
+      if (existing.safety_status === 'blocked') {
+        throw new BadRequestException(
+          'This experiment is blocked and will never run. Nothing about starting it is a matter of timing.',
+        );
+      }
+
+      if (existing.safety_status === 'clinician_gated') {
+        // Clinician review does not exist yet, so there is no way for one of
+        // these to become startable. Saying "not yet reviewed" would imply a
+        // queue somebody is working through.
+        throw new BadRequestException(
+          'This experiment needs a clinician to agree to it first, and Wellovue has no way to record that agreement yet. It stays waiting.',
+        );
+      }
+
+      if (existing.status !== 'draft') {
+        throw new ConflictException(
+          `This experiment is already ${existing.status}, so it cannot be started.`,
+        );
+      }
+
+      // First, and in this transaction. Throwing here rolls back everything,
+      // which is the behaviour that matters: an experiment must not be able to
+      // start when the prediction could not be written.
+      const prediction = await this.predictions.createWithin(
+        client,
+        userId,
+        experimentId,
+        null,
+      );
+
+      const started = await client.query<ExperimentRow>(
+        `update experiments.experiments
+            set status = 'active', started_at = now()
+          where id = $1
+          returning *`,
+        [experimentId],
+      );
+
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          subjectUserId: userId,
+          action: 'experiment.start',
+          resourceType: 'experiment',
+          resourceId: experimentId,
+          metadata: { predictionId: prediction.id, template: existing.template },
+        },
+        client,
+      );
+
+      return { experiment: toExperiment(started.rows[0]), prediction };
+    });
   }
 
   async list(userId: string): Promise<Experiment[]> {

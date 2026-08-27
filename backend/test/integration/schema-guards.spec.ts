@@ -201,8 +201,48 @@ describe('database safety guarantees', () => {
       expect(error?.message).toMatch(/experiments_blocked_chk/);
     });
 
-    it('allows a safe experiment to run', async () => {
-      const error = await captureError(() => insertExperiment('allowed', false, 'active'));
+    it('refuses to activate even a safe experiment with no prediction', async () => {
+      // Added by migration 0018. This used to be the test that a safe
+      // experiment may simply run; it may not. The platform's claim is that
+      // the prediction was written down before the trial began, and an
+      // invariant enforced only by the code currently calling is an invariant
+      // until somebody writes different code.
+      const error = await captureError(() =>
+        insertExperiment('allowed', false, 'active'),
+      );
+      expect(error?.message).toMatch(/without a prediction recorded first/i);
+    });
+
+    it('allows a safe experiment to run once its prediction exists', async () => {
+      const { rows: created } = await db.query<{ id: string }>(
+        `insert into experiments.experiments
+           (user_id, title, question, protocol, safety_status,
+            clinician_review_required, status)
+         values ($1, 'T', 'Q', '{}', 'allowed', false, 'draft')
+         returning id`,
+        [userId],
+      );
+      const experimentId = created[0].id;
+
+      const { rows: model } = await db.query<{ id: string }>(
+        `insert into ai.model_versions (model_name, version)
+         values ('pattern-engine', 'schema-guard-probe')
+         on conflict (model_name, version) do update set model_name = excluded.model_name
+         returning id`,
+      );
+      await db.query(
+        `insert into ai.predictions
+           (user_id, model_version_id, experiment_id, prediction_type,
+            input_snapshot, prediction)
+         values ($1, $2, $3, 'probe', '{}'::jsonb, '{}'::jsonb)`,
+        [userId, model[0].id, experimentId],
+      );
+
+      const error = await captureError(() =>
+        db.query("update experiments.experiments set status = 'active' where id = $1", [
+          experimentId,
+        ]),
+      );
       expect(error).toBeNull();
     });
   });

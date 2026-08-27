@@ -219,6 +219,9 @@ reintroduces a specific failure.
 | A prediction's body and snapshot are generated server-side | A record of how often the platform was right is worth nothing if the platform chose the answer after seeing the question. |
 | Immutable means "cannot be revised while it belongs to somebody" | Read as "can never be deleted", it made accounts that had made a prediction impossible to erase. Twice: the trigger and a `restrict` foreign key. |
 | A blocked experiment gets no prediction | It will never run, and an immutable expectation about something that cannot happen is noise in the accountability record. |
+| An experiment cannot become active without a prediction | Enforced by trigger, not only by the service that starts one. An invariant held up by the code currently calling is an invariant until somebody writes different code. |
+| `ai.predictions.experiment_id` is frozen like the rest of the row | Reassignment is the same failure as editing: the expectation ends up attached to a question it was not made about. |
+| An experiment that has been started cannot be deleted | Its prediction cascades from it and refuses to go while the account exists. Removing the record of what was expected by deleting the thing it was about is the loophole that would make every accuracy figure optional. Erasing the account still works. |
 
 ## Shared Type Changes
 
@@ -708,33 +711,28 @@ release:
 
 ## Next Implementation Ticket
 
-Ticket 2 is shipped. `POST /api/predictions` writes an expectation derived
-entirely on the server from the evidence as it stands, attributed to the engine
-version that produced it, with a snapshot holding the finding itself rather
-than a reference to one that may since have moved. There is no endpoint that
-can revise a prediction, and the trigger refuses anyway.
-
-Two defects surfaced, both older than this ticket and both invisible until
-something wrote to these tables. `experiments.experiments` never stored the
-template its safety decision was made about (fixed in 0016), and `ai.predictions`
-could not be erased at all: the immutability trigger refused every DELETE while
-the row cascades from `identity.users`, and `prediction_outcomes` was
-`on delete restrict` behind it (both fixed in 0017).
+Ticket 3 is shipped. `POST /api/experiments/:id/start` records the prediction
+and activates the experiment in one transaction, in that order, and migration
+0018 makes the database refuse any transition to `active` without a prediction
+attached to that experiment. The landing page's claim now rests on something
+other than the code that happens to be calling.
 
 Remaining:
 
-> **Ticket 3: start an allowed experiment.** Draft to active for `allowed`
-> only, refusing blocked outright and gated until reviewed. The prediction is
-> recorded before the status changes, in the same transaction, because "the
-> prediction was written first" is the product's whole claim and a claim that
-> depends on two writes landing in order needs them to be one write.
-
-> **Ticket 4: measure the result.** The outcome endpoint exists; what is
-> missing is completing the experiment alongside it and showing predicted
-> against observed.
+> **Ticket 4: measure the result.** The outcome endpoint exists and scores
+> observed against expected. What is missing is completing the experiment
+> alongside it, and the screen showing predicted against observed. That screen
+> is the first place a person sees whether the platform was right about them,
+> which makes it worth designing carefully rather than quickly.
 
 > **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
 > experiments, predictions, outcomes, limitations. Web first, export later.
+
+There is also no frontend for starting an experiment. `/experiments` lists them
+read-only and the endpoint exists. That is a deliberate hold: starting one is
+the first irreversible thing a person can do in this product — the experiment
+cannot afterwards be deleted, by design — so it should land with the screen
+that shows what happens next rather than before it.
 
 Gestational and Type 1 stay parked until the loop is closed. Per-user target
 ranges still wait.
