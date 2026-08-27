@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/AppShell';
+import { KNOWN_LAB_UNITS, type KnownLabTest } from '@wellovue/types';
 import { api, ApiError } from '@/lib/api';
 
-type Tab = 'glucose' | 'meal' | 'activity';
+type Tab = 'glucose' | 'meal' | 'activity' | 'labs';
 
 export default function LogPage() {
   const [tab, setTab] = useState<Tab>('glucose');
@@ -18,7 +19,7 @@ export default function LogPage() {
       </p>
 
       <div className="mt-6 flex gap-6 border-b border-rule" role="tablist">
-        {(['glucose','meal','activity'] as Tab[]).map((option) => (
+        {(['glucose','meal','activity','labs'] as Tab[]).map((option) => (
           <button
             key={option}
             role="tab"
@@ -39,6 +40,7 @@ export default function LogPage() {
         {tab === 'glucose' && <GlucoseForm />}
         {tab === 'meal' && <MealForm />}
         {tab === 'activity' && <ActivityForm />}
+        {tab === 'labs' && <LabForm />}
       </div>
     </AppShell>
   );
@@ -242,6 +244,95 @@ function ActivityForm() {
     <Form onSubmit={() => mutation.mutate()} mutation={mutation} label="Log activity">
       <Input label="Minutes walked" type="number" value={minutes} onChange={setMinutes} required />
       <Input label="When" type="datetime-local" value={occurredAt} onChange={setOccurredAt} required />
+    </Form>
+  );
+}
+
+/**
+ * HbA1c, fasting glucose, weight and BMI.
+ *
+ * These four first because they are what the prediabetes findings actually
+ * read. A detector that suggests logging an HbA1c while the product offers no
+ * way to record one is worse than a detector that says nothing: it asks
+ * somebody to do something and then does not let them.
+ *
+ * The unit is prefilled from the contract and stays editable. A printout can
+ * carry anything, and rejecting an unfamiliar unit would lose the reading —
+ * so the value is stored exactly as entered, with whatever unit came with it.
+ */
+const LAB_TESTS: { value: KnownLabTest; label: string }[] = [
+  { value: 'hba1c', label: 'HbA1c' },
+  { value: 'fasting_glucose', label: 'Fasting glucose' },
+  { value: 'weight', label: 'Weight' },
+  { value: 'bmi', label: 'BMI' },
+];
+
+function LabForm() {
+  const queryClient = useQueryClient();
+  const [testName, setTestName] = useState<KnownLabTest>('hba1c');
+  const [value, setValue] = useState('');
+  const [unit, setUnit] = useState(KNOWN_LAB_UNITS.hba1c ?? '');
+  const [collectedAt, setCollectedAt] = useState(nowLocal());
+
+  const chooseTest = (next: KnownLabTest) => {
+    setTestName(next);
+    // Follows the test unless the person has typed something of their own.
+    setUnit((current) =>
+      Object.values(KNOWN_LAB_UNITS).includes(current) || current === ''
+        ? (KNOWN_LAB_UNITS[next] ?? '')
+        : current,
+    );
+  };
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.labs.create({
+        testName,
+        valueNumeric: Number(value),
+        unit: unit || undefined,
+        collectedAt: new Date(collectedAt),
+        source: 'manual',
+      }),
+    onSuccess: () => {
+      setValue('');
+      void queryClient.invalidateQueries({ queryKey: ['timeline'] });
+      // The findings that read these are recomputed on the next visit.
+      void queryClient.invalidateQueries({ queryKey: ['evidence'] });
+    },
+  });
+
+  return (
+    <Form onSubmit={() => mutation.mutate()} mutation={mutation} label="Add result">
+      <div>
+        <label htmlFor="labTest" className="block text-sm text-ink-muted">
+          Test
+        </label>
+        <select
+          id="labTest"
+          value={testName}
+          onChange={(e) => chooseTest(e.target.value as KnownLabTest)}
+          className="mt-1 w-full border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+        >
+          {LAB_TESTS.map((test) => (
+            <option key={test.value} value={test.value}>
+              {test.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex gap-4">
+        <Input label="Result" type="number" step="0.1" value={value} onChange={setValue} required />
+        <Input label="Unit" value={unit} onChange={setUnit} />
+      </div>
+
+      <Input
+        label="When it was taken"
+        type="datetime-local"
+        value={collectedAt}
+        onChange={setCollectedAt}
+        required
+      />
     </Form>
   );
 }

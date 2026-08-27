@@ -208,6 +208,10 @@ reintroduces a specific failure.
 | The engine gate does not replace the NestJS gate | One enforcement point opens the moment something new calls the service. The two are redundant on purpose. |
 | The engine never reads the diabetes profile | Care mode arrives in the request, so there is one source of truth for the value that decides which analysis runs. |
 | `careMode` defaults to `unknown` in the engine, not to Type 2 | An omitted field must fail closed. The caller that forgets it is the one least likely to have considered whose record it is analysing. |
+| Every `would_improve_with` entry comes from `suggestions.py` | A suggestion the product cannot honour sends someone looking for a control that is not there. Free text cannot be checked; a catalogue can. |
+| Lab test names are matched case-insensitively | A lab import writes whatever the source called the test. An exact match told a demo record with eight HbA1c results that it had none. |
+| A lab's unit comes from the data, never from the detector | HbA1c is reported in % and in mmol/mol. Assuming one labels the other's numbers wrongly, on scales an order of magnitude apart. |
+| Prediabetes detectors are not offered to Type 2 | They would likely be useful there, which is exactly why switching them on by assumption would make "Type 2 is unchanged" untestable. |
 
 ## Shared Type Changes
 
@@ -545,6 +549,26 @@ Success:
 
 ### Phase C: Prediabetes And Insulin-Treated Type 2
 
+**Prediabetes is shipped.** `LabsModule` with audited create/list, a lab entry
+tab on `/log` for HbA1c, fasting glucose, weight and BMI, `load_labs` in the
+engine, and five detectors gated to `prediabetes`: `hba1c_trend`,
+`weight_trend`, `fasting_glucose_trend`, `activity_consistency`,
+`meal_timing_association`. Type 2 returns the same four findings it always did.
+
+Lab detectors look back two years regardless of the requested window. The
+window on an evidence request describes a period of behaviour; a quarterly test
+has nothing to say inside thirty days, and reporting "not enough results" to
+somebody with four years of them would be false. The finding says it looked
+further back than the screen is showing.
+
+**Insulin-treated Type 2 remains.** The detectors already run for it — same
+physiology, same analysis. What is left is the copy and the experiment
+boundaries: `classifyTemplate` blocks `insulin_dosing` and gates
+`medication_timing` today, and making it profile-aware must keep it failing
+closed. The 11 tests in `backend/test/safety.spec.ts` are the contract.
+
+
+
 Prediabetes is close to the current evidence model. Insulin-treated Type 2 uses
 the current data model but needs stricter language and safety boundaries.
 
@@ -664,28 +688,25 @@ release:
 
 ## Next Implementation Ticket
 
-Phase B is complete. The next work is Phase C, and the first ticket is the one
-the data model was deliberately left incomplete for:
+Prediabetes is shipped. The next ticket is the other half of Phase C:
 
-> Unify the target range behind one shared constant, then let a profile
-> override it.
-
-3.9 and 10.0 mmol/L are hardcoded in five places:
-`frontend/src/components/GlucoseValue.tsx`,
-`frontend/src/components/DayGlucoseStrip.tsx`,
-`frontend/src/components/marketing/data.ts`, and
-`metabolic-engine/app/engines/thresholds.py`. Migration 0013 left
-`target_low` / `target_high` off `clinical.diabetes_profiles` because a column
-nothing reads is worse than no column.
+> Make the safety classifier profile-aware, and tighten the language for
+> insulin-treated Type 2.
 
 Acceptance criteria:
 
-- One shared constant in `@wellovue/types`, and the frontend sites read it.
-- The engine's `thresholds.py` names the shared contract as the source and
-  matches it. Two languages, so it cannot import — but it can be checked.
-- Only then, an additive migration adding nullable `target_low` / `target_high`.
-- The value actually reaches both the analysis and the display, and a test
-  proves a non-default range changes a finding rather than only a label.
+- `classifyTemplate` takes the care mode and active flags alongside the
+  template, and still gates anything it does not recognise. The 11 existing
+  tests in `backend/test/safety.spec.ts` pass unchanged.
+- Insulin-treated Type 2 receives the same findings it does now, and no
+  experiment template that implies a dose or timing change.
+- Findings shown to someone on insulin carry the stricter language: what the
+  platform will not do about insulin belongs beside the finding, not in a
+  footer.
+- Nothing about the Type 2 detector output changes.
 
-After that, Phase C proper: prediabetes detectors, and the language and safety
-boundaries for insulin-treated Type 2.
+After that, Phase D: gestational, as a clinician-supported workflow only.
+
+Per-user target ranges still wait. The shared range in
+`packages/types/src/glucose.ts` is where they will plug in, so adding them is
+now a controlled change rather than a hunt through the codebase.

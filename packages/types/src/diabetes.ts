@@ -232,8 +232,19 @@ export const careModeCapabilitiesSchema = z.object({
 });
 export type CareModeCapabilities = z.infer<typeof careModeCapabilitiesSchema>;
 
-/** Care modes whose detectors exist and have been checked. Everything else waits. */
-const EVIDENCE_READY: readonly CareMode[] = ['type_2_standard', 'type_2_insulin_supported'];
+/**
+ * Care modes whose detectors exist and have been reviewed. Everything else waits.
+ *
+ * Must stay in step with the engine's registry: this decides whether the
+ * backend asks, and the registry decides whether the engine answers. Listing a
+ * mode here that no detector supports would produce an empty analysis rather
+ * than a stated refusal, which is the one outcome worse than either.
+ */
+const EVIDENCE_READY: readonly CareMode[] = [
+  'type_2_standard',
+  'type_2_insulin_supported',
+  'prediabetes',
+];
 
 export function careModeCapabilities(
   careMode: CareMode,
@@ -258,8 +269,6 @@ function unsupportedReason(careMode: CareMode): string {
   switch (careMode) {
     case 'unknown':
       return 'Wellovue needs to know what kind of diabetes you have before it can interpret your data. Until then it will not guess.';
-    case 'prediabetes':
-      return 'Wellovue currently produces evidence for Type 2 diabetes. Prediabetes detectors are being built and are not ready to be relied on.';
     case 'gestational':
       return 'Pregnancy changes what these numbers mean, and Wellovue does not yet produce findings for it. This is being built as a clinician-supported workflow.';
     case 'type_1_cgm_insulin':

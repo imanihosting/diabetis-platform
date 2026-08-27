@@ -7,10 +7,11 @@ point is a gate that opens the moment something new calls the service. The
 engine answers questions about any user id it is handed, so it has to be able
 to say no on its own.
 
-Every detector here models Type 2 physiology. Run over a Type 1 record they
-would return confident numbers computed from the wrong model of a body, and
-nothing in the output would say so. That is the failure this module exists to
-make impossible rather than merely unlikely.
+A detector written for one kind of body returns confident numbers when run
+over another, and nothing in the output says so. That is the failure this
+module exists to make impossible rather than merely unlikely: the Type 2
+detectors assume a Type 2 physiology, the prediabetes ones assume a body that
+is not diabetic yet, and neither is a safe default for the other.
 
 The declaration is on the detector, not on the caller. A detector that gains a
 new care mode says so in one place, next to the code whose assumptions changed.
@@ -21,6 +22,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from app.engines import suggestions
 from app.models.findings import StructuredFinding
 
 # Care modes, mirroring `careModeSchema` in @wellovue/types. These two are the
@@ -45,14 +47,26 @@ ALL_CARE_MODES = frozenset(
     }
 )
 
-# What a detector is handed. Loaded once per request and shared, because every
-# detector wants some subset of the same three frames.
-DetectorInputs = tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+
+@dataclass(frozen=True)
+class DetectorInputs:
+    """What a detector is handed.
+
+    Loaded once per request and shared, because every detector wants some
+    subset of the same frames. A dataclass rather than a tuple so adding a
+    source — labs were the first — does not rewrite every signature.
+    """
+
+    glucose: pd.DataFrame
+    meals: pd.DataFrame
+    activity: pd.DataFrame
+    labs: pd.DataFrame
+
 
 # A detector returns None when the signal it needs is absent entirely, which is
 # different from returning an "insufficient data" finding — that is a real
 # answer and is shown to the user as one.
-DetectorFn = Callable[[pd.DataFrame, pd.DataFrame, pd.DataFrame], StructuredFinding | None]
+DetectorFn = Callable[[DetectorInputs], StructuredFinding | None]
 
 
 @dataclass(frozen=True)
@@ -75,6 +89,16 @@ class Detector:
     body that is not.
     """
 
+    needs_labs: bool = False
+    """
+    Whether this detector reads `clinical.lab_results`.
+
+    Declared so the loader can skip that query entirely when nothing permitted
+    for this care mode wants it. A Type 2 request does exactly the work it did
+    before labs existed, which is what "Type 2 is unchanged" has to mean if it
+    is going to mean anything.
+    """
+
     def allowed_for(self, care_mode: str, active_flags: Iterable[str]) -> bool:
         if care_mode not in self.supported_care_modes:
             return False
@@ -95,44 +119,27 @@ TYPE_2_CARE_MODES = frozenset({CARE_MODE_TYPE_2_STANDARD, CARE_MODE_TYPE_2_INSUL
 PREGNANCY_BLOCKED = frozenset({"pregnancy"})
 
 
-def build_registry(
-    morning: DetectorFn,
-    post_meal: DetectorFn,
-    late_meal: DetectorFn,
-    walk_effect: DetectorFn,
-) -> tuple[Detector, ...]:
-    """The registry, wired from the detector functions in `patterns`.
+def build_registry(detectors: Iterable[Detector]) -> tuple[Detector, ...]:
+    """Freezes the detector list, refusing anything that contradicts itself."""
+    frozen = tuple(detectors)
 
-    Built by a function taking the callables rather than importing them, so
-    `patterns` can own the analysis and this module can own the permissions
-    without the two importing each other in a circle.
-    """
-    return (
-        Detector(
-            name="morning_glucose_pattern",
-            run=morning,
-            supported_care_modes=TYPE_2_CARE_MODES,
-            blocked_flags=PREGNANCY_BLOCKED,
-        ),
-        Detector(
-            name="post_meal_response",
-            run=post_meal,
-            supported_care_modes=TYPE_2_CARE_MODES,
-            blocked_flags=PREGNANCY_BLOCKED,
-        ),
-        Detector(
-            name="late_evening_meal_response",
-            run=late_meal,
-            supported_care_modes=TYPE_2_CARE_MODES,
-            blocked_flags=PREGNANCY_BLOCKED,
-        ),
-        Detector(
-            name="post_meal_walk_effect",
-            run=walk_effect,
-            supported_care_modes=TYPE_2_CARE_MODES,
-            blocked_flags=PREGNANCY_BLOCKED,
-        ),
-    )
+    names = [d.name for d in frozen]
+    if len(names) != len(set(names)):
+        raise ValueError(f"Duplicate detector names in the registry: {names}")
+
+    for detector in frozen:
+        unknown = detector.supported_care_modes - ALL_CARE_MODES
+        if unknown:
+            # A typo here would silently disable a detector forever: it would
+            # declare support for a mode nothing ever asks for, and simply
+            # never run.
+            raise ValueError(
+                f"Detector {detector.name!r} declares unknown care modes: {sorted(unknown)}"
+            )
+        if not detector.supported_care_modes:
+            raise ValueError(f"Detector {detector.name!r} supports no care mode at all")
+
+    return frozen
 
 
 def unsupported_finding(care_mode: str) -> StructuredFinding:
@@ -158,11 +165,9 @@ def unsupported_finding(care_mode: str) -> StructuredFinding:
         confidence=0.0,
         sample_count=0,
         limitations=[
-            "Every detector currently implemented models Type 2 physiology",
-            "Applying them here would produce confident numbers from the wrong "
-            "model of the body",
+            "No detector has been reviewed against this kind of diabetes",
+            "Applying one written for another would produce confident numbers "
+            "from the wrong model of the body",
         ],
-        would_improve_with=[
-            "Confirm the kind of diabetes recorded on the profile",
-        ],
+        would_improve_with=[suggestions.CONFIRM_DIAGNOSIS],
     )

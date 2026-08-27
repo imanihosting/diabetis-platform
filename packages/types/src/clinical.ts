@@ -58,6 +58,7 @@ export const knownLabTestSchema = z.enum([
   'weight',
   'bmi',
 ]);
+export type KnownLabTest = z.infer<typeof knownLabTestSchema>;
 
 export const createLabResultSchema = z
   .object({
@@ -75,3 +76,60 @@ export const createLabResultSchema = z
     message: 'A lab result needs either a numeric or a text value',
   });
 export type CreateLabResultInput = z.infer<typeof createLabResultSchema>;
+
+export const labResultSchema = z.object({
+  id: uuidSchema,
+  userId: uuidSchema,
+  testName: z.string(),
+  codeSystem: z.string().nullable(),
+  code: z.string().nullable(),
+  valueNumeric: z.number().nullable(),
+  valueText: z.string().nullable(),
+  unit: z.string().nullable(),
+  referenceRange: z.string().nullable(),
+  collectedAt: z.coerce.date(),
+  source: dataSourceSchema,
+  createdAt: z.coerce.date(),
+});
+export type LabResult = z.infer<typeof labResultSchema>;
+
+export const labListQuerySchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    testName: z.string().max(200).optional(),
+  })
+  .transform((v) => {
+    const to = v.to ?? new Date();
+    return {
+      to,
+      // A lab is not a daily measurement. Two years is the window in which an
+      // HbA1c trend is a trend rather than two points.
+      from: v.from ?? new Date(to.getTime() - 730 * 24 * 60 * 60 * 1000),
+      testName: v.testName,
+    };
+  })
+  .refine((v) => v.to > v.from, { message: '`from` must be before `to`' });
+export type LabListQuery = z.infer<typeof labListQuerySchema>;
+
+/**
+ * The units the platform expects for the tests it recognises.
+ *
+ * Not enforced — a lab printout can carry anything and rejecting an unfamiliar
+ * unit would lose the reading. Used to prefill the entry form and to say what
+ * a trend is measured in, so a number and its unit cannot drift apart on the
+ * way to a clinician.
+ */
+export const KNOWN_LAB_UNITS: Partial<Record<KnownLabTest, string>> = {
+  hba1c: 'mmol/mol',
+  fasting_glucose: 'mmol/L',
+  weight: 'kg',
+  bmi: 'kg/m2',
+  egfr: 'mL/min/1.73m2',
+  uacr: 'mg/mmol',
+  ldl_c: 'mmol/L',
+  hdl_c: 'mmol/L',
+  triglycerides: 'mmol/L',
+  systolic_bp: 'mmHg',
+  diastolic_bp: 'mmHg',
+};

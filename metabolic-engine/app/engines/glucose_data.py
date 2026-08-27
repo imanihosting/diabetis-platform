@@ -99,3 +99,41 @@ def load_meals(user_id: UUID, start: datetime, end: datetime) -> pd.DataFrame:
     for column in ("carbs_g", "protein_g", "fat_g", "fiber_g", "confidence"):
         frame[column] = frame[column].astype(float)
     return frame
+
+
+def load_labs(
+    user_id: UUID, start: datetime, end: datetime, test_names: list[str] | None = None
+) -> pd.DataFrame:
+    """Lab and body measurements in the window.
+
+    One table carries HbA1c, fasting glucose, weight and BMI alike: a lab
+    result is a named measurement with a value, a unit and a collection time,
+    and weight fits that shape exactly.
+
+    Rows without a numeric value are dropped. A result recorded only as text
+    ("normal", "see report") is worth keeping in the record and cannot be put
+    on a trend line, and silently coercing it would invent a number nobody
+    measured.
+    """
+    sql = """
+        select id, test_name, value_numeric, unit, collected_at, source
+          from clinical.lab_results
+         where user_id = %s and collected_at between %s and %s
+           and value_numeric is not null
+    """
+    params: list[object] = [str(user_id), start, end]
+    if test_names:
+        sql += " and test_name = any(%s)"
+        params.append(test_names)
+    sql += " order by collected_at"
+
+    rows = db.fetch_all(sql, tuple(params))
+    if not rows:
+        return pd.DataFrame(
+            columns=["id", "test_name", "value_numeric", "unit", "collected_at", "source"]
+        )
+
+    frame = pd.DataFrame(rows)
+    frame["collected_at"] = pd.to_datetime(frame["collected_at"], utc=True)
+    frame["value_numeric"] = frame["value_numeric"].astype(float)
+    return frame

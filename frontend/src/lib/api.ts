@@ -5,8 +5,10 @@ import type {
   GlucoseSummary,
   LoginInput,
   Meal,
+  CreateLabResultInput,
   DiabetesProfile,
   DiabetesSafetyFlag,
+  LabResult,
   MedicationRecord,
   PatternResponse,
   RecordSafetyFlagInput,
@@ -221,6 +223,15 @@ export const api = {
       request<PatternResponse>(
         `/evidence?from=${from.toISOString()}&to=${to.toISOString()}`,
       ),
+  },
+
+  labs: {
+    list: (testName?: string) =>
+      request<LabResult[]>(
+        `/labs${testName ? `?testName=${encodeURIComponent(testName)}` : ''}`,
+      ),
+    create: (body: CreateLabResultInput) =>
+      request<LabResult>('/labs', { method: 'POST', body: JSON.stringify(body) }),
   },
 
   meals: {

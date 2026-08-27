@@ -72,6 +72,11 @@ describe('careModeCapabilities', () => {
     expect(careModeCapabilities('type_2_insulin_supported', []).evidenceEnabled).toBe(
       true,
     );
+    // Enabled once the prediabetes detectors shipped. This list and the
+    // engine's registry decide the same thing from two sides: naming a mode
+    // here that no detector supports would produce an empty analysis rather
+    // than a stated refusal.
+    expect(careModeCapabilities('prediabetes', []).evidenceEnabled).toBe(true);
   });
 
   it('refuses to analyse every care mode the engine was not written for', () => {
@@ -80,7 +85,6 @@ describe('careModeCapabilities', () => {
     // model of the body, and nothing on the page would say so.
     const unsupported: CareMode[] = [
       'unknown',
-      'prediabetes',
       'gestational',
       'type_1_cgm_insulin',
       'other_specific',

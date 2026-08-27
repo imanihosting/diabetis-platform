@@ -19,16 +19,21 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from app.engines import glucose_data, registry
+from app.engines import glucose_data, prediabetes, registry, suggestions
+from app.engines.meal_response import post_meal_responses
 from app.engines.thresholds import (
+    LAB_TREND_LOOKBACK_DAYS,
     MIN_SAMPLES_FOR_ANY_FINDING,
-    POST_MEAL_WINDOW_MINUTES,
     TARGET_HIGH_MMOL,
     WALK_PROXIMITY_MINUTES,
 )
 from app.models.findings import StructuredFinding
 
 MODEL_VERSION = "pattern-engine-v1.0.0"
+
+_EMPTY_LABS = pd.DataFrame(
+    columns=["id", "test_name", "value_numeric", "unit", "collected_at", "source"]
+)
 
 
 def detect_all(
@@ -57,6 +62,18 @@ def detect_all(
     activity = glucose_data.load_events(
         user_id, start, end, ["exercise_started", "exercise_ended"]
     )
+    # Only queried when something permitted here actually reads it, so a Type 2
+    # request does exactly the work it did before labs existed.
+    # Deliberately not the requested window. See LAB_TREND_LOOKBACK_DAYS: a
+    # quarterly test has nothing to say inside thirty days, and reporting "not
+    # enough results" to somebody with four years of them would be false.
+    labs = (
+        glucose_data.load_labs(
+            user_id, end - timedelta(days=LAB_TREND_LOOKBACK_DAYS), end
+        )
+        if any(d.needs_labs for d in permitted)
+        else _EMPTY_LABS
+    )
 
     if glucose.empty:
         return [
@@ -71,67 +88,26 @@ def detect_all(
                 confidence=0.0,
                 sample_count=0,
                 limitations=["No glucose data in the selected window"],
-                would_improve_with=[
-                    "Add glucose readings manually, or import a CGM or meter export"
-                ],
+                would_improve_with=[suggestions.LOG_GLUCOSE],
             )
         ]
+
+    inputs = registry.DetectorInputs(
+        glucose=glucose, meals=meals, activity=activity, labs=labs
+    )
 
     # A detector returns None when the signal it needs is absent entirely —
     # distinct from returning an "insufficient data" finding, which is a real
     # answer worth showing the user.
-    candidates: list[StructuredFinding | None] = [
-        detector.run(glucose, meals, activity) for detector in permitted
-    ]
+    candidates: list[StructuredFinding | None] = [d.run(inputs) for d in permitted]
 
     return [f for f in candidates if f is not None]
-
-
-def _post_meal_responses(
-    glucose: pd.DataFrame, meals: pd.DataFrame
-) -> list[dict[str, float | pd.Timestamp]]:
-    """For each meal, the glucose peak and rise within the post-meal window."""
-    responses: list[dict[str, float | pd.Timestamp]] = []
-
-    for _, meal in meals.iterrows():
-        start = meal["started_at"]
-        window_end = start + timedelta(minutes=POST_MEAL_WINDOW_MINUTES)
-
-        # Baseline: the last reading at or just before the meal.
-        baseline_rows = glucose[
-            (glucose["measured_at"] <= start)
-            & (glucose["measured_at"] >= start - timedelta(minutes=30))
-        ]
-        window = glucose[
-            (glucose["measured_at"] > start) & (glucose["measured_at"] <= window_end)
-        ]
-
-        # A meal without a baseline reading *and* post-meal readings tells us
-        # nothing about the response, so it is skipped rather than guessed at.
-        if baseline_rows.empty or window.empty:
-            continue
-
-        baseline = float(baseline_rows.iloc[-1]["value_mmol"])
-        peak = float(window["value_mmol"].max())
-
-        responses.append(
-            {
-                "meal_started_at": start,
-                "baseline": baseline,
-                "peak": peak,
-                "rise": peak - baseline,
-                "carbs_g": float(meal["carbs_g"]),
-                "hour": start.hour,
-            }
-        )
-
-    return responses
 
 
 def _post_meal_response(
     glucose: pd.DataFrame, meals: pd.DataFrame
 ) -> StructuredFinding | None:
-    responses = _post_meal_responses(glucose, meals)
+    responses = post_meal_responses(glucose, meals)
     n = len(responses)
 
     if n < MIN_SAMPLES_FOR_ANY_FINDING:
@@ -150,8 +126,8 @@ def _post_meal_response(
                 "A meal needs a reading shortly before and within 2 hours after",
             ],
             would_improve_with=[
-                "Log meals close to when you eat",
-                "Wear a CGM, or take a reading before and about 90 minutes after meals",
+                suggestions.LOG_MEALS_PROMPTLY,
+                suggestions.LOG_AROUND_MEALS,
             ],
         )
 
@@ -187,8 +163,7 @@ def _post_meal_response(
         sample_count=n,
         limitations=limitations,
         would_improve_with=[
-            "Record portion sizes and carbohydrate estimates",
-            "Log meal end times as well as start times",
+            suggestions.LOG_MEAL_CARBS,
         ],
     )
 
@@ -202,7 +177,7 @@ def _post_meal_walk_effect(
     life, not a randomised comparison. The finding says so, and points at the
     experiment that would actually test it.
     """
-    responses = _post_meal_responses(glucose, meals)
+    responses = post_meal_responses(glucose, meals)
     if not responses:
         return None
 
@@ -233,9 +208,8 @@ def _post_meal_walk_effect(
             sample_count=n_with + n_without,
             limitations=["Too few meals in one or both groups"],
             would_improve_with=[
-                f"Log at least {MIN_SAMPLES_FOR_ANY_FINDING} meals both with "
-                "and without a walk afterwards",
-                "Run a Living Trial that alternates walking and not walking after a similar meal",
+                suggestions.paired_meals_needed(MIN_SAMPLES_FOR_ANY_FINDING),
+                suggestions.ALTERNATE_WALKING,
             ],
         )
 
@@ -265,8 +239,8 @@ def _post_meal_walk_effect(
             f"Statistical p-value: {float(p_value):.3f}",
         ],
         would_improve_with=[
-            "Run a Living Trial: the same meal, alternating a walk and no walk",
-            "Record how long and how briskly you walked",
+            suggestions.ALTERNATE_WALKING,
+            suggestions.LOG_ACTIVITY_MINUTES,
         ],
     )
 
@@ -275,7 +249,7 @@ def _late_meal_effect(
     glucose: pd.DataFrame, meals: pd.DataFrame
 ) -> StructuredFinding | None:
     """Whether meals after 20:00 are followed by a different response."""
-    responses = _post_meal_responses(glucose, meals)
+    responses = post_meal_responses(glucose, meals)
     if not responses:
         return None
 
@@ -296,7 +270,7 @@ def _late_meal_effect(
             confidence=0.0,
             sample_count=len(late) + len(earlier),
             limitations=["Too few meals in one or both time groups"],
-            would_improve_with=["Keep logging meals across different times of day"],
+            would_improve_with=[suggestions.LOG_MEALS_ACROSS_THE_DAY],
         )
 
     difference = float(np.mean(late) - np.mean(earlier))
@@ -320,8 +294,7 @@ def _late_meal_effect(
             f"Statistical p-value: {float(p_value):.3f}",
         ],
         would_improve_with=[
-            "Log sleep times so overnight recovery can be separated from meal timing",
-            "Compare a similar meal eaten early and late in a Living Trial",
+            suggestions.ALTERNATE_MEAL_TIMING,
         ],
     )
 
@@ -345,7 +318,7 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
             confidence=0.0,
             sample_count=n_days,
             limitations=["Too few mornings with readings"],
-            would_improve_with=["Take a reading shortly after waking, or wear a CGM overnight"],
+            would_improve_with=[suggestions.LOG_WAKING_GLUCOSE],
         )
 
     daily_means = morning.groupby(morning["measured_at"].dt.date)["value_mmol"].mean()
@@ -377,17 +350,16 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
         # eyes; the platform surfaces it rather than interpreting it.
         clinician_review_recommended=above_target_days >= max(3, n_days // 2),
         would_improve_with=[
-            "Log sleep start and end times",
-            "Record evening meal times and medication timing",
+            suggestions.LOG_MEDICATION_TIMING,
         ],
     )
 
 
 # --- Registry wiring --------------------------------------------------------
 #
-# The detectors above take the frames they actually need. The registry hands
-# every detector all three, so these adapters bridge the two and keep the
-# emptiness guards that used to live inline in `detect_all`.
+# The detectors above take the frames they actually need. Every detector in the
+# registry is handed the same `DetectorInputs`, so these adapters bridge the two
+# and keep the emptiness guards that used to live inline in `detect_all`.
 #
 # Those guards are behaviour, not tidiness. `_post_meal_response` called with no
 # meals returns a real "insufficient data" finding saying zero meals had paired
@@ -396,35 +368,55 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
 # new findings on the screen of every user who only records glucose.
 
 
-def _morning_detector(
-    glucose: pd.DataFrame, _meals: pd.DataFrame, _activity: pd.DataFrame
-) -> StructuredFinding | None:
-    return _morning_glucose_pattern(glucose)
+def _morning_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
+    return _morning_glucose_pattern(i.glucose)
 
 
-def _post_meal_detector(
-    glucose: pd.DataFrame, meals: pd.DataFrame, _activity: pd.DataFrame
-) -> StructuredFinding | None:
-    return None if meals.empty else _post_meal_response(glucose, meals)
+def _post_meal_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
+    return None if i.meals.empty else _post_meal_response(i.glucose, i.meals)
 
 
-def _late_meal_detector(
-    glucose: pd.DataFrame, meals: pd.DataFrame, _activity: pd.DataFrame
-) -> StructuredFinding | None:
-    return None if meals.empty else _late_meal_effect(glucose, meals)
+def _late_meal_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
+    return None if i.meals.empty else _late_meal_effect(i.glucose, i.meals)
 
 
-def _walk_detector(
-    glucose: pd.DataFrame, meals: pd.DataFrame, activity: pd.DataFrame
-) -> StructuredFinding | None:
-    if meals.empty or activity.empty:
+def _walk_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
+    if i.meals.empty or i.activity.empty:
         return None
-    return _post_meal_walk_effect(glucose, meals, activity)
+    return _post_meal_walk_effect(i.glucose, i.meals, i.activity)
 
+
+_TYPE_2 = registry.TYPE_2_CARE_MODES
+_PREDIABETES = frozenset({registry.CARE_MODE_PREDIABETES})
+_BLOCKED = registry.PREGNANCY_BLOCKED
 
 DETECTORS = registry.build_registry(
-    morning=_morning_detector,
-    post_meal=_post_meal_detector,
-    late_meal=_late_meal_detector,
-    walk_effect=_walk_detector,
+    [
+        # --- Type 2. Unchanged, in the order they have always run. ----------
+        registry.Detector("morning_glucose_pattern", _morning_detector, _TYPE_2, _BLOCKED),
+        registry.Detector("post_meal_response", _post_meal_detector, _TYPE_2, _BLOCKED),
+        registry.Detector("late_evening_meal_response", _late_meal_detector, _TYPE_2, _BLOCKED),
+        registry.Detector("post_meal_walk_effect", _walk_detector, _TYPE_2, _BLOCKED),
+        # --- Prediabetes. Deliberately not offered to Type 2 yet. -----------
+        #
+        # They would very likely be useful there, and that is exactly why they
+        # are not switched on by assumption: "Type 2 output is unchanged" has
+        # to be checkable, and adding four findings to every Type 2 screen in
+        # the same change that introduces them would make it untestable.
+        registry.Detector(
+            "hba1c_trend", prediabetes.hba1c_trend, _PREDIABETES, _BLOCKED, needs_labs=True
+        ),
+        registry.Detector(
+            "weight_trend", prediabetes.weight_trend, _PREDIABETES, _BLOCKED, needs_labs=True
+        ),
+        registry.Detector(
+            "fasting_glucose_trend", prediabetes.fasting_glucose_trend, _PREDIABETES, _BLOCKED
+        ),
+        registry.Detector(
+            "activity_consistency", prediabetes.activity_consistency, _PREDIABETES, _BLOCKED
+        ),
+        registry.Detector(
+            "meal_timing_association", prediabetes.meal_timing_association, _PREDIABETES, _BLOCKED
+        ),
+    ]
 )
