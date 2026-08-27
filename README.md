@@ -212,13 +212,16 @@ fails closed: an unrecognised template is gated, never allowed.
       engine build that decided it
 - [x] Measuring the result: recording what happened is what finishes an
       experiment, and `/experiments/[id]` shows predicted beside observed
+- [x] Clinician packet: thirty or ninety days on one page — findings with their
+      limitations, glucose, lab trends, every experiment beside the expectation
+      recorded before it ran, and what is worth raising
 - [x] Rate limiting on public endpoints, and CI on every push
 - [x] Containerised stack and an isolated Docker test environment
 
-**Not built.** The loop closes; what it produces for somebody else does not.
+**Not built.** The loop is closed; these are the things around it.
 
-- [ ] Clinician evidence packet — thirty and ninety days of findings,
-      experiments, predictions and outcomes on one readable page
+- [ ] Exporting the packet. It is a web page and nothing else — no PDF, no
+      share link — and a printed sheet is what gets carried to an appointment
 - [ ] Weighing competing explanations for a pattern against each other
 - [ ] Recording a clinician's agreement, so a gated experiment can proceed
 - [ ] Gestational and Type 1 workflows, both of which need clinical review first

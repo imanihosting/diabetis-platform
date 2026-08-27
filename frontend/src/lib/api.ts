@@ -2,6 +2,7 @@ import { clearSessionHint } from '@/hooks/useSessionHint';
 import type {
   AttachOutcomeInput,
   CareModeCapabilities,
+  ClinicianPacket,
   ClientAuthResponse,
   GlucoseSummary,
   LoginInput,
@@ -262,6 +263,18 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+  },
+
+  reports: {
+    /**
+     * Thirty or ninety days on one page, for an appointment.
+     *
+     * The period is one of two fixed windows. An arbitrary range would let it
+     * be chosen after the answer is seen, which is the same failure as an
+     * editable prediction in different clothes.
+     */
+    clinicianPacket: (days: 30 | 90) =>
+      request<ClinicianPacket>(`/reports/clinician?days=${days}`),
   },
 
   evidence: {

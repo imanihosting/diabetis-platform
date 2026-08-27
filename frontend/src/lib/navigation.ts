@@ -49,10 +49,22 @@ const CARE_PROFILE: NavItem = {
 const EXPERIMENTS: NavItem = {
   href: '/experiments',
   label: 'Experiments',
-  detail: 'What you have proposed, and what the safety rules said',
+  detail: 'What you have proposed, and what came of it',
 };
 
-export const APP_SECONDARY_NAV: NavItem[] = [CARE_PROFILE, EXPERIMENTS, CONTACT];
+/**
+ * Secondary rather than primary, and that placement is the product's position
+ * on who this is for. PRODUCT.md puts the clinician second: never the primary
+ * voice on the screen, but present enough that a person can see their record
+ * produces something a professional will take seriously.
+ */
+const REPORT: NavItem = {
+  href: '/report',
+  label: 'Summary for an appointment',
+  detail: 'Thirty or ninety days on one page, to bring with you',
+};
+
+export const APP_SECONDARY_NAV: NavItem[] = [CARE_PROFILE, EXPERIMENTS, REPORT, CONTACT];
 
 /**
  * Kept separate so it can sit in the footer on both surfaces without ever

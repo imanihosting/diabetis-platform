@@ -43,8 +43,7 @@ const STEPS = [
   {
     n: 7,
     title: 'Turn it into evidence',
-    body: 'What held up becomes something you can act on, and something your clinician can read in a minute.',
-    building: true,
+    body: 'Thirty or ninety days on one page: what was found, what was tested against a prediction, what it does not account for, and what is worth raising. Yours to bring, and readable in a minute.',
   },
 ];
 

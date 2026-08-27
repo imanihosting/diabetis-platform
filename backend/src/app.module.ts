@@ -19,6 +19,7 @@ import { PredictionsModule } from './predictions/predictions.module';
 import { MedicationsModule } from './medications/medications.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { EvidenceModule } from './evidence/evidence.module';
+import { ReportsModule } from './reports/reports.module';
 import { DiabetesProfileModule } from './diabetes-profile/diabetes-profile.module';
 import { HealthModule } from './health/health.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
@@ -75,6 +76,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     MedicationsModule,
     TimelineModule,
     EvidenceModule,
+    ReportsModule,
     DiabetesProfileModule,
     HealthModule,
     WaitlistModule,

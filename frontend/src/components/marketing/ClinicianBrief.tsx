@@ -8,16 +8,17 @@ const HBA1C = [
 const RANGE = { below: 2, inRange: 78, above: 20 };
 
 /**
- * The page a clinician will receive.
+ * The page a clinician receives.
  *
  * Rendered as the document itself rather than described in a feature grid,
  * because the claim is that ninety days fits on one page and the honest way to
  * make that claim is to show the page.
  *
- * Labelled as unbuilt, because it is. Every other component on this page
- * renders real output against real seeded data; this one is a design. An
- * unlabelled mockup among real screenshots is worse than an obvious one, since
- * the reader has no way to tell which is which.
+ * This carried a "Being built" label until the packet existed. It is a typeset
+ * illustration of `/report` rather than a screenshot of it — the sections are
+ * the sections that page renders, and the figures are the demo record's own,
+ * including the walk effect the seeder encodes. The label came off when the
+ * claim became true, which is the only reason it should ever come off.
  */
 export function ClinicianBrief() {
   const latest = HBA1C[HBA1C.length - 1];
@@ -27,7 +28,6 @@ export function ClinicianBrief() {
     <article className="border border-[var(--rule)] bg-[var(--paper-raised)]">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--rule)] px-6 py-4 sm:px-8">
         <h3 className="text-sm font-semibold">Ninety-day summary</h3>
-        <p className="text-xs text-[var(--ink-faint)]">Being built</p>
       </header>
 
       <div className="divide-y divide-[var(--rule)]">

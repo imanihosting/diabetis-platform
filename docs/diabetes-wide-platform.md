@@ -221,6 +221,13 @@ reintroduces a specific failure.
 | A blocked experiment gets no prediction | It will never run, and an immutable expectation about something that cannot happen is noise in the accountability record. |
 | An experiment cannot become active without a prediction | Enforced by trigger, not only by the service that starts one. An invariant held up by the code currently calling is an invariant until somebody writes different code. |
 | `ai.predictions.experiment_id` is frozen like the rest of the row | Reassignment is the same failure as editing: the expectation ends up attached to a question it was not made about. |
+| The packet reads labs over two years, not the packet's period | HbA1c is drawn quarterly. A ninety-day window holds one measurement and a thirty-day window often none, and a single point is the shape of data a summary is least use for. The window differs from the heading and the page says so. |
+| A lab series in two units is shown without a change | HbA1c is reported in `%` and in `mmol/mol`, an order of magnitude apart. Subtracting across them produces a confident number that means nothing. The engine already refuses the same comparison. |
+| The packet raises a missed prediction on direction, never on magnitude | Any threshold for "how far off is worth mentioning" would be a number invented in the code and then quoted in a consulting room as though it meant something. A sign that disagrees needs no cutoff. |
+| Nothing in the packet is composed at render time | Every item raised comes from a finding the model flagged or an experiment that went the other way, and a question appears only when the shared proposal catalogue already holds one. A plausible sentence a clinician reads as a claim is the most expensive thing this product could get wrong. |
+| A care mode with no detectors gets a reason, not an empty findings list | A clinician reading a blank section would reasonably take it for "nothing was found", which is a different claim from "this was never analysed". |
+| The packet leaves out drafts and refusals | A proposal nobody started says nothing about the person in the room, and a refused one would put an experiment the product declined in front of a professional as though it were part of their care. |
+| Two fixed periods, thirty days and ninety | An arbitrary window would let the period be chosen after the answer is seen, which is an editable prediction in different clothes. |
 | An outcome is written once and never edited | A prediction that cannot be revised beside an outcome that can is an accountability chain missing the link that holds the answer. Enforced by trigger since 0019, on top of the unique constraint that stops a second row. |
 | An experiment cannot be completed without an outcome | The mirror of the prediction guard. A loop that writes down what it expects and then finishes without saying what happened keeps only the flattering half of its own record. `abandoned` is deliberately not guarded: giving up unmeasured is an honest end. |
 | One experiment, one prediction | Two expectations attached to one trial makes "what was predicted" a question with two answers, and whichever a screen shows was chosen after the fact. |
@@ -717,33 +724,30 @@ release:
 
 ## Next Implementation Ticket
 
-Ticket 4 is shipped, and with it the loop closes. `POST
-/api/experiments/:id/complete` records the measurement and finishes the
-experiment in one transaction, in that order — the mirror of `start` — and
-migration 0019 makes the database refuse the transition to `completed` without
-an outcome attached, refuse a second prediction for the same experiment, and
-refuse any edit or deletion of an outcome once written.
+None. Ticket 5 shipped and the loop the product promises is closed end to end:
+collect, one timeline, find patterns, propose a safe test, write the prediction
+down first, measure the result against it, and hand a clinician a page they can
+read in a minute.
 
-Two endpoints went away with it, and both removals are the point. A prediction
-is now written only by starting an experiment, and an outcome only by
-completing one. The standalone `POST /predictions` produced expectations
-attached to trials that never ran, which nothing could ever measure; the
-standalone `POST /predictions/:id/outcome` left the trial it settled running
-with its answer already known. One door each.
+`GET /api/reports/clinician?days=30|90` assembles that page on the server, from
+the same services the app's own screens read — findings through
+`EvidenceService`, so the care-mode gate stays in the path; glucose through the
+same summary the timeline shows; experiments with the expectations frozen
+before each ran. `/report` renders it. Nothing on it is written at render time.
 
-`/experiments/[id]` is the screen: the question, the protocol, what was
-expected of it and when that was written down, and — once it is over —
-predicted beside observed with the gap between them in words. Starting lives
-there too, next to what it commits somebody to, rather than as a button in a
-list.
+What is left is no longer a sequence, and the order is a judgement worth making
+deliberately:
 
-Remaining:
+- **The go-live blockers.** Neither is code, and the database TLS one is
+  blocked on a DNS name before a certificate can be bought — the only item here
+  with a lead time.
+- **Exporting the packet.** It is a web page and nothing else. A printed sheet
+  is what gets carried into an appointment.
+- **Weighing competing explanations.** The last loop step still labelled "Being
+  built" publicly, and the only remaining item that changes what the engine
+  says rather than how it is presented.
+- **Recording a clinician's agreement**, so a gated experiment can stop waiting
+  forever.
 
-> **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
-> experiments, predictions, outcomes, limitations. Web first, export later.
-> It is the last step of the loop still labelled "Being built" on the public
-> pages, and the last component on the landing page that is a design rather
-> than real output.
-
-Gestational and Type 1 stay parked until clinical review. Per-user target
-ranges still wait. Neither go-live blocker has moved, and neither is code.
+Gestational and Type 1 stay parked behind clinical review. Per-user target
+ranges still wait on something ready to honour them.

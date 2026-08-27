@@ -1,6 +1,6 @@
 # Handover
 
-State of Wellovue as of 27 August 2026, at commit `bb880fe` plus Ticket 4.
+State of Wellovue as of 27 August 2026, at commit `00cb9e0` plus Ticket 5.
 
 Read this before changing anything. Several decisions below look arbitrary and
 are not, and a few traps in this repo will cost you an hour if you meet them
@@ -53,7 +53,7 @@ Python engine owns scientific computation.** Neither reaches into the other.
 The loop the product promises is: collect data, build one timeline, find
 patterns, propose a safe test, **write down the prediction before it runs**,
 measure the result against it, and turn that into something a clinician can
-read. All of it exists except the last step, which is Ticket 5.
+read. All seven steps exist. What is left is not the loop.
 
 **Built and working.**
 
@@ -73,16 +73,19 @@ read. All of it exists except the last step, which is Ticket 5.
 - Finishing one by recording what happened, in one transaction, scored against
   the expectation — and the screen showing predicted beside observed
 - Outcomes: written once, never edited, and the only way to complete a trial
+- The clinician packet: thirty or ninety days on one page — findings with their
+  limitations, glucose, lab trends, every experiment with the expectation
+  recorded before it ran, and what is worth raising
 - Rate limiting on public endpoints; CI on every push
 - Public site: landing, About, How this works, Contact, and the policy pages
 
 **Not built.** Named plainly on the public pages too, which matters — see §7.
 
-- The clinician evidence packet. The last loop step still labelled "Being
-  built", and the last landing-page component that is a design rather than
-  real output
-- Weighing competing explanations for a pattern. Step four of the loop, also
-  still labelled
+- Weighing competing explanations for a pattern. Step four of the loop, and the
+  only one still labelled "Being built"
+- Exporting the packet. It is a web page and nothing else: no PDF, no print
+  stylesheet beyond dropping the app chrome, no share link. Deliberate — the
+  page had to be right before the format question was worth asking
 - Recording a clinician's agreement. A gated experiment therefore waits
   forever, and says so rather than implying a queue
 - Gestational and Type 1 workflows. Both need clinical review before either
@@ -138,6 +141,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 |---|---|---|
 | `backend/test/*.spec.ts` | 71 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
+| `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
 | `backend/test/integration/schema-guards.spec.ts` | 25 | yes |
 | `backend/test/integration/predictions.spec.ts` | 19 | yes |
@@ -261,15 +265,16 @@ The mono cut is reserved for measured values.
 faking its own screenshots has already told you something. That is enforced by
 convention rather than by code, so it needs watching.
 
-Two of the seven loop steps on `/how-it-works` are marked **"Being built"**:
-weighing competing explanations, and turning what held up into something a
-clinician can read. The clinician packet on the landing page carries the same
-label, because it is a design for something that does not exist while every
-other component there renders real output against real seeded data. The landing
-page's finding quotes the strings the engine actually emits.
+One of the seven loop steps on `/how-it-works` is still marked **"Being
+built"**: weighing competing explanations against each other. Everything else
+on the public pages describes something that exists. The landing page's finding
+quotes the strings the engine actually emits.
 
-The proposed-trial panel lost its label in Ticket 4, when the thing it depicts
-started existing. That is the only reason a label should ever come off.
+Two labels have come off, each when the thing it covered started existing: the
+proposed-trial panel in Ticket 4, the clinician summary in Ticket 5. That is
+the only reason a label should ever come off. Both panels are typeset
+illustrations of real screens rather than screenshots of them, and their
+figures are the demo record's own.
 
 If you build one of those, remove its label. If you add a claim, check it is
 true first.
@@ -325,16 +330,40 @@ works with space-separated RGB triplets. Use `color-mix(in oklch, ...)`.
 user units while `vector-effect: non-scaling-stroke` makes `stroke-dasharray`
 screen units. `DayTrace` sums the length per segment against the measured box.
 
-**Open, unexplained: one 401 in the integration suite, seen once.** On the
-first full run of the Ticket 4 suite, `experiments.spec.ts` failed at a helper's
-`PUT /api/diabetes-profile` with 401 on the *second* account it registered in a
-single test — register returned 201, so the token existed and the guard rejected
-it anyway. Four subsequent full runs of the same suite passed, as did the same
-file run alone. Not reproduced, not diagnosed, and deliberately not written off:
-the suspects are refresh/session state or `throttle.spec.ts` leaving mutated
-`process.env` behind for files that run after it, since `fileParallelism` is off
-and every spec shares one process. If it reappears, capture the response body at
-the failing call before assuming it is the same thing.
+**Open: the integration suite misroutes about one run in eight.** A test
+fails with a status no guard or handler in this application ever issued —
+usually a 401 where 200 was expected, sometimes a 404 on a route that exists —
+and the failing test moves between files from run to run. Roughly 1 in 8 full
+runs; a single file run alone has never reproduced it.
+
+What has been ruled out, each by instrumenting the source and looping the suite
+until it failed again:
+
+- **Not JWT verification.** `JwtAuthGuard` logs nothing when these 401s are
+  returned. Neither branch fires: the header is present, and `verifyAsync` does
+  not throw. Whatever answered did not come through this guard.
+- **Not token expiry.** `JWT_ACCESS_TTL` is 15 minutes; a full run takes about
+  fifteen seconds.
+- **Not credentials.** `AuthService.login` logs only the failures the suite
+  causes deliberately.
+- **Not HTTP keep-alive.** Node 19 turned `http.globalAgent.keepAlive` on by
+  default, which is a real hazard here — every spec file builds its own app,
+  supertest binds it to an ephemeral port, `afterAll` closes it, and a later
+  file can be handed the same port while pooled sockets still point at it.
+  Setting `keepAlive = false` for the suite did not stop the failures.
+
+The strongest remaining signal: the wrong statuses are exactly the ones *other*
+tests deliberately produce — 401 from the unauthenticated assertions, 404 from
+the "this route does not exist" assertions. A response arriving from the wrong
+server instance fits every observation, including the timing (2ms for a call
+that reaches the pattern engine and cannot return in under 50ms).
+
+So this looks like the harness misrouting a request rather than anything wrong
+in the product, which is why it is not treated as a release blocker. It should
+still be fixed: it will eventually fail CI on a change that is perfectly fine,
+and the first instinct will be to go looking for an auth bug that is not there.
+Next thing to try is proving which server answered — bind each file's app once
+with an explicit `app.listen(0)` and stamp the port on every response.
 
 **Vitest cannot emit decorator metadata.** esbuild does not support it, so
 NestJS DI resolves every constructor parameter as `undefined`.
@@ -436,19 +465,28 @@ in front, have it overwrite `X-Forwarded-For`, then set `TRUST_PROXY=true`.
 ## 12. Where to pick up
 
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** is kept
-current and is the answer to "what now". At this commit it is:
+current and is the answer to "what now". The loop is closed, so what is left is
+no longer a ticket in that sequence — it is a choice between four things, and
+the order is a judgement somebody should make deliberately rather than by
+picking up whatever is nearest:
 
-> **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
-> experiments, predictions, outcomes, limitations. Web first, export later.
+1. **The go-live blockers in §10.** Neither is code. The database TLS one is
+   blocked on a DNS name before a certificate is worth buying, so it has a lead
+   time nothing else here has, and it is the only item on this list that can be
+   started today and finished by somebody else.
+2. **Exporting the packet.** It is a web page and nothing else. A printed sheet
+   is what actually gets carried into an appointment, and the page was built
+   for a printer without anybody testing it against one.
+3. **Weighing competing explanations.** The last loop step still labelled
+   "Being built" on the public pages, and the one that would change what the
+   engine says rather than how it is presented.
+4. **Recording a clinician's agreement.** Until this exists, every
+   clinician-gated experiment waits forever, and the product says so in as many
+   words. That is honest but it is not finished.
 
-Everything it needs now exists: findings carry their own limitations,
-experiments carry the safety decision that let them run, and a completed one
-carries an expectation written before it began beside the measurement that
-settled it. `ExperimentDetail` on `GET /api/experiments/:id` is the shape a
-packet page would aggregate.
+Gestational and Type 1 stay parked behind clinical review either way, and
+per-user target ranges still wait on something ready to honour them.
 
-It is also the last component on the landing page that is a design rather than
-real output, and the last loop step but one still labelled "Being built" — so
-finishing it is what lets both labels come off. See §7 before touching either.
-
-Then the go-live blockers in §10, neither of which is code.
+One caution before touching the public pages: see §7. Two "Being built" labels
+have come off so far, each when the thing it covered started existing, and that
+is the only reason one should.

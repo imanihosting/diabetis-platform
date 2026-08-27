@@ -7,3 +7,4 @@ export * from './timeline';
 export * from './insights';
 export * from './diabetes';
 export * from './experiments';
+export * from './reports';
