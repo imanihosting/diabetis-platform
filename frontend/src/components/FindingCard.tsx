@@ -1,5 +1,6 @@
 import type { StructuredFinding } from '@wellovue/types';
 import { EvidenceBadge } from '@/components/EvidenceBadge';
+import { ProposeExperiment } from '@/components/ProposeExperiment';
 
 /**
  * One finding, exactly as the engine returned it.
@@ -9,6 +10,9 @@ import { EvidenceBadge } from '@/components/EvidenceBadge';
  * and that is the difference between evidence and advice. Nothing here is
  * phrased by the app — the summary, the limitations and the suggestions are
  * the engine's own words, and the app only decides where they sit.
+ *
+ * The action to test a finding sits at the bottom, on the minority of
+ * findings that have one. See ProposeExperiment.
  *
  * The effect estimate is deliberately not coloured. Colour in this product
  * means one of two things: where a glucose value sits relative to target, or
@@ -66,6 +70,10 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
       {finding.wouldImproveWith.length > 0 && (
         <Section title="What would sharpen this" items={finding.wouldImproveWith} />
       )}
+
+      {/* Last, after the limitations. Somebody deciding whether to spend a week
+          testing this should read what it does not account for first. */}
+      <ProposeExperiment finding={finding} />
     </article>
   );
 }

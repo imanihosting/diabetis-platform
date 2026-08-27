@@ -5,9 +5,11 @@ import type {
   GlucoseSummary,
   LoginInput,
   Meal,
+  CreateExperimentInput,
   CreateLabResultInput,
   DiabetesProfile,
   Experiment,
+  ExperimentDecision,
   DiabetesSafetyFlag,
   LabResult,
   MedicationRecord,
@@ -213,12 +215,17 @@ export const api = {
   },
 
   experiments: {
-    /**
-     * Read-only for now. Nothing in the app proposes one yet; the endpoint
-     * that does exists and applies the safety decision, and this is the
-     * surface that will show what it decided.
-     */
     list: () => request<Experiment[]>('/experiments'),
+    /**
+     * Always resolves for a well-formed proposal, including when the answer is
+     * no: a refusal comes back as a decision, not as a thrown error, because
+     * it is an answer the reader is meant to see rather than a failure.
+     */
+    propose: (body: CreateExperimentInput) =>
+      request<{ experiment: Experiment; decision: ExperimentDecision }>('/experiments', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 
   evidence: {

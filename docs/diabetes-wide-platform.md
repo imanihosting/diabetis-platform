@@ -705,40 +705,42 @@ release:
 
 ## Next Implementation Ticket
 
-The experiment safety primitive now has a runtime caller. `POST /api/experiments`
-resolves the diabetes context, classifies, persists the decision, and the
-database's check constraints refuse it independently if it is wrong. An
-integration test walks every template across five profiles and asserts the
-persisted row matches both the classifier's intent and the constraints in
-migration 0006.
+Ticket 1 of the loop is shipped: a finding that a week of alternating behaviour
+could settle now carries an action that proposes exactly one safe experiment,
+posts it through the endpoint that classifies it, and shows what the safety
+rules said. Nothing starts or measures anything.
 
-A refusal is recorded rather than rejected. Blocked insulin dosing returns 201
-with a `decision` explaining why, and the row is a draft that can never start:
-a 400 would treat it as malformed input, and it is a real question the product
-declines. Keeping what was asked, when, and why it was refused is worth more
-than a clean error code.
+The map from finding type to template lives in `packages/types/src/insights.ts`
+and is deliberately narrow. Most finding types have no entry, which is the
+correct answer rather than a gap: a morning glucose average has no one-week
+test a person can run alone, and an HbA1c trend moves over quarters. A test
+asserts every template the map can produce is in
+`ALLOWED_EXPERIMENT_TEMPLATES`, so the map can never be the thing that surfaces
+a gated or blocked protocol — while the classifier still decides who may run
+it, so the same finding proposes a runnable test for one reader and a clinician
+conversation for another.
 
 Remaining, in order:
 
-> Let somebody propose an experiment from the app.
+> **Ticket 2: the prediction API.** Immutable creation and outcome attachment.
+> The body is server-generated, the model version and input snapshot are
+> enforced, and the tests attack immutability through both the API and SQL.
+> `ai.predictions` already refuses UPDATE and DELETE by trigger; nothing writes
+> to it.
 
-The endpoint exists and the read-only surface exists; nothing connects them.
-This is the smaller half of what used to be called Living Trials, and it should
-stay small: choose a template, state the question, see the decision. Running
-one, measuring it, and comparing the result against the prediction is Phase E
-work and needs the prediction accountability API, which has tables and
-immutability guards but no endpoints.
+> **Ticket 3: start an allowed experiment.** Draft to active for `allowed`
+> only, refusing blocked outright and gated until reviewed, with the prediction
+> recorded before the status changes. That ordering is the product's whole
+> claim about accountability, so the write that records it and the write that
+> starts the experiment belong in one transaction.
 
-> Let people record sleep.
+> **Ticket 4: measure the result.** Attach the outcome, complete the
+> experiment, show predicted against observed.
 
-`metabolic.sleep_sessions` exists with no write path. Two findings name sleep in
-their limitations, honestly, and cannot suggest recording it because the
-suggestion catalogue only holds things the product can capture. Adding the write
-path turns a limitation into an actionable suggestion.
+> **Ticket 5: the first clinician packet.** Thirty and ninety days: findings,
+> experiments, predictions, outcomes, limitations. Web first, export later.
 
-> Phase D: gestational.
-
-The first care mode that should not be built without clinical review. The
-release checklist above says so and nothing in the platform yet satisfies it.
+Gestational and Type 1 stay parked until the loop is closed, and both need
+clinical review before either starts.
 
 Per-user target ranges still wait.

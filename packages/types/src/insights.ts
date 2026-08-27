@@ -156,3 +156,104 @@ export const evidenceQuerySchema = z
     message: `The window cannot be longer than ${MAX_EVIDENCE_WINDOW_DAYS} days`,
   });
 export type EvidenceQuery = z.infer<typeof evidenceQuerySchema>;
+
+/**
+ * The one safe experiment a finding suggests testing.
+ *
+ * A finding says what already happened; an experiment is how somebody finds
+ * out whether it happens on purpose. This is the join between the two, and it
+ * is deliberately narrow: one template per finding type, and only for findings
+ * where a week of alternating behaviour would actually settle something.
+ *
+ * Most finding types are absent, and that is the correct answer rather than a
+ * gap to fill later. A morning glucose average has no one-week test a person
+ * can run alone. An HbA1c trend moves over quarters. Offering a button that
+ * proposes a test which cannot resolve the question would be worse than
+ * offering nothing, because it would look like the product knew what to do.
+ *
+ * Every template here is drawn from ALLOWED_EXPERIMENT_TEMPLATES, and a test
+ * asserts it. That does not mean a proposal is always allowed: the classifier
+ * still gates it against the person's care profile, so the same finding
+ * proposes a runnable test for one reader and a clinician conversation for
+ * another. What it does mean is that this map can never be the thing that
+ * surfaces a blocked protocol.
+ */
+const FINDING_EXPERIMENTS: Record<
+  string,
+  { template: string; title: string; question: string; protocol: Record<string, unknown> }
+> = {
+  post_meal_walk_effect: {
+    template: 'post_meal_walk',
+    title: 'Walking after a meal',
+    question:
+      'Does walking after a meal actually lower the rise for me, or were those days different in some other way?',
+    protocol: {
+      days: 6,
+      instruction:
+        'Eat a similar meal on six days. Walk after three of them, chosen at random rather than when you feel like it.',
+      records: ['meal', 'activity', 'glucose'],
+    },
+  },
+  late_evening_meal_response: {
+    template: 'meal_timing',
+    title: 'Eating the same meal earlier',
+    question:
+      'Is the larger rise about the hour I eat, or about what I happen to eat late?',
+    protocol: {
+      days: 6,
+      instruction:
+        'Eat the same meal on six days: three of them before 19:00, three after 20:00.',
+      records: ['meal', 'glucose'],
+    },
+  },
+  meal_timing_association: {
+    template: 'meal_timing',
+    title: 'Eating the same meal earlier',
+    question: 'Does the time of day change the rise, holding the meal itself steady?',
+    protocol: {
+      days: 6,
+      instruction:
+        'Eat the same meal on six days, half early and half late, and log each one.',
+      records: ['meal', 'glucose'],
+    },
+  },
+  post_meal_response: {
+    template: 'meal_order',
+    title: 'Changing the order of a meal',
+    question:
+      'Does eating the protein and vegetables before the carbohydrate change my rise?',
+    protocol: {
+      days: 6,
+      instruction:
+        'Eat the same meal on six days. On three of them, eat everything else before the carbohydrate.',
+      records: ['meal', 'glucose'],
+    },
+  },
+};
+
+export interface ExperimentProposal {
+  template: string;
+  title: string;
+  question: string;
+  protocol: Record<string, unknown>;
+}
+
+/**
+ * The proposal a finding supports, or null when it supports none.
+ *
+ * Null for a finding with no effect estimate, whatever its type. A detector
+ * that could not measure anything has not identified a question worth a week
+ * of somebody's life, and "not enough data" is the wrong thing to hand a
+ * person a test for.
+ */
+export function proposalFromFinding(
+  finding: Pick<StructuredFinding, 'findingType' | 'effectEstimate'>,
+): ExperimentProposal | null {
+  if (finding.effectEstimate === null) return null;
+  return FINDING_EXPERIMENTS[finding.findingType] ?? null;
+}
+
+/** Every template this map can produce. Used to prove none of them is unsafe. */
+export function proposableTemplates(): string[] {
+  return [...new Set(Object.values(FINDING_EXPERIMENTS).map((e) => e.template))];
+}
