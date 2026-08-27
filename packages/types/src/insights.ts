@@ -61,3 +61,79 @@ export const patternResponseSchema = z.object({
   findings: z.array(structuredFindingSchema),
 });
 export type PatternResponse = z.infer<typeof patternResponseSchema>;
+
+const STRENGTH_ORDER: Record<EvidenceStrength, number> = {
+  strong: 0,
+  moderate: 1,
+  weak: 2,
+  insufficient: 3,
+};
+
+/**
+ * The strength of a whole finding, rather than of its numbers alone.
+ *
+ * A finding with no effect estimate has not measured anything, whatever its
+ * sample count: the engine returns those when a comparison group is too thin
+ * to describe. `evidenceStrength(8, 0)` would call that "weak evidence", which
+ * overstates it — there is no evidence yet, only a count of what was logged.
+ */
+export function findingStrength(
+  finding: Pick<StructuredFinding, 'effectEstimate' | 'sampleCount' | 'confidence'>,
+): EvidenceStrength {
+  if (finding.effectEstimate === null) return 'insufficient';
+  return evidenceStrength(finding.sampleCount, finding.confidence);
+}
+
+/**
+ * Puts the findings the data can support first, firmest first.
+ *
+ * The engine returns findings in detector order, which is an implementation
+ * detail of the engine. Ordering lives here rather than in either caller so
+ * the API, the web app, and a printed clinician report present the same
+ * record in the same order. Ties keep the larger sample first, then the
+ * engine's own order.
+ */
+export function orderFindings(findings: StructuredFinding[]): StructuredFinding[] {
+  return [...findings].sort((a, b) => {
+    const byStrength = STRENGTH_ORDER[findingStrength(a)] - STRENGTH_ORDER[findingStrength(b)];
+    if (byStrength !== 0) return byStrength;
+    return b.sampleCount - a.sampleCount;
+  });
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Longest window the evidence endpoint will ask the engine to analyse. */
+export const MAX_EVIDENCE_WINDOW_DAYS = 365;
+
+/** Window used when the caller does not name one. */
+export const DEFAULT_EVIDENCE_WINDOW_DAYS = 30;
+
+/**
+ * The time range an evidence request covers.
+ *
+ * Deliberately carries no user id. The engine will answer about any user id it
+ * is handed, so the identity comes from the verified access token on the
+ * server and can never be supplied by the browser.
+ *
+ * The upper bound on the window is not a performance guess: the engine loads
+ * every reading in the range into memory, so an unbounded range is a way to
+ * make one request cost arbitrarily much.
+ */
+export const evidenceQuerySchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .transform((v) => {
+    const to = v.to ?? new Date();
+    return {
+      to,
+      from: v.from ?? new Date(to.getTime() - DEFAULT_EVIDENCE_WINDOW_DAYS * DAY_MS),
+    };
+  })
+  .refine((v) => v.to > v.from, { message: '`from` must be before `to`' })
+  .refine((v) => v.to.getTime() - v.from.getTime() <= MAX_EVIDENCE_WINDOW_DAYS * DAY_MS, {
+    message: `The window cannot be longer than ${MAX_EVIDENCE_WINDOW_DAYS} days`,
+  });
+export type EvidenceQuery = z.infer<typeof evidenceQuerySchema>;

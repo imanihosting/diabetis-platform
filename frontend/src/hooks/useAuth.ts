@@ -33,6 +33,19 @@ export function useCurrentUser() {
   });
 }
 
+/**
+ * Whether data queries may run yet.
+ *
+ * The access token lives in memory, so a cold page load starts without one.
+ * Firing queries immediately means each one 401s, triggers a refresh, and
+ * retries: the data arrives either way, but it costs a wasted round trip per
+ * query and puts errors in the console on every single load.
+ */
+export function useSession() {
+  const user = useCurrentUser();
+  return { ready: Boolean(user.data), settled: !user.isLoading };
+}
+
 export function useLogin() {
   const queryClient = useQueryClient();
   const router = useRouter();

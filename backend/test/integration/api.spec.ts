@@ -710,6 +710,157 @@ describe('API end to end', () => {
     });
   });
 
+  describe('evidence', () => {
+    const auth = () => ({ authorization: `Bearer ${accessToken}` });
+
+    let userId: string;
+
+    beforeAll(async () => {
+      // Read back rather than threaded down from the registration test, so
+      // this block does not depend on the shape of that response body.
+      const { rows } = await pool.query<{ id: string }>(
+        'select id from identity.users where email = $1',
+        [email],
+      );
+      userId = rows[0].id;
+    });
+
+    /**
+     * Puts one morning reading on each of `days` consecutive days.
+     *
+     * Written straight to the table rather than through the API because the
+     * point of these tests is the bridge to the Python engine, and the engine
+     * reads the table. Each window is disjoint from every other test's, so
+     * these rows cannot move another assertion.
+     */
+    async function seedMornings(startIso: string, days: number, value: number) {
+      const start = new Date(startIso);
+      for (let day = 0; day < days; day += 1) {
+        const at = new Date(start.getTime() + day * 24 * 60 * 60 * 1000);
+        at.setUTCHours(7, 0, 0, 0);
+        await pool.query(
+          `insert into metabolic.glucose_samples
+             (user_id, measured_at, glucose_value, unit, source)
+           values ($1, $2, $3, 'mmol/L', 'cgm_device')
+           on conflict do nothing`,
+          [userId, at.toISOString(), value],
+        );
+      }
+    }
+
+    interface Finding {
+      findingType: string;
+      summary: string;
+      effectEstimate: number | null;
+      effectUnit: string | null;
+      confidence: number;
+      sampleCount: number;
+      limitations: string[];
+      clinicianReviewRecommended: boolean;
+      wouldImproveWith: string[];
+    }
+
+    const get = (from: string, to: string) =>
+      http().get(`/api/evidence?from=${from}&to=${to}`).set(auth());
+
+    it('refuses to produce findings for an unauthenticated caller', async () => {
+      // The engine behind this endpoint answers about whatever user id it is
+      // given, so the token is the only thing standing between a stranger and
+      // someone's metabolic record.
+      await http().get('/api/evidence').expect(401);
+    });
+
+    it('rejects a reversed range and an unbounded one', async () => {
+      await get('2026-04-11T00:00:00.000Z', '2026-04-01T00:00:00.000Z').expect(400);
+      await get('2020-01-01T00:00:00.000Z', '2026-04-01T00:00:00.000Z').expect(400);
+    });
+
+    it('produces a real finding from the readings in the window', async () => {
+      await seedMornings('2026-04-01T00:00:00.000Z', 10, 6);
+
+      const res = await get(
+        '2026-04-01T00:00:00.000Z',
+        '2026-04-11T00:00:00.000Z',
+      ).expect(200);
+
+      expect(res.body.userId).toBe(userId);
+      expect(res.body.modelVersion).toMatch(/^pattern-engine-/);
+      expect(Date.parse(res.body.generatedAt)).not.toBeNaN();
+
+      const morning = (res.body.findings as Finding[]).find(
+        (f) => f.findingType === 'morning_glucose_pattern',
+      );
+      expect(morning).toBeTruthy();
+      // The engine computed this from the rows above, not from a fixture.
+      expect(morning!.effectEstimate).toBeCloseTo(6, 1);
+      expect(morning!.effectUnit).toContain('mmol/L');
+      expect(morning!.sampleCount).toBe(10);
+      expect(morning!.summary).toContain('6.0');
+    });
+
+    it('never returns a finding without its limitations attached', async () => {
+      const res = await get(
+        '2026-04-01T00:00:00.000Z',
+        '2026-04-11T00:00:00.000Z',
+      ).expect(200);
+
+      // An unqualified finding is the one failure mode this product cannot
+      // have: it would read as a claim rather than as evidence.
+      for (const finding of res.body.findings as Finding[]) {
+        expect(finding.limitations.length).toBeGreaterThan(0);
+        expect(finding.confidence).toBeGreaterThanOrEqual(0);
+        expect(finding.confidence).toBeLessThanOrEqual(1);
+        expect(finding.sampleCount).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('answers a window with no data instead of failing', async () => {
+      const res = await get(
+        '2025-01-01T00:00:00.000Z',
+        '2025-01-10T00:00:00.000Z',
+      ).expect(200);
+
+      // "Not enough data" is a real answer and is delivered as one. A 404 or
+      // an empty list would let the screen imply the question was never asked.
+      expect(res.body.findings).toHaveLength(1);
+      const [finding] = res.body.findings as Finding[];
+      expect(finding.findingType).toBe('insufficient_data');
+      expect(finding.effectEstimate).toBeNull();
+      expect(finding.sampleCount).toBe(0);
+      expect(finding.wouldImproveWith.length).toBeGreaterThan(0);
+    });
+
+    it('flags a pattern a clinician should see', async () => {
+      await seedMornings('2026-05-01T00:00:00.000Z', 6, 12.5);
+
+      const res = await get(
+        '2026-05-01T00:00:00.000Z',
+        '2026-05-07T00:00:00.000Z',
+      ).expect(200);
+
+      const morning = (res.body.findings as Finding[]).find(
+        (f) => f.findingType === 'morning_glucose_pattern',
+      );
+      // Persistently raised waking glucose is surfaced, not interpreted.
+      expect(morning!.clinicianReviewRecommended).toBe(true);
+    });
+
+    it('orders answerable findings ahead of the ones needing more data', async () => {
+      const res = await get(
+        '2026-04-01T00:00:00.000Z',
+        '2026-06-30T00:00:00.000Z',
+      ).expect(200);
+
+      const findings = res.body.findings as Finding[];
+      const lastAnswered = findings.map((f) => f.effectEstimate !== null).lastIndexOf(true);
+      const firstUnanswered = findings.map((f) => f.effectEstimate === null).indexOf(true);
+
+      if (lastAnswered !== -1 && firstUnanswered !== -1) {
+        expect(lastAnswered).toBeLessThan(firstUnanswered);
+      }
+    });
+  });
+
   describe('audit trail', () => {
     it('records every write the user made', async () => {
       const res = await http()

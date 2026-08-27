@@ -197,7 +197,7 @@ Phase 0 and the foundations of Phases 1–2 are in place:
 - [x] Unified metabolic timeline
 - [x] Pattern engine v1 with structured findings
 - [x] Containerised stack and an isolated Docker test environment
-- [ ] Evidence screen wired to the pattern engine
+- [x] Evidence screen wired to the pattern engine through `GET /api/evidence`
 - [ ] Prediction accountability API (tables and guards exist)
 - [ ] Future Sandbox, Living Trials, Clinician Evidence Room
 

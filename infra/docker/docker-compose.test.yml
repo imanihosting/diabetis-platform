@@ -91,6 +91,35 @@ services:
       postgres:
         condition: service_healthy
 
+  # The engine the backend's /evidence endpoint calls. Without it the bridge
+  # between the two services is only ever exercised against a hostname that
+  # does not resolve, which tests the timeout and nothing else.
+  metabolic-engine-test:
+    build:
+      context: ../../metabolic-engine
+      dockerfile: Dockerfile
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://wellovue_test:wellovue_test@postgres:5432/wellovue_test?sslmode=disable
+      # Development, so the service token check is off: the suite is testing
+      # the evidence bridge, not the shared secret, and Settings refuses to
+      # start unauthenticated in any other environment.
+      ENVIRONMENT: development
+    ports:
+      # The port backend/.env.test names, so `npm run test:integration` from an
+      # editor reaches the same engine the containerised run does.
+      - "58000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live').status==200 else 1)\""
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   backend-tests:
     build:
       context: ../..
@@ -115,6 +144,8 @@ services:
         condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
+      metabolic-engine-test:
+        condition: service_healthy
 
   engine-tests:
     build:

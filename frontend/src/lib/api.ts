@@ -5,6 +5,7 @@ import type {
   LoginInput,
   Meal,
   MedicationRecord,
+  PatternResponse,
   RegisterInput,
   TimelineEntry,
   User,
@@ -172,6 +173,20 @@ export const api = {
         { method: 'POST', body: form },
       );
     },
+  },
+
+  evidence: {
+    /**
+     * Structured findings for the signed-in user.
+     *
+     * No user id is sent. The server takes it from the access token, because
+     * the engine behind this endpoint will answer about whatever id it is
+     * given.
+     */
+    findings: (from: Date, to: Date) =>
+      request<PatternResponse>(
+        `/evidence?from=${from.toISOString()}&to=${to.toISOString()}`,
+      ),
   },
 
   meals: {

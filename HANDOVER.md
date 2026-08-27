@@ -80,20 +80,20 @@ pattern engine can be checked against an answer we control.
 ## 5. Tests
 
 ```bash
-npm test                  # 21 unit, no infrastructure needed
+npm test                  # 30 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
-`test:docker` brings up its own PostgreSQL and MinIO, migrates, runs every
-suite, and tears down. Nothing touches the provisioned VMs. The Postgres image
+`test:docker` brings up its own PostgreSQL, MinIO and metabolic engine,
+migrates, runs every suite, and tears down. Nothing touches the provisioned VMs. The Postgres image
 carries the same extension versions as production, so hypertables, vector
 indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 21 | no |
+| `backend/test/*.spec.ts` | 30 | no |
 | `backend/test/integration/schema-guards.spec.ts` | 18 | yes |
-| `backend/test/integration/api.spec.ts` | 50 | yes |
+| `backend/test/integration/api.spec.ts` | 57 | yes |
 | `metabolic-engine/tests` | 7 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -177,6 +177,21 @@ phrase a finding that exists; it must not create one. Every finding carries an
 effect estimate, confidence, sample count and explicit limitations. When data
 is thin the answer is "not enough data" plus what to log. Do not soften this.
 
+**The evidence endpoint is never told whose data to read.** The Python engine
+will answer about any user id it is handed, so `GET /api/evidence` accepts only
+a time range and takes the identity from the verified access token. That is the
+whole authorisation decision, made in one place in `EvidenceService`. Adding a
+`userId` parameter for convenience would turn an authenticated endpoint into a
+lookup of anyone's metabolic record.
+
+**A finding with no effect estimate is shown, not hidden.** The engine returns
+those when a comparison group is too thin, and the Evidence screen groups them
+under "Not enough data yet" with what each one needs. Dropping them would make
+the screen look more certain than the data is. They are also scored
+`insufficient` by `findingStrength()` regardless of sample count — the count
+describes what was logged, not what was measured, so `evidenceStrength()` alone
+would badge them "weak evidence" and claim a measurement nobody made.
+
 **Colour is reserved for meaning.** One palette across both surfaces: warm
 paper, warm ink, and colour only for glucose relative to target and for
 evidence strength. No teal or blue anywhere, deliberately, because that is the
@@ -204,15 +219,12 @@ The mono cut is reserved for measured values.
   medication records, activity events
 - The unified metabolic timeline
 - Pattern engine v1 producing structured findings
+- The Evidence screen, reading live findings through `GET /api/evidence`
 - Public site: landing, About, How this works, Contact, Privacy, Terms, Cookies
 - Waitlist and contact endpoints, both public, validated, audited
 
 ## 9. What is not
 
-- **Evidence screen is not wired to the pattern engine.** It renders a worked
-  example of the finding shape. The engine works and is reachable at
-  `/patterns/detect`; nothing calls it from the UI yet. This is the most
-  valuable next piece.
 - Prediction accountability API. Tables and immutability guards exist; no
   endpoints.
 - Future Sandbox, Living Trials, Clinician Evidence Room.

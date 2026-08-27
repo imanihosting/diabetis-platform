@@ -23,7 +23,7 @@ trap cleanup EXIT
 # `docker compose run` does not rebuild, so the test images must be built
 # explicitly or a code change would be silently tested against a stale image.
 echo "==> Building images"
-if ! "${COMPOSE[@]}" build migrate backend-tests engine-tests; then
+if ! "${COMPOSE[@]}" build migrate backend-tests engine-tests metabolic-engine-test; then
   echo "Image build failed." >&2
   exit 1
 fi
@@ -39,6 +39,14 @@ echo "==> Creating the object storage bucket"
 
 echo "==> Applying migrations"
 "${COMPOSE[@]}" run --rm --quiet-pull migrate || exit 1
+
+# Started after the migrations it reads through, so its first query does not
+# meet a half-built schema.
+echo "==> Starting the metabolic engine"
+if ! "${COMPOSE[@]}" up -d --wait metabolic-engine-test; then
+  echo "The metabolic engine did not become healthy." >&2
+  exit 1
+fi
 
 echo ""
 echo "==> Backend suite (unit + integration)"

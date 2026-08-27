@@ -1,4 +1,4 @@
-import { evidenceStrength, type EvidenceStrength } from '@wellovue/types';
+import { findingStrength, type EvidenceStrength, type StructuredFinding } from '@wellovue/types';
 import { cn } from '@/lib/cn';
 
 const STYLES: Record<EvidenceStrength, string> = {
@@ -15,23 +15,28 @@ const LABELS: Record<EvidenceStrength, string> = {
   strong: 'Strong evidence',
 };
 
+export type BadgeFinding = Pick<
+  StructuredFinding,
+  'effectEstimate' | 'sampleCount' | 'confidence'
+>;
+
 /**
  * How much a finding can be trusted, stated in words rather than a number.
  *
- * The strength is computed by `evidenceStrength()` in the shared contract, the
+ * The strength is computed by `findingStrength()` in the shared contract, the
  * same function the API and the clinician report use, so the three surfaces
- * can never disagree about how firm a finding is.
+ * can never disagree about how firm a finding is. The colour is never the only
+ * signal: the word beside it says the same thing, and both survive greyscale
+ * printing.
  */
 export function EvidenceBadge({
-  sampleCount,
-  confidence,
+  finding,
   className,
 }: {
-  sampleCount: number;
-  confidence: number;
+  finding: BadgeFinding;
   className?: string;
 }) {
-  const strength = evidenceStrength(sampleCount, confidence);
+  const strength = findingStrength(finding);
 
   return (
     <span
@@ -42,7 +47,7 @@ export function EvidenceBadge({
       )}
     >
       {LABELS[strength]}
-      <span className="measure opacity-70">n={sampleCount}</span>
+      <span className="measure opacity-70">n={finding.sampleCount}</span>
     </span>
   );
 }
