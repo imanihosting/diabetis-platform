@@ -79,84 +79,93 @@ decisions.
 
 ## Data Model Changes
 
-Make the next migration additive. Do not rewrite existing `clinical.conditions`,
-`metabolic.glucose_samples`, `nutrition.meals`, or `experiments.*` tables.
+**Shipped in migration `0013_diabetes_profile.sql`.** What follows is what
+exists, not a proposal. Three things differ from the original sketch, and each
+difference is load-bearing rather than stylistic. They are recorded under
+[Decisions That Should Not Be Reversed](#decisions-that-should-not-be-reversed)
+so a later phase does not helpfully put them back.
 
-Add a profile layer:
+The migration is additive. Nothing rewrites `clinical.conditions`,
+`metabolic.glucose_samples`, `nutrition.meals` or `experiments.*`.
 
 ```sql
 create table if not exists clinical.diabetes_profiles (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references identity.users(id) on delete cascade,
-  diabetes_type text not null,
-  care_mode text not null,
-  diagnosed_on date,
-  diagnosis_source text not null default 'self_reported',
-  glucose_unit text not null default 'mmol/L',
-  target_low numeric,
-  target_high numeric,
-  safety_tier text not null default 'standard',
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null references identity.users(id) on delete cascade,
+  diabetes_type       text not null,
+  care_mode           text not null,
+  diagnosed_on        date,
+  diagnosis_source    text not null default 'self_reported',
   clinician_supported boolean not null default false,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
+  payload             jsonb not null default '{}'::jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
   unique (user_id),
-  constraint diabetes_type_chk check (
-    diabetes_type in (
-      'type_1',
-      'type_2',
-      'gestational',
-      'prediabetes',
-      'other_specific',
-      'unknown'
-    )
-  ),
-  constraint care_mode_chk check (
-    care_mode in (
-      'type_2_standard',
-      'type_2_insulin_supported',
-      'prediabetes',
-      'gestational',
-      'type_1_cgm_insulin',
-      'other_specific',
-      'unknown'
-    )
-  ),
-  constraint glucose_unit_chk check (glucose_unit in ('mmol/L', 'mg/dL')),
-  constraint target_range_chk check (
-    target_low is null
-    or target_high is null
-    or target_high > target_low
-  ),
-  constraint safety_tier_chk check (
-    safety_tier in ('standard', 'clinician_supported', 'high_risk', 'pregnancy')
+  constraint diabetes_type_chk    check (diabetes_type in (...)),
+  constraint care_mode_chk        check (care_mode in (...)),
+  constraint diagnosis_source_chk check (
+    diagnosis_source in ('self_reported','clinician','imported','assumed')
   )
 );
 ```
 
-Add explicit safety flags. Do not rely only on medication names or user copy,
-because names vary and imports can be incomplete.
+`diagnosis_source` carries `assumed`, which the sketch did not have. Everyone
+registered before this migration signed up to a product that only offers
+Type 2, so they were backfilled as Type 2 — but nobody asked them. A profile
+that cannot tell an answer from an assumption will eventually be trusted as
+though someone had answered.
+
+There is **no `safety_tier` column**. The tier is a function of the care mode
+and the flags currently active, and a stored copy drifts from them: a pregnancy
+flag gets written, the column still reads `standard`, and the safety service
+asks the stale value. It is computed on every read by `deriveSafetyTier` in
+`@wellovue/types`.
+
+There are **no `target_low` / `target_high` columns yet**. 3.9 and 10.0 mmol/L
+are currently hardcoded in five places across the frontend and the Python
+engine. A per-user target added before those are unified is a column that looks
+authoritative and that nothing reads, which is worse than no column: the next
+person sets it, sees no change, and cannot tell whether the feature is broken
+or absent. Unify the five sites behind one shared constant first, then add
+these as a nullable override.
+
+Safety flags are **append-only**, enforced by a trigger, like `audit.events`
+and `ai.predictions`:
 
 ```sql
 create table if not exists clinical.diabetes_safety_flags (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references identity.users(id) on delete cascade,
-  flag text not null,
-  status text not null,
-  source text not null,
-  recorded_at timestamptz not null default now(),
-  resolved_at timestamptz,
-  metadata jsonb not null default '{}'::jsonb,
-  constraint safety_flag_status_chk check (
-    status in ('active', 'inactive', 'unknown')
-  )
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references identity.users(id) on delete cascade,
+  flag         text not null,
+  status       text not null,
+  source       text not null,
+  recorded_at  timestamptz not null default now(),
+  metadata     jsonb not null default '{}'::jsonb,
+  constraint safety_flag_status_chk check (status in ('active','inactive','unknown')),
+  constraint safety_flag_source_chk check (
+    source in ('self_reported','clinician','imported','derived')
+  ),
+  constraint safety_flag_name_chk   check (flag in (...))
 );
 
-create index if not exists diabetes_safety_flags_user_idx
-  on clinical.diabetes_safety_flags (user_id, flag, recorded_at desc);
+create trigger diabetes_safety_flags_append_only
+  before update or delete on clinical.diabetes_safety_flags
+  for each row execute function clinical.guard_safety_flag_append_only();
 ```
 
-Initial flags:
+A flag is a claim about someone's risk at a moment in time. When the platform
+believed a person was pregnant, or using insulin, is exactly the sort of record
+that must not be quietly revised later. A flag is therefore resolved by
+inserting a row saying so, and the current state of a flag is its most recent
+row. That is why there is no `resolved_at` and no unique constraint on
+`(user_id, flag)`: both belong to a mutable design, and this is not one.
+
+Reading current flags means taking the latest row per flag and keeping it only
+if that row says `active`. Filtering on `status = 'active'` alone resurrects
+flags that were resolved, because the row that raised them is still there. The
+query lives in one place in `DiabetesProfileService` for that reason.
+
+The initial flag set:
 
 - `insulin_therapy`
 - `pump_or_automated_insulin_delivery`
@@ -168,18 +177,47 @@ Initial flags:
 - `paediatric_user`
 - `clinician_managed_protocol`
 
-These are not diagnoses by themselves. They are product safety context.
+These are not diagnoses. They are product safety context.
+
+## Decisions That Should Not Be Reversed
+
+Each of these looks like an omission and is not. Restoring any of them
+reintroduces a specific failure.
+
+| Decision | What reversing it breaks |
+|---|---|
+| `safety_tier` is derived, never stored | A stored tier goes stale against the flags it came from. The tier decides whether someone may run an experiment unsupervised, so it is the last value that should be allowed to be wrong while looking authoritative. |
+| Safety flags are append-only | The history of what the platform believed about someone's risk, and when, becomes rewritable. A resolved flag must leave the row that raised it in place. |
+| No `target_low` / `target_high` until the five hardcoded sites are unified | A column nothing reads teaches the next person that the feature is broken. Adding a column later is an `ALTER`; removing one that has been lying to people is not. |
+| Care mode is derived server-side, never accepted from a client | A request could otherwise ask for a Type 1 record to be analysed by Type 2 detectors. |
+| Existing accounts backfilled to `type_2_standard`, source `assumed` | Leaving them `unknown` is conservative in name only: it takes the evidence screen away from people whose data has not changed and whose findings were correct yesterday. |
+| Nothing added to `PatternRequest` until the engine can act on it | An unused field is a lie with a schema, and the next person cannot tell whether the engine honours it. |
 
 ## Shared Type Changes
 
-Add shared schemas in `packages/types` before wiring UI or backend behavior:
+**Shipped in `packages/types/src/diabetes.ts`.** Schemas:
 
-- `diabetesTypeSchema`
-- `careModeSchema`
-- `safetyTierSchema`
-- `diabetesProfileSchema`
-- `diabetesSafetyFlagSchema`
+- `diabetesTypeSchema`, `careModeSchema`, `safetyTierSchema`
+- `diagnosisSourceSchema`, `safetyFlagSchema`, `safetyFlagStatusSchema`
+- `diabetesProfileSchema`, `diabetesSafetyFlagSchema`
+- `updateDiabetesProfileSchema`, `recordSafetyFlagSchema` (client input)
 - `careModeCapabilitiesSchema`
+
+And the three functions the safety posture depends on, shared so the API, the
+app and any future report cannot disagree:
+
+- `deriveCareMode(diabetesType, activeFlags)` — insulin moves Type 2 into the
+  insulin-supported mode; pregnancy outranks the recorded diagnosis, because a
+  gestational context is about what the body is doing now rather than what was
+  written down before.
+- `deriveSafetyTier(careMode, activeFlags)` — most severe wins, and flag order
+  must not change the answer.
+- `careModeCapabilities(careMode, activeFlags)` — what the product will do for
+  this person today, plus the sentence explaining why when the answer is "not
+  yet".
+
+`updateDiabetesProfileSchema` deliberately has no `careMode` field. It is
+derived, and a schema that accepted it would be the hole.
 
 Keep the current evidence contract backward-compatible:
 
@@ -220,14 +258,18 @@ Add a `DiabetesProfileModule` in NestJS with these responsibilities:
 - Expose capabilities to the frontend, such as which evidence types are enabled.
 - Block unsupported workflows before they reach the metabolic engine.
 
-Suggested endpoints:
+**Shipped** as `DiabetesProfileModule`:
 
 | Endpoint | Purpose | Auth |
 |---|---|---|
-| `GET /api/diabetes-profile` | Return profile, flags, care mode, and capabilities | Required |
-| `PUT /api/diabetes-profile` | Update profile fields from onboarding/settings | Required |
-| `POST /api/diabetes-profile/flags` | Add or update a safety flag | Required |
-| `GET /api/diabetes-profile/capabilities` | Return enabled evidence, experiment, and report features | Required |
+| `GET /api/diabetes-profile` | Profile, active flags, and capabilities in one response | Required |
+| `PUT /api/diabetes-profile` | Update the recorded diagnosis. Care mode is recomputed, not accepted | Required |
+| `POST /api/diabetes-profile/flags` | Record a flag. Append-only: ending one means recording that it ended | Required |
+| `GET /api/diabetes-profile/flags` | Every flag ever recorded, newest first | Required |
+
+No separate `/capabilities` endpoint. Every caller that wants the care mode
+also wants to know what it permits, and splitting them invites a caller to act
+on one without the other.
 
 Every write must create an audit event. Treat profile changes as health-data
 changes, not account preferences.
@@ -237,6 +279,8 @@ changes, not account preferences.
 Keep `GET /api/evidence` as the public product route inside the signed-in app.
 Change what happens behind it:
 
+**Shipped (Phase A).** NestJS owns the gate, and the engine is untouched:
+
 ```text
 GET /api/evidence
   |
@@ -244,24 +288,36 @@ GET /api/evidence
 NestJS loads current user
   |
   v
-NestJS loads diabetes profile + safety flags
+NestJS loads diabetes profile + active safety flags
   |
   v
-NestJS builds PatternRequest with careMode + safetyTier
-  |
-  v
-FastAPI runs only detectors allowed for that care mode
-  |
-  v
-NestJS validates structured findings
+capabilities.evidenceEnabled ?
+  |                    \
+  | yes                 \ no
+  v                      v
+FastAPI runs the        NestJS returns a single
+Type 2 detectors        `care_mode_unsupported` finding
+  |                      |
+  v                      v
+NestJS orders and validates structured findings
   |
   v
 Frontend renders evidence, limitations, and unsupported states
 ```
 
-If the user has no profile yet, use `unknown` and return only descriptive or
-insufficient-data findings. The UI should ask for profile setup before showing
-care-mode-specific interpretations.
+One place decides, so there is no chance of two answers. Moving the decision
+into the engine's detector registry is Phase B, and NestJS stays the workflow
+gate afterwards: the engine refuses to run a detector, the backend refuses to
+ask.
+
+A user with no profile row reads as `unknown`, which is identical in effect to
+a profile that says `unknown` — the platform knows exactly as little in both
+cases.
+
+The unsupported answer is shaped like every other finding: a summary, its
+limitations, and what would change it. "We do not analyse this yet" is a real
+answer and belongs in the same frame as the others. A 404 or an empty list
+would let the screen imply the question was never asked.
 
 ## Metabolic Engine Changes
 
@@ -303,6 +359,14 @@ enforce it.
 Expand the existing experiment safety classifier into a profile-aware safety
 service.
 
+The first step of this exists: `careModeCapabilities` already returns
+`experimentsEnabled`, which is false above the standard safety tier regardless
+of care mode. `classifyTemplate` in `packages/types/src/experiments.ts` is
+still template-only and still fails closed — an unrecognised template is gated,
+never allowed. Making it profile-aware must preserve that: the 11 tests in
+`backend/test/safety.spec.ts` assert it, and they should keep passing
+unchanged.
+
 Inputs:
 
 - Experiment template
@@ -333,9 +397,13 @@ Rules:
 
 Do not redesign the app around diabetes type. Add capability-aware surfaces.
 
+Nothing on the frontend has been built yet. `/evidence` renders the
+`care_mode_unsupported` finding through the ordinary finding card, which reads
+acceptably and was not designed for it; Phase B step 3 is the designed state.
+
 Add:
 
-- A short profile setup flow after account creation.
+- A short profile setup flow after account creation (Phase B step 1).
 - A settings page section for diabetes profile and care context.
 - Care-mode labels where they affect interpretation.
 - Unsupported states in `/evidence`, `/log`, `/timeline`, and future
@@ -382,27 +450,64 @@ objects FHIR-shaped so future export is possible.
 
 ## Rollout Plan
 
-### Phase A: Make Type 2 Explicit
+### Phase A: Make Type 2 Explicit — SHIPPED
 
-Add the profile tables, shared schemas, and backend profile endpoint. Backfill
-seed/demo users as `type_2_standard`. Keep real users as `unknown` unless they
-answer onboarding.
+Migration `0013`, `packages/types/src/diabetes.ts`, `DiabetesProfileModule`,
+and the care-mode gate on `/evidence`. Applied to the platform database; all
+existing accounts backfilled to `type_2_standard` with source `assumed`.
+
+Verified:
+
+- Existing Type 2 `/evidence` behaviour unchanged — the demo record returns the
+  same four findings, in the same order, from the same engine version.
+- A user can read and update their profile, and every write is audited.
+- Flipping an account to Type 1 returns `care_mode_unsupported` and no Type 2
+  finding leaks; restoring returns all four.
+- The append-only trigger is tested by attacking it directly over SQL.
+
+Two things Phase A left deliberately unfinished, both listed first in Phase B:
+new registrations get `type_2_standard`/`assumed` rather than `unknown`,
+because onboarding does not exist yet and `unknown` would be a dead end with no
+way out; and the frontend has no designed treatment for the unsupported
+finding, so it currently renders through the ordinary finding card.
+
+### Phase B: Setup Flow, Then Capability Gates
+
+In this order. Steps 1 and 2 must land together: switching the default to
+`unknown` before there is a way to answer the question strands every new
+account on a screen that refuses to help them.
+
+1. **Care-profile setup after signup.** The shortest flow that can set
+   `diabetesType` and the flags that change the care mode. Keyboard and screen
+   reader paths included, since this gates the whole product.
+2. **Switch new users to `unknown`.** Change the default in
+   `DiabetesProfileService.createForNewUser` and the registration transaction.
+   Existing accounts keep their backfilled `type_2_standard`; this is about
+   people who have not answered yet, not about revoking an answer.
+3. **Design the unsupported evidence state.** A real treatment for
+   `care_mode_unsupported` on `/evidence`, distinct from a finding, that states
+   the support level plainly and points at the profile. Currently it falls
+   through the ordinary card, which reads acceptably and was not designed for
+   it.
+4. **Add `careMode` to `PatternRequest`** — and not before the engine registry
+   exists to act on it. The contract is mirrored in `packages/types/src/insights.ts`
+   and `metabolic-engine/app/models/findings.py`, and those two are the same
+   contract in two languages: change them together.
+5. **Move the gate into the engine's detector registry.** Each detector
+   declares the care modes it supports and the flags that block it. NestJS
+   stays the workflow gate: the engine refuses to run a detector, the backend
+   refuses to ask. Two independent refusals, not one moved.
+6. **Keep the current Type 2 findings as the regression test.** The demo
+   record's four findings, their order and their effect estimates are the
+   contract for "nothing broke". If they change, something did.
 
 Success:
 
-- Existing Type 2 `/evidence` behavior is unchanged.
-- A user can view and update their diabetes profile.
-- Every profile write is audited.
-
-### Phase B: Capability Gates
-
-Add care-mode capabilities and engine detector filtering.
-
-Success:
-
-- `/evidence` only runs detectors allowed for the user's care mode.
-- Unknown and unsupported modes get clear unsupported states.
-- Type 2 demo findings still match the current test expectations.
+- A new account can answer the question and reach evidence in one sitting.
+- `/evidence` runs only detectors allowed for the user's care mode, enforced in
+  the engine.
+- Unknown and unsupported modes get a designed state, not a fallen-through one.
+- Type 2 demo findings still match the current test expectations exactly.
 
 ### Phase C: Prediabetes And Insulin-Treated Type 2
 
@@ -440,22 +545,32 @@ Success:
 
 ## Testing Requirements
 
-Add tests before exposing new care modes.
+Add tests before exposing new care modes. Ticked items exist today.
 
-Backend:
+Backend (`backend/test/diabetes-profile.spec.ts`,
+`backend/test/integration/diabetes-profile.spec.ts`):
 
-- Profile create/update validation.
-- Audit rows for every profile write.
-- Care-mode capability derivation.
-- Evidence requests include server-derived care mode, not browser-supplied care
-  mode.
-- Unsupported care modes return safe responses.
+- [x] Profile create/update validation.
+- [x] Audit rows for every profile write.
+- [x] Care-mode capability derivation, including that flag order cannot let a
+      milder flag mask a severe one.
+- [x] A client-supplied `careMode` is ignored: the request sends
+      `type_1` with `careMode: type_2_standard` and asserts the server derives
+      `type_1_cgm_insulin`.
+- [x] Unsupported care modes return a stated finding, and no Type 2 finding
+      leaks into the response.
+- [x] The append-only trigger, attacked directly over SQL.
+- [ ] Profile setup flow (Phase B step 1).
 
 Shared types:
 
-- Diabetes profile schema validation.
-- Safety flag validation.
-- Backward compatibility for existing `StructuredFinding` objects.
+- [x] Diabetes profile schema validation.
+- [x] Safety flag validation, including rejecting an unrecognised flag name.
+- [x] `careModeCapabilities` covers every member of the care-mode enum, so a
+      mode added to the contract cannot fall through to a default.
+- [x] Backward compatibility for existing `StructuredFinding` objects: the
+      contract is unchanged, and `care_mode_unsupported` is an ordinary
+      finding rather than a new shape.
 
 Metabolic engine:
 
@@ -513,22 +628,27 @@ release:
   the baseline reference for protecting electronic protected health information
   if the product falls under HIPAA as a covered entity or business associate.
 
-## Recommended First Implementation Ticket
+## Next Implementation Ticket
 
-Start with this ticket:
+Phase A is shipped. The next ticket is Phase B steps 1 and 2, which have to
+land together:
 
-> Add diabetes profile, care mode, and safety flag foundations without changing
-> the current Type 2 evidence behavior.
+> Ask a new account what kind of diabetes they have, and stop assuming.
 
 Acceptance criteria:
 
-- New additive migration creates `clinical.diabetes_profiles` and
-  `clinical.diabetes_safety_flags`.
-- Shared schemas exist in `packages/types`.
-- NestJS exposes authenticated profile read/update endpoints.
-- Profile writes are audited.
-- Demo seed creates a `type_2_standard` profile.
-- `/api/evidence` still returns the same Type 2 findings for the demo user.
-- Unknown profiles do not receive Type 2-specific findings.
-- Tests cover profile validation, audit, and evidence routing.
+- A profile setup flow runs after account creation and can set `diabetesType`
+  and the flags that change the care mode.
+- The flow is completable by keyboard and readable by a screen reader. It gates
+  the whole product, so it cannot be the one screen that excludes people.
+- New registrations default to `unknown` instead of `type_2_standard`, and the
+  `assumed` diagnosis source is no longer written for accounts created after
+  this change.
+- Existing accounts keep their backfilled `type_2_standard`. This ticket is
+  about people who have not answered yet, not about revoking an answer.
+- A new account that skips setup sees the unsupported evidence state with a
+  route back into setup, and never a blank screen.
+- The demo record's four Type 2 findings are unchanged.
 
+Do not start step 4 (`careMode` on `PatternRequest`) before step 5 (the engine
+detector registry). An unused field is a lie with a schema.
