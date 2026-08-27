@@ -46,7 +46,13 @@ const CARE_PROFILE: NavItem = {
   detail: 'What kind of diabetes, and what changes how it is read',
 };
 
-export const APP_SECONDARY_NAV: NavItem[] = [CARE_PROFILE, CONTACT];
+const EXPERIMENTS: NavItem = {
+  href: '/experiments',
+  label: 'Experiments',
+  detail: 'What you have proposed, and what the safety rules said',
+};
+
+export const APP_SECONDARY_NAV: NavItem[] = [CARE_PROFILE, EXPERIMENTS, CONTACT];
 
 /**
  * Kept separate so it can sit in the footer on both surfaces without ever

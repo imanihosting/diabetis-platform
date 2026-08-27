@@ -14,6 +14,7 @@ import { UsersModule } from './users/users.module';
 import { GlucoseModule } from './glucose/glucose.module';
 import { MealsModule } from './meals/meals.module';
 import { LabsModule } from './labs/labs.module';
+import { ExperimentsModule } from './experiments/experiments.module';
 import { MedicationsModule } from './medications/medications.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { EvidenceModule } from './evidence/evidence.module';
@@ -68,6 +69,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     GlucoseModule,
     MealsModule,
     LabsModule,
+    ExperimentsModule,
     MedicationsModule,
     TimelineModule,
     EvidenceModule,

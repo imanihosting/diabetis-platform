@@ -144,27 +144,74 @@ export function classifyTemplate(
   template: string,
   context: SafetyProfileContext,
 ): SafetyStatus {
+  return classify(template, context).status;
+}
+
+/**
+ * The classification and why it came out that way.
+ *
+ * Internal, so `classifyTemplate` keeps the signature its tests are written
+ * against while the endpoint gets the reason too. One computation with two
+ * views rather than two functions that can disagree about the same request —
+ * which, for a safety decision and the sentence explaining it, is the pair
+ * least able to afford disagreeing.
+ */
+interface Classification {
+  status: SafetyStatus;
+  reason: string;
+}
+
+const BLOCKED_REASONS: Record<string, string> = {
+  insulin_dosing:
+    'Wellovue cannot create experiments that involve insulin dosing. This is not a limitation of the software; it is a line the product does not cross.',
+  medication_discontinuation:
+    'Stopping a medication is a clinical decision, and never one Wellovue will help you plan.',
+  hypoglycemia_treatment:
+    'Treating a hypo is urgent care. Wellovue is not the place for it, and following a plan written in an app would cost time you may not have.',
+  hyperglycemia_treatment:
+    'Treating a hyper is urgent care, and belongs with the people who can see more than your records.',
+  emergency_triage:
+    'Wellovue cannot help in an emergency. Contact your clinician or emergency services.',
+};
+
+function classify(template: string, context: SafetyProfileContext): Classification {
   let status: SafetyStatus;
+  let reason: string;
 
   if ((BLOCKED_TEMPLATES as readonly string[]).includes(template)) {
     status = 'blocked';
+    reason =
+      BLOCKED_REASONS[template] ??
+      'Wellovue will never help plan this kind of change.';
   } else if ((CLINICIAN_GATED_TEMPLATES as readonly string[]).includes(template)) {
     status = 'clinician_gated';
+    reason = 'This needs a clinician to look at it before it can start.';
   } else if ((ALLOWED_EXPERIMENT_TEMPLATES as readonly string[]).includes(template)) {
     status = 'allowed';
+    reason = 'You can start this whenever you like.';
   } else {
     // An unrecognised template is gated, never silently allowed.
     status = 'clinician_gated';
+    reason =
+      'Wellovue does not recognise this kind of experiment, so it cannot judge whether it is safe to run unsupervised.';
   }
 
   if (
     insulinIsInvolved(context) &&
     (INSULIN_BLOCKED_TEMPLATES as readonly string[]).includes(template)
   ) {
+    if (SEVERITY.blocked > SEVERITY[status]) {
+      reason =
+        'Changing a dose while insulin is in the picture is not something Wellovue will help plan. Under a clinician it is ordinary care; here it would be an instruction dressed as an experiment.';
+    }
     status = atLeast(status, 'blocked');
   }
 
   if (!SELF_SERVE_CARE_MODES.includes(context.careMode)) {
+    if (SEVERITY.clinician_gated > SEVERITY[status]) {
+      reason =
+        'Wellovue does not yet know enough about your kind of diabetes to say this is safe to run on your own.';
+    }
     status = atLeast(status, 'clinician_gated');
   }
 
@@ -172,10 +219,59 @@ export function classifyTemplate(
   // Pregnancy and a history of severe hypoglycaemia change who has to be
   // involved, not merely how carefully.
   if (deriveSafetyTier(context.careMode, context.safetyFlags) !== 'standard') {
+    if (SEVERITY.clinician_gated > SEVERITY[status]) {
+      reason =
+        'Your care profile puts this in the group that a clinician should agree to first.';
+    }
     status = atLeast(status, 'clinician_gated');
   }
 
-  return status;
+  return { status, reason };
+}
+
+export const experimentDecisionSchema = z.object({
+  status: safetyStatusSchema,
+  reason: z.string(),
+  /** Whether the person may begin it now, without anyone else's involvement. */
+  canStart: z.boolean(),
+});
+export type ExperimentDecision = z.infer<typeof experimentDecisionSchema>;
+
+/**
+ * The safety decision, and everything that follows from it.
+ *
+ * The persisted status and the review flag are derived here rather than
+ * accepted from a request, for the reason `careMode` is: the browser supplies
+ * the question, the server supplies the safety answer. Sending
+ * `clinicianReviewRequired: false` alongside a gated template would otherwise
+ * reach the database and come back as a constraint violation, which is a 500
+ * dressed as a validation error.
+ *
+ * A blocked experiment is still recorded, as a draft that can never start.
+ * Refusing with a 400 would treat it as malformed input, and blocked insulin
+ * dosing is not malformed: it is a real question the product must decline. The
+ * record of what was asked, when, and why it was refused is worth keeping.
+ */
+export function experimentDecision(
+  template: string,
+  context: SafetyProfileContext,
+): ExperimentDecision & {
+  experimentStatus: ExperimentStatus;
+  clinicianReviewRequired: boolean;
+} {
+  const { status, reason } = classify(template, context);
+
+  return {
+    status,
+    reason,
+    canStart: status === 'allowed',
+    // `awaiting_review` rather than `draft` for a gated experiment: it is
+    // waiting on somebody, and a draft implies it is waiting on you.
+    experimentStatus: status === 'clinician_gated' ? 'awaiting_review' : 'draft',
+    // The database's `experiments_gate_chk` requires exactly this pairing.
+    // Deriving it here means the two cannot disagree.
+    clinicianReviewRequired: status === 'clinician_gated',
+  };
 }
 
 export const hypothesisSchema = z.object({

@@ -705,27 +705,40 @@ release:
 
 ## Next Implementation Ticket
 
-Phase C is complete. Phase D is gestational, and it is the first care mode that
-should not be built without clinical review — the guide's own release checklist
-says so, and nothing in the platform yet satisfies it.
+The experiment safety primitive now has a runtime caller. `POST /api/experiments`
+resolves the diabetes context, classifies, persists the decision, and the
+database's check constraints refuse it independently if it is wrong. An
+integration test walks every template across five profiles and asserts the
+persisted row matches both the classifier's intent and the constraints in
+migration 0006.
 
-Before that, two smaller pieces of debt are worth clearing, both created by
-work that shipped correctly:
+A refusal is recorded rather than rejected. Blocked insulin dosing returns 201
+with a `decision` explaining why, and the row is a draft that can never start:
+a 400 would treat it as malformed input, and it is a real question the product
+declines. Keeping what was asked, when, and why it was refused is worth more
+than a clean error code.
 
-> Give `classifyTemplate` a caller.
+Remaining, in order:
 
-Nothing invokes it. The database's check constraints enforce the same
-invariants independently, so the contract is not unenforced — but a safety
-function with no caller is one nobody notices breaking. An experiments endpoint
-is the natural caller and is Phase D-sized; a smaller step is to surface the
-classification on the Evidence screen, so a person can see which experiments
-their profile would permit before any of them exist.
+> Let somebody propose an experiment from the app.
+
+The endpoint exists and the read-only surface exists; nothing connects them.
+This is the smaller half of what used to be called Living Trials, and it should
+stay small: choose a template, state the question, see the decision. Running
+one, measuring it, and comparing the result against the prediction is Phase E
+work and needs the prediction accountability API, which has tables and
+immutability guards but no endpoints.
 
 > Let people record sleep.
 
-`metabolic.sleep_sessions` exists with no write path. Two findings currently
-name sleep in their limitations and cannot suggest recording it, because
-the suggestion catalogue only holds things the product can capture. Adding the
-write path would let a real limitation become an actionable suggestion.
+`metabolic.sleep_sessions` exists with no write path. Two findings name sleep in
+their limitations, honestly, and cannot suggest recording it because the
+suggestion catalogue only holds things the product can capture. Adding the write
+path turns a limitation into an actionable suggestion.
+
+> Phase D: gestational.
+
+The first care mode that should not be built without clinical review. The
+release checklist above says so and nothing in the platform yet satisfies it.
 
 Per-user target ranges still wait.

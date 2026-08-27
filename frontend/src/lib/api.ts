@@ -7,6 +7,7 @@ import type {
   Meal,
   CreateLabResultInput,
   DiabetesProfile,
+  Experiment,
   DiabetesSafetyFlag,
   LabResult,
   MedicationRecord,
@@ -209,6 +210,15 @@ export const api = {
         body: JSON.stringify(body),
       }),
     flagHistory: () => request<DiabetesSafetyFlag[]>('/diabetes-profile/flags'),
+  },
+
+  experiments: {
+    /**
+     * Read-only for now. Nothing in the app proposes one yet; the endpoint
+     * that does exists and applies the safety decision, and this is the
+     * surface that will show what it decided.
+     */
+    list: () => request<Experiment[]>('/experiments'),
   },
 
   evidence: {
