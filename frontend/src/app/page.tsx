@@ -9,6 +9,7 @@ import { Boundaries } from '@/components/marketing/Boundaries';
 import { ClinicianBrief } from '@/components/marketing/ClinicianBrief';
 import { EmailCapture } from '@/components/marketing/EmailCapture';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
+import { CREATE_ACCOUNT_HREF } from '@/lib/navigation';
 
 export const metadata: Metadata = {
   title: 'Wellovue',
@@ -41,7 +42,7 @@ export default function LandingPage() {
         <Reveal delay={200}>
           <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-8">
             <Link
-              href="/login"
+              href={CREATE_ACCOUNT_HREF}
               className="inline-block bg-[var(--ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
             >
               Create an account
@@ -249,7 +250,7 @@ export default function LandingPage() {
         id="stay-in-touch"
         className="border-t border-[var(--rule)] bg-[var(--paper-sunk)] py-[clamp(4rem,10vw,9rem)]"
       >
-        <div className="mx-auto max-w-6xl px-7 sm:px-6">
+        <div className="mx-auto max-w-6xl px-7 sm:px-8">
           <Reveal>
             <h2 className="max-w-[20ch] text-fold font-semibold text-balance">
               Find out what is actually true for you.

@@ -14,6 +14,7 @@ export function Disclosure({
   label,
   openLabel,
   children,
+  renderTrigger,
   triggerClassName,
   panelClassName,
   align = 'right',
@@ -21,6 +22,13 @@ export function Disclosure({
   label: string;
   openLabel?: string;
   children: ReactNode | ((close: () => void) => ReactNode);
+  /**
+   * Contents of the trigger button, when a bare text label is not enough.
+   * The button itself stays here: it owns the ref that restores focus and the
+   * aria-expanded/aria-controls pair, and nesting a second button inside it to
+   * carry an icon would be invalid markup.
+   */
+  renderTrigger?: (open: boolean) => ReactNode;
   triggerClassName?: string;
   panelClassName?: string;
   align?: 'left' | 'right';
@@ -63,7 +71,11 @@ export function Disclosure({
         onClick={() => setOpen((v) => !v)}
         className={triggerClassName}
       >
-        {open && openLabel ? openLabel : label}
+        {renderTrigger
+          ? renderTrigger(open)
+          : open && openLabel
+            ? openLabel
+            : label}
       </button>
 
       {open && (

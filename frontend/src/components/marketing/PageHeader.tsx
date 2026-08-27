@@ -39,7 +39,7 @@ export function Prose({
 }) {
   return (
     <section className="border-t border-[var(--rule)] py-[clamp(2.75rem,6vw,5rem)]">
-      <div className="mx-auto max-w-6xl px-7 sm:px-6">
+      <div className="mx-auto max-w-6xl px-7 sm:px-8">
         <div className="grid gap-x-16 gap-y-8 lg:grid-cols-12">
           <div className="lg:col-span-5">
             {eyebrow && (

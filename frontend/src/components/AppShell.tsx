@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Disclosure } from '@/components/Disclosure';
+import { Wordmark } from '@/components/RangeMark';
+import { CareBoundary } from '@/components/CareBoundary';
 import { APP_NAV, APP_SECONDARY_NAV, LEGAL_NAV, isCurrent } from '@/lib/navigation';
 import { useLogout } from '@/hooks/useAuth';
 
@@ -14,6 +16,11 @@ import { useLogout } from '@/hooks/useAuth';
  * The primary row stays Timeline, Log and Evidence: that is the daily work.
  * Contact and the policy pages are reachable from a disclosure and again from
  * the footer, which is where people look for them anyway.
+ *
+ * Shares the public site's vocabulary and not its scale. The mark, the band
+ * marking the current page and the band above the footer are the same objects
+ * as on the landing page, at the density of something used every evening
+ * rather than read once. A dashboard is scanned; a landing page is read.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -22,27 +29,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6">
       <header className="flex items-center justify-between gap-4 border-b border-rule py-5">
-        <Link href="/timeline" className="text-sm font-medium tracking-tight text-ink">
-          Wellovue
-        </Link>
+        <Wordmark href="/timeline" />
 
         <div className="flex items-center gap-6">
           <nav className="flex gap-6" aria-label="Main">
-            {APP_NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isCurrent(pathname, item.href) ? 'page' : undefined}
-                className={cn(
-                  'text-sm transition-colors',
-                  isCurrent(pathname, item.href)
-                    ? 'text-ink'
-                    : 'text-ink-faint hover:text-ink-muted',
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {APP_NAV.map((item) => {
+              const current = isCurrent(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={current ? 'page' : undefined}
+                  className={cn(
+                    'text-sm transition-colors',
+                    current
+                      ? 'nav-band text-ink'
+                      : 'nav-band nav-band-hover text-ink-faint hover:text-ink-muted',
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <Disclosure
@@ -91,8 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="flex-1 py-8">{children}</main>
 
-      <footer className="border-t border-rule py-5">
-        <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
+      <footer className="mt-8">
+        {/* Same band that opens the public footer, at the app's weight. */}
+        <div aria-hidden className="range-band-rule h-1 w-full" />
+
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2 pt-5">
           {[...APP_SECONDARY_NAV, ...LEGAL_NAV].map((item) => (
             <Link
               key={item.href}
@@ -104,11 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <p className="mt-4 text-xs leading-relaxed text-ink-faint">
-          This platform helps you understand patterns in your own data and
-          prepare for conversations with your clinician. It does not diagnose
-          conditions, adjust medication, or provide emergency advice.
-        </p>
+        <CareBoundary className="mt-5 pb-8" />
       </footer>
     </div>
   );

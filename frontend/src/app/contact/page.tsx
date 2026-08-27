@@ -23,7 +23,7 @@ export default function ContactPage() {
       {/* Placed above the form on purpose: someone in trouble should meet this
           before they start typing, not after they have sent it. */}
       <section className="border-y border-[var(--rule)] bg-[var(--paper-sunk)] py-7">
-        <div className="mx-auto max-w-6xl px-7 sm:px-6">
+        <div className="mx-auto max-w-6xl px-7 sm:px-8">
           <div className="flex max-w-[74ch] gap-4">
             <span
               aria-hidden

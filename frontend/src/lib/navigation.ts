@@ -59,6 +59,49 @@ export const APP_NAV: NavItem[] = [
   { href: '/evidence', label: 'Evidence' },
 ];
 
+/**
+ * The footer's groups.
+ *
+ * Three named columns rather than one undifferentiated row of links. A reader
+ * arrives at a footer with an errand, and the errand is almost always one of
+ * these: understand the product, get help, or check what was agreed.
+ *
+ * Support holds a single destination and keeps its heading anyway. The label
+ * is doing the work of telling someone where to go with a problem; dropping it
+ * to save a line would trade a signpost for a link.
+ */
+export const FOOTER_GROUPS: { title: string; items: NavItem[] }[] = [
+  { title: 'Product', items: [ABOUT, HOW_IT_WORKS] },
+  { title: 'Support', items: [CONTACT] },
+  { title: 'Legal', items: LEGAL_NAV },
+];
+
+/**
+ * Where "create an account" goes.
+ *
+ * /login carries both forms behind one state, so the query parameter is what
+ * decides which one a visitor lands on. Sending someone who clicked "Create
+ * account" to a sign-in form is a small betrayal that costs a signup.
+ */
+export const CREATE_ACCOUNT_HREF = '/login?create=1';
+export const SIGN_IN_HREF = '/login';
+
+/**
+ * The safety boundary, in the words both shells use.
+ *
+ * PRODUCT.md is explicit that this is a reason to trust the platform rather
+ * than fine print, so it is declared here as content and given a heading and a
+ * readable size wherever it appears. Two surfaces, one sentence, no drift.
+ */
+export const CARE_BOUNDARY = {
+  title: 'Care boundary',
+  body:
+    'Wellovue helps you understand patterns in your own data and prepare for ' +
+    'conversations with your clinician. It is not a medical device. It does ' +
+    'not diagnose, adjust medication, or advise you in an emergency. Always ' +
+    'speak to your clinician before changing anything about your treatment.',
+} as const;
+
 /** Marks the parent section as current for nested routes such as /about/data. */
 export function isCurrent(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);

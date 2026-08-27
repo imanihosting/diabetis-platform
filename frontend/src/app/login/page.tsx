@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { useCurrentUser, useLogin, useRegister } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/api';
 import { LEGAL_NAV } from '@/lib/navigation';
+import { Wordmark } from '@/components/RangeMark';
 
 /**
  * Sign in and account creation.
@@ -16,7 +17,21 @@ import { LEGAL_NAV } from '@/lib/navigation';
  * the rest of the site.
  */
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  return (
+    <Suspense fallback={null}>
+      <LoginView />
+    </Suspense>
+  );
+}
+
+function LoginView() {
+  const params = useSearchParams();
+  // "Create account" in the header and the hero both land here. Arriving on a
+  // sign-in form after clicking create is a small betrayal that costs a signup,
+  // so the link says which form it wants and this honours it.
+  const [mode, setMode] = useState<'login' | 'register'>(
+    params.get('create') === '1' ? 'register' : 'login',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -43,10 +58,8 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-7 py-5 sm:px-6">
-        <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
-          Wellovue
-        </Link>
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-7 py-5 sm:px-8">
+        <Wordmark />
         <Link
           href="/how-it-works"
           className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
@@ -55,7 +68,7 @@ export default function LoginPage() {
         </Link>
       </header>
 
-      <main className="flex flex-1 items-center px-7 py-[clamp(2rem,6vw,4rem)] sm:px-6">
+      <main className="flex flex-1 items-center px-7 py-[clamp(2rem,6vw,4rem)] sm:px-8">
         <div className="mx-auto grid w-full max-w-5xl gap-x-20 gap-y-14 lg:grid-cols-12">
           <div className="lg:col-span-6">
             <h1 className="max-w-[16ch] text-fold font-semibold text-balance">
@@ -145,7 +158,7 @@ export default function LoginPage() {
       </main>
 
       <footer className="border-t border-rule py-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-7 sm:flex-row sm:items-baseline sm:justify-between sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-7 sm:flex-row sm:items-baseline sm:justify-between sm:px-8">
           <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-2">
             {LEGAL_NAV.map((item) => (
               <Link

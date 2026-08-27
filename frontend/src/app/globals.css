@@ -154,3 +154,80 @@ body {
     stroke-dashoffset: 0;
   }
 }
+
+/* Navigation marker: the target band's geometry, in ink.
+ *
+ * A plain 1px underline is the browser default dressed up, and it says nothing
+ * about this product. The band does: a defined upper bound with a wash beneath
+ * it, which is the shape a reader has already learned from every chart here.
+ *
+ * Deliberately NOT drawn in the range colour. Colour on this product means one
+ * of two things, where a glucose value sits and how far a finding can be
+ * trusted, and a green underline on "About" would mean neither. The shape
+ * carries the identity; the ink keeps the colour honest. It also survives
+ * greyscale printing, which a tinted marker would not.
+ */
+.nav-band {
+  position: relative;
+}
+.nav-band::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.45rem;
+  height: 4px;
+  background: linear-gradient(
+    to bottom,
+    var(--ink) 0 1px,
+    color-mix(in oklch, var(--ink) 15%, transparent) 1px 100%
+  );
+}
+
+/* The same band, waiting. Hover states are a preview of the current-page
+   marker rather than a different idea. */
+.nav-band-hover::after {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--ink) 45%, transparent) 0 1px,
+    color-mix(in oklch, var(--ink) 8%, transparent) 1px 100%
+  );
+  opacity: 0;
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.nav-band-hover:hover::after,
+.nav-band-hover:focus-visible::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-band-hover::after {
+    transition: none;
+  }
+}
+
+/* The target band, used as a rule.
+ *
+ * Replaces the hairline above a footer. The upper bound is dashed and held
+ * well below full strength, which is exactly how DayTrace draws the
+ * target-high line: a solid saturated hairline running the full width of a
+ * 1280px page shouts, and this product does not. The wash beneath carries the
+ * band; the dashes only say where it stops.
+ *
+ * Defined once here rather than inline in each shell, so the two surfaces
+ * cannot drift into two slightly different bands.
+ */
+.range-band-rule {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in oklch, var(--in-range) 60%, transparent) 0 3px,
+      transparent 3px 8px
+    ),
+    linear-gradient(to bottom, transparent 0 1px, var(--in-range-wash) 1px 100%);
+  background-size:
+    100% 1px,
+    100% 100%;
+  background-position: top left;
+  background-repeat: no-repeat;
+}

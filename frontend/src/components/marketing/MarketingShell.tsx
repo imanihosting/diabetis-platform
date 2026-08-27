@@ -4,11 +4,32 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Disclosure } from '@/components/Disclosure';
-import { LEGAL_NAV, MARKETING_NAV, isCurrent } from '@/lib/navigation';
+import { RangeMark, Wordmark } from '@/components/RangeMark';
+import { CareBoundary } from '@/components/CareBoundary';
+import { MENU_TRIGGER_CLASS, MenuTriggerContent } from '@/components/MenuButton';
+import {
+  CREATE_ACCOUNT_HREF,
+  FOOTER_GROUPS,
+  MARKETING_NAV,
+  SIGN_IN_HREF,
+  isCurrent,
+} from '@/lib/navigation';
 import { useSessionHint } from '@/hooks/useSessionHint';
+import { cn } from '@/lib/cn';
 
 /**
  * Header and footer for every public page.
+ *
+ * The chrome used to be scaffolding: a text wordmark, four links at one
+ * weight, a hairline rule, and the safety boundary set in the smallest type on
+ * the page. Nothing about it said which product this was.
+ *
+ * It says so now through the product's own drawing rather than through volume.
+ * The mark is the target band with a trace settling into it; the current page
+ * is marked with that band's geometry rendered in ink; the footer opens on a
+ * thin band instead of a hairline. No new colour was introduced to do it, and
+ * none of it is decoration a reader has to learn separately, because it is all
+ * the same object the charts already teach.
  *
  * The nav sits inline from the medium breakpoint up and behind a disclosure
  * below it: four items plus an action will not fit on a 360px phone without
@@ -21,75 +42,117 @@ export function MarketingShell({ children }: { children: ReactNode }) {
   // them to a login form they do not need is how a public page becomes a dead
   // end for the people who use the product most.
   const signedIn = useSessionHint();
-  const account = signedIn
-    ? { href: '/timeline', label: 'Your timeline' }
-    : { href: '/login', label: 'Sign in' };
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-6 px-7 py-5 sm:px-6">
-        <Link
-          href="/"
-          className="text-sm font-semibold tracking-tight text-[var(--ink)]"
-        >
-          Wellovue
-        </Link>
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-6 px-7 py-5 sm:px-8">
+        <Wordmark />
 
         <nav aria-label="Main" className="hidden items-center gap-8 md:flex">
-          {MARKETING_NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isCurrent(pathname, item.href) ? 'page' : undefined}
-              className={
-                isCurrent(pathname, item.href)
-                  ? 'text-sm text-[var(--ink)] underline decoration-1 underline-offset-[6px]'
-                  : 'text-sm text-[var(--ink-muted)] underline-offset-[6px] hover:text-[var(--ink)] hover:underline'
-              }
-            >
-              {item.label}
-            </Link>
-          ))}
+          {MARKETING_NAV.map((item) => {
+            const current = isCurrent(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={current ? 'page' : undefined}
+                className={cn(
+                  'text-sm transition-colors',
+                  current
+                    ? 'nav-band text-ink'
+                    : 'nav-band nav-band-hover text-ink-muted hover:text-ink',
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
 
-          <Link
-            href={account.href}
-            className="text-sm font-medium text-[var(--ink)] underline-offset-[6px] hover:underline"
-          >
-            {account.label}
-          </Link>
+          {signedIn ? (
+            <Link
+              href="/timeline"
+              className="bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+            >
+              Your timeline
+            </Link>
+          ) : (
+            <div className="flex items-center gap-6">
+              {/* Sign in stays a quiet link. Returning users know where it is
+                  and go looking for it; the account that does not exist yet is
+                  the one that needs an obvious door. */}
+              <Link
+                href={SIGN_IN_HREF}
+                className="nav-band nav-band-hover text-sm text-ink-muted transition-colors hover:text-ink"
+              >
+                Sign in
+              </Link>
+              <Link
+                href={CREATE_ACCOUNT_HREF}
+                className="bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+              >
+                Create account
+              </Link>
+            </div>
+          )}
         </nav>
 
         <div className="md:hidden">
           <Disclosure
             label="Menu"
-            openLabel="Close"
-            triggerClassName="text-sm font-medium text-[var(--ink)] underline-offset-4 hover:underline"
-            panelClassName="w-[min(17rem,calc(100vw-3.5rem))] border border-[var(--rule)] bg-[var(--paper-raised)] p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
+            renderTrigger={(open) => <MenuTriggerContent open={open} />}
+            triggerClassName={MENU_TRIGGER_CLASS}
+            panelClassName="w-[min(19rem,calc(100vw-3.5rem))] border border-rule bg-paper-raised p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
           >
             {(close) => (
               <nav aria-label="Main" className="flex flex-col">
-                {MARKETING_NAV.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={close}
-                    aria-current={isCurrent(pathname, item.href) ? 'page' : undefined}
-                    className={
-                      isCurrent(pathname, item.href)
-                        ? 'px-3 py-2.5 text-sm font-medium text-[var(--ink)]'
-                        : 'px-3 py-2.5 text-sm text-[var(--ink-muted)] hover:text-[var(--ink)]'
-                    }
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-                <Link
-                  href={account.href}
-                  onClick={close}
-                  className="mt-1 border-t border-[var(--rule)] px-3 pb-2 pt-3 text-sm font-medium text-[var(--ink)]"
-                >
-                  {account.label}
-                </Link>
+                {MARKETING_NAV.map((item) => {
+                  const current = isCurrent(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={close}
+                      aria-current={current ? 'page' : undefined}
+                      className={cn(
+                        'flex min-h-[2.75rem] items-center px-3 text-sm',
+                        current
+                          ? 'font-medium text-ink'
+                          : 'text-ink-muted hover:bg-paper-sunk hover:text-ink',
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+
+                <div className="mt-2 flex flex-col gap-2 border-t border-rule pt-3">
+                  {signedIn ? (
+                    <Link
+                      href="/timeline"
+                      onClick={close}
+                      className="flex min-h-[2.75rem] items-center justify-center bg-ink px-3 text-sm font-medium text-paper"
+                    >
+                      Your timeline
+                    </Link>
+                  ) : (
+                    <>
+                      <Link
+                        href={CREATE_ACCOUNT_HREF}
+                        onClick={close}
+                        className="flex min-h-[2.75rem] items-center justify-center bg-ink px-3 text-sm font-medium text-paper"
+                      >
+                        Create account
+                      </Link>
+                      <Link
+                        href={SIGN_IN_HREF}
+                        onClick={close}
+                        className="flex min-h-[2.75rem] items-center justify-center px-3 text-sm text-ink-muted hover:bg-paper-sunk hover:text-ink"
+                      >
+                        Sign in
+                      </Link>
+                    </>
+                  )}
+                </div>
               </nav>
             )}
           </Disclosure>
@@ -98,45 +161,69 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-[var(--rule)] py-10">
-        <div className="mx-auto max-w-6xl px-7 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:gap-x-14">
-            <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-3">
-              {MARKETING_NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="text-sm text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+      <SiteFooter signedIn={signedIn} />
+    </div>
+  );
+}
 
-            <nav aria-label="Legal" className="flex flex-wrap gap-x-8 gap-y-3">
-              {LEGAL_NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="text-sm text-[var(--ink-faint)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+function SiteFooter({ signedIn }: { signedIn: boolean }) {
+  return (
+    <footer className="mt-[clamp(3rem,7vw,6rem)]">
+      {/* The target band as the page's ground line, replacing a hairline rule.
+          The same object every chart above it is drawn on, so it reads as this
+          product signing the page rather than as a decorative stripe. */}
+      <div aria-hidden className="range-band-rule h-1.5 w-full" />
+
+      <div className="mx-auto max-w-6xl px-7 py-[clamp(2.5rem,5vw,4rem)] sm:px-8">
+        <div className="flex flex-col gap-x-16 gap-y-10 lg:flex-row lg:justify-between">
+          <div className="max-w-[34ch]">
+            <div className="flex items-center gap-2.5 text-[0.95rem] font-semibold tracking-tight text-ink">
+              <RangeMark />
+              Wellovue
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+              Personal metabolic evidence, from your own data.
+            </p>
+
+            {!signedIn && (
+              <Link
+                href={CREATE_ACCOUNT_HREF}
+                className="mt-5 inline-flex min-h-[2.75rem] items-center bg-ink px-5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+              >
+                Create account
+              </Link>
+            )}
           </div>
 
-          <div className="mt-8 flex flex-col gap-4 text-xs leading-relaxed text-[var(--ink-faint)] sm:flex-row sm:justify-between">
-            <p className="max-w-[62ch]">
-              For understanding your own patterns and preparing for appointments.
-              Not a medical device, and not a substitute for professional care.
-              Always speak to your clinician before changing anything about your
-              treatment.
-            </p>
-            <p className="shrink-0">&#169; {new Date().getFullYear()}</p>
+          <div className="grid grid-cols-2 gap-x-10 gap-y-9 sm:grid-cols-3 lg:gap-x-16">
+            {FOOTER_GROUPS.map((group) => (
+              <nav key={group.title} aria-label={group.title}>
+                <h2 className="text-xs font-semibold uppercase tracking-[0.09em] text-ink">
+                  {group.title}
+                </h2>
+                <ul className="mt-3.5 space-y-2.5">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="text-sm text-ink-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
           </div>
         </div>
-      </footer>
-    </div>
+
+        <CareBoundary className="mt-[clamp(2.5rem,5vw,3.5rem)]" />
+
+        <p className="mt-8 text-xs text-ink-faint">
+          &#169; {new Date().getFullYear()} Wellovue
+        </p>
+      </div>
+    </footer>
   );
 }

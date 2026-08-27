@@ -23,7 +23,7 @@ export function Fold({
 }) {
   return (
     <section className="border-t border-[var(--rule)] py-[clamp(3.5rem,9vw,8rem)]">
-      <div className="mx-auto max-w-6xl px-7 sm:px-6">
+      <div className="mx-auto max-w-6xl px-7 sm:px-8">
         <div className="grid gap-x-16 gap-y-10 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <p className="flex items-baseline gap-3 text-sm text-[var(--ink-faint)]">
