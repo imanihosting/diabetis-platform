@@ -37,17 +37,24 @@ function LoginView() {
 
   const router = useRouter();
   const existing = useCurrentUser();
+  const login = useLogin();
+  const register = useRegister();
+  const active = mode === 'login' ? login : register;
 
   // Arriving here with a live session means the visitor was looking for their
   // account, not for a form. Send them on rather than asking them to prove
   // again what the cookie already establishes.
+  //
+  // Only for a session that was already there. Submitting the form also
+  // resolves the user, and this effect used to fire on that too — which sent a
+  // brand-new account to the timeline a moment after registration had sent it
+  // to the setup question, and the timeline won. The mutation owns where it
+  // goes next; this handles the case it does not.
+  const submitting = active.isPending || active.isSuccess;
   useEffect(() => {
+    if (submitting) return;
     if (existing.data) router.replace('/timeline');
-  }, [existing.data, router]);
-
-  const login = useLogin();
-  const register = useRegister();
-  const active = mode === 'login' ? login : register;
+  }, [existing.data, router, submitting]);
   const creating = mode === 'register';
 
   function handleSubmit(event: React.FormEvent) {

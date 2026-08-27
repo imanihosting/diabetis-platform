@@ -1,10 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { findingStrength, type PatternResponse, type StructuredFinding } from '@wellovue/types';
+import {
+  findingStrength,
+  profileNeedsSetup,
+  type PatternResponse,
+  type StructuredFinding,
+} from '@wellovue/types';
 import { AppShell } from '@/components/AppShell';
 import { FindingCard } from '@/components/FindingCard';
+import { UnsupportedCareMode } from '@/components/UnsupportedCareMode';
 import { useEvidence } from '@/hooks/useEvidence';
+import { useDiabetesProfile } from '@/hooks/useDiabetesProfile';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -31,6 +38,7 @@ export default function EvidencePage() {
   const [days, setDays] = useState(30);
   const user = useCurrentUser();
   const evidence = useEvidence(days);
+  const profile = useDiabetesProfile();
 
   if (user.isLoading) {
     return (
@@ -97,12 +105,37 @@ export default function EvidencePage() {
         <EngineError error={evidence.error} onRetry={() => void evidence.refetch()} />
       )}
 
-      {evidence.data && <Findings response={evidence.data} days={days} />}
+      {evidence.data && (
+        <Findings
+          response={evidence.data}
+          days={days}
+          needsSetup={
+            profile.data ? profileNeedsSetup(profile.data.profile) : false
+          }
+        />
+      )}
     </AppShell>
   );
 }
 
-function Findings({ response, days }: { response: PatternResponse; days: number }) {
+function Findings({
+  response,
+  days,
+  needsSetup,
+}: {
+  response: PatternResponse;
+  days: number;
+  needsSetup: boolean;
+}) {
+  // The gate answers with exactly one finding and nothing else, so this is the
+  // whole screen rather than a card among others.
+  const gated = response.findings.find(
+    (f) => f.findingType === 'care_mode_unsupported',
+  );
+  if (gated) {
+    return <UnsupportedCareMode finding={gated} needsSetup={needsSetup} />;
+  }
+
   // Nothing was measured at all — every question came back with a count of
   // zero. Checked on the sample counts rather than on a detector's name so
   // this does not break the first time the engine adds a detector.

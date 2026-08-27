@@ -155,7 +155,17 @@ create trigger diabetes_safety_flags_append_only
 
 A flag is a claim about someone's risk at a moment in time. When the platform
 believed a person was pregnant, or using insulin, is exactly the sort of record
-that must not be quietly revised later. A flag is therefore resolved by
+that must not be quietly revised later.
+
+Append-only means the history cannot be rewritten while the person has an
+account. It does not mean the person cannot leave. Migration 0013 refused every
+DELETE, and because `user_id` cascades from `identity.users` that made an
+account with any recorded flag **impossible to erase** — GDPR erasure failed
+with a message about append-only storage. Migration 0015 narrows the rule:
+UPDATE is always refused, and DELETE is refused only while the referenced user
+still exists, which is the one case where there is a subject left to protect.
+Safety flags are health data about a person, so they leave with the account,
+like glucose and meals and unlike `audit.events`. A flag is therefore resolved by
 inserting a row saying so, and the current state of a flag is its most recent
 row. That is why there is no `resolved_at` and no unique constraint on
 `(user_id, flag)`: both belong to a mutable design, and this is not one.
@@ -192,6 +202,9 @@ reintroduces a specific failure.
 | Care mode is derived server-side, never accepted from a client | A request could otherwise ask for a Type 1 record to be analysed by Type 2 detectors. |
 | Existing accounts backfilled to `type_2_standard`, source `assumed` | Leaving them `unknown` is conservative in name only: it takes the evidence screen away from people whose data has not changed and whose findings were correct yesterday. |
 | Nothing added to `PatternRequest` until the engine can act on it | An unused field is a lie with a schema, and the next person cannot tell whether the engine honours it. |
+| New accounts are `unknown`/`unanswered`, not `type_2`/`assumed` | There is now a way to ask, so guessing is a choice rather than a constraint, and guessing wrong means reading someone's data with the wrong model of their body. |
+| `unanswered` is a separate source from `assumed` | The absence of a claim is not a weaker version of a claim that could be wrong. Collapsing them loses the only signal that says whether anyone was ever asked. |
+| Safety flags may be deleted by account erasure, never otherwise | Refusing every DELETE made an account with any flag impossible to erase. The guarantee is that history cannot be rewritten while the person has an account. |
 
 ## Shared Type Changes
 
@@ -473,18 +486,21 @@ finding, so it currently renders through the ordinary finding card.
 
 ### Phase B: Setup Flow, Then Capability Gates
 
-In this order. Steps 1 and 2 must land together: switching the default to
+Steps 1 to 3 are **shipped**: migrations `0014` and `0015`, `/profile`, and the
+`UnsupportedCareMode` surface. Steps 4 to 6 remain.
+
+In this order. Steps 1 and 2 had to land together: switching the default to
 `unknown` before there is a way to answer the question strands every new
 account on a screen that refuses to help them.
 
-1. **Care-profile setup after signup.** The shortest flow that can set
+1. **Care-profile setup after signup.** — SHIPPED. The shortest flow that can set
    `diabetesType` and the flags that change the care mode. Keyboard and screen
    reader paths included, since this gates the whole product.
-2. **Switch new users to `unknown`.** Change the default in
+2. **Switch new users to `unknown`.** — SHIPPED. Change the default in
    `DiabetesProfileService.createForNewUser` and the registration transaction.
    Existing accounts keep their backfilled `type_2_standard`; this is about
    people who have not answered yet, not about revoking an answer.
-3. **Design the unsupported evidence state.** A real treatment for
+3. **Design the unsupported evidence state.** — SHIPPED. A real treatment for
    `care_mode_unsupported` on `/evidence`, distinct from a finding, that states
    the support level plainly and points at the profile. Currently it falls
    through the ordinary card, which reads acceptably and was not designed for
@@ -630,25 +646,28 @@ release:
 
 ## Next Implementation Ticket
 
-Phase A is shipped. The next ticket is Phase B steps 1 and 2, which have to
-land together:
+Phase B steps 1 to 3 are shipped. The next ticket is steps 4 and 5, which have
+to land together:
 
-> Ask a new account what kind of diabetes they have, and stop assuming.
+> Move detector selection into the engine, and tell it which care mode it is
+> analysing.
 
 Acceptance criteria:
 
-- A profile setup flow runs after account creation and can set `diabetesType`
-  and the flags that change the care mode.
-- The flow is completable by keyboard and readable by a screen reader. It gates
-  the whole product, so it cannot be the one screen that excludes people.
-- New registrations default to `unknown` instead of `type_2_standard`, and the
-  `assumed` diagnosis source is no longer written for accounts created after
-  this change.
-- Existing accounts keep their backfilled `type_2_standard`. This ticket is
-  about people who have not answered yet, not about revoking an answer.
-- A new account that skips setup sees the unsupported evidence state with a
-  route back into setup, and never a blank screen.
-- The demo record's four Type 2 findings are unchanged.
+- The engine exposes a detector registry. Each detector declares the care modes
+  it supports and the safety flags that block it.
+- `careMode` is added to `PatternRequest` in **both**
+  `packages/types/src/insights.ts` and `metabolic-engine/app/models/findings.py`.
+  They are the same contract in two languages and their docstrings say so.
+- The engine refuses to run a detector outside its declared care modes, and the
+  backend refuses to ask. Two independent refusals, not one moved: NestJS stays
+  the workflow gate.
+- The engine never reads the diabetes profile itself. Care mode arrives in the
+  request, so there is one source of truth for it.
+- Engine tests cover registry filtering by care mode and by blocked flag.
+- The demo record's four Type 2 findings, their order and their effect
+  estimates are unchanged.
 
-Do not start step 4 (`careMode` on `PatternRequest`) before step 5 (the engine
-detector registry). An unused field is a lie with a schema.
+Do not do step 4 without step 5. A `careMode` field the engine cannot act on is
+an unused field, which is the trap the target-range columns were left out to
+avoid.

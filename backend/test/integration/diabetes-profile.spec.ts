@@ -56,24 +56,44 @@ describe('diabetes profile', () => {
 
   describe('creation', () => {
     it('gives every new account a profile, in the registration transaction', async () => {
-      // A user without a profile reads as care mode `unknown`, which switches
-      // the evidence screen off. Nobody should land there by registering.
+      // A row must exist, or the account is indistinguishable from one whose
+      // registration half-failed.
       const { rows } = await pool.query<{ care_mode: string; diagnosis_source: string }>(
         'select care_mode, diagnosis_source from clinical.diabetes_profiles where user_id = $1',
         [userId],
       );
       expect(rows).toHaveLength(1);
-      expect(rows[0].care_mode).toBe('type_2_standard');
-      // Recorded as an assumption, because nobody asked them yet.
-      expect(rows[0].diagnosis_source).toBe('assumed');
+      // Not Type 2. There is now a way to ask, so guessing would be a choice.
+      expect(rows[0].care_mode).toBe('unknown');
+      // `unanswered`, not `assumed`: the absence of a claim rather than a claim
+      // that could be wrong.
+      expect(rows[0].diagnosis_source).toBe('unanswered');
     });
 
-    it('returns the profile, its flags, and what they permit', async () => {
+    it('does not interpret anything until the question is answered', async () => {
       const res = await http().get('/api/diabetes-profile').set(auth()).expect(200);
-      expect(res.body.profile.careMode).toBe('type_2_standard');
-      expect(res.body.capabilities.safetyTier).toBe('standard');
-      expect(res.body.capabilities.evidenceEnabled).toBe(true);
+      expect(res.body.profile.careMode).toBe('unknown');
+      expect(res.body.capabilities.evidenceEnabled).toBe(false);
+      expect(res.body.capabilities.unsupportedReason).toBeTruthy();
       expect(res.body.activeFlags).toEqual([]);
+
+      const evidence = await http().get('/api/evidence').set(auth()).expect(200);
+      expect(evidence.body.findings[0].findingType).toBe('care_mode_unsupported');
+    });
+
+    it('starts interpreting once the person answers', async () => {
+      const saved = await http()
+        .put('/api/diabetes-profile')
+        .set(auth())
+        .send({ diabetesType: 'type_2' })
+        .expect(200);
+
+      expect(saved.body.profile.careMode).toBe('type_2_standard');
+      // The answer replaces the absence of one, and is marked as having come
+      // from the person rather than from the platform.
+      expect(saved.body.profile.diagnosisSource).toBe('self_reported');
+      expect(saved.body.capabilities.evidenceEnabled).toBe(true);
+      expect(saved.body.capabilities.safetyTier).toBe('standard');
     });
 
     it('refuses to serve a profile to an unauthenticated caller', async () => {
@@ -103,6 +123,7 @@ describe('diabetes profile', () => {
         .set(auth())
         .send({ diabetesType: 'type_2' })
         .expect(200);
+      // Reached here having answered Type 2 above.
 
       const before = await http().get('/api/diabetes-profile').set(auth()).expect(200);
       expect(before.body.profile.careMode).toBe('type_2_standard');
@@ -179,6 +200,37 @@ describe('diabetes profile', () => {
         ]),
       );
       expect(remove?.message).toMatch(/append-only/i);
+    });
+
+    it('still lets the account be erased', async () => {
+      // Migration 0013 refused every DELETE, and `user_id` cascades from
+      // identity.users — so an account that had ever recorded a flag could not
+      // be deleted at all, and erasure failed with a message about
+      // append-only storage. Append-only means the history cannot be rewritten
+      // while the person has an account; it does not mean the person cannot
+      // leave.
+      const { rows } = await pool.query<{ id: string }>(
+        'insert into identity.users (email) values ($1) returning id',
+        [`erasure-${Date.now()}@test.local`],
+      );
+      const doomed = rows[0].id;
+
+      await pool.query(
+        `insert into clinical.diabetes_safety_flags (user_id, flag, status, source)
+         values ($1, 'pregnancy', 'active', 'self_reported')`,
+        [doomed],
+      );
+
+      const failure = await captureError(() =>
+        pool.query('delete from identity.users where id = $1', [doomed]),
+      );
+      expect(failure).toBeNull();
+
+      const left = await pool.query(
+        'select 1 from clinical.diabetes_safety_flags where user_id = $1',
+        [doomed],
+      );
+      expect(left.rowCount).toBe(0);
     });
 
     it('rejects a flag name the contract does not know', async () => {

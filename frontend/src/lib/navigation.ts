@@ -40,7 +40,13 @@ export const MARKETING_NAV: NavItem[] = [ABOUT, HOW_IT_WORKS, CONTACT];
  * is in front of them. Contact stays, because needing help does not stop at
  * sign-in.
  */
-export const APP_SECONDARY_NAV: NavItem[] = [CONTACT];
+const CARE_PROFILE: NavItem = {
+  href: '/profile',
+  label: 'Care profile',
+  detail: 'What kind of diabetes, and what changes how it is read',
+};
+
+export const APP_SECONDARY_NAV: NavItem[] = [CARE_PROFILE, CONTACT];
 
 /**
  * Kept separate so it can sit in the footer on both surfaces without ever

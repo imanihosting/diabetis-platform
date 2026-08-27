@@ -52,16 +52,25 @@ export class DiabetesProfileService {
    * arriving in it by way of a half-failed registration is not a safety
    * decision anybody made.
    *
-   * Recorded as Type 2 with the source `assumed`. That is what the product
-   * currently offers and says on its landing page, so it is the honest default
-   * — and marking it as an assumption keeps it distinguishable from an answer
-   * once onboarding exists to ask the question.
+   * Recorded as `unknown`, and the source as `unanswered`.
+   *
+   * Phase A recorded new accounts as Type 2 because there was no way to ask.
+   * There is now, so guessing would be a choice rather than a constraint, and
+   * guessing wrong means interpreting someone's data with the wrong model of
+   * their body. A person who has not answered gets an evidence screen that
+   * says so and a route to the question, which is a worse first impression
+   * than a page of findings and a far better one than confident findings
+   * computed for somebody else's physiology.
+   *
+   * Accounts backfilled by migration 0013 keep `type_2_standard`/`assumed`.
+   * This changes what happens to people who have not answered, not what was
+   * already decided for people who cannot be asked retroactively.
    */
   async createForNewUser(userId: string, client: PoolClient): Promise<void> {
     await client.query(
       `insert into clinical.diabetes_profiles
          (user_id, diabetes_type, care_mode, diagnosis_source)
-       values ($1, 'type_2', 'type_2_standard', 'assumed')
+       values ($1, 'unknown', 'unknown', 'unanswered')
        on conflict (user_id) do nothing`,
       [userId],
     );
@@ -305,7 +314,7 @@ function unknownProfile(userId: string): DiabetesProfile {
     diabetesType: 'unknown',
     careMode: 'unknown',
     diagnosedOn: null,
-    diagnosisSource: 'assumed',
+    diagnosisSource: 'unanswered',
     clinicianSupported: false,
     createdAt: now,
     updatedAt: now,

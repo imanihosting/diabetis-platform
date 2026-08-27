@@ -82,7 +82,10 @@ export function useRegister() {
     onSuccess: (data) => {
       tokenStore.set(data.tokens.accessToken);
       queryClient.setQueryData(['currentUser'], data.user);
-      router.push('/timeline');
+      // A new account has no care profile, so nothing can be interpreted for
+      // them yet. Sending them to a timeline of raw readings first, and only
+      // explaining later why Evidence refuses, gets the order backwards.
+      router.push('/profile?welcome=1');
     },
   });
 }

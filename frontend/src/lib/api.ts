@@ -1,11 +1,17 @@
 import { clearSessionHint } from '@/hooks/useSessionHint';
 import type {
+  CareModeCapabilities,
   ClientAuthResponse,
   GlucoseSummary,
   LoginInput,
   Meal,
+  DiabetesProfile,
+  DiabetesSafetyFlag,
   MedicationRecord,
   PatternResponse,
+  RecordSafetyFlagInput,
+  SafetyFlag,
+  UpdateDiabetesProfileInput,
   RegisterInput,
   TimelineEntry,
   User,
@@ -124,6 +130,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+export interface DiabetesContextResponse {
+  profile: DiabetesProfile;
+  activeFlags: SafetyFlag[];
+  capabilities: CareModeCapabilities;
+}
+
 export { refreshSession };
 
 export const api = {
@@ -173,6 +185,28 @@ export const api = {
         { method: 'POST', body: form },
       );
     },
+  },
+
+  diabetesProfile: {
+    /**
+     * Profile, active flags and capabilities in one response.
+     *
+     * Care mode and safety tier are absent from every request on purpose: they
+     * are derived on the server, because they decide which analysis a person's
+     * data is put through.
+     */
+    get: () => request<DiabetesContextResponse>('/diabetes-profile'),
+    update: (body: UpdateDiabetesProfileInput) =>
+      request<DiabetesContextResponse>('/diabetes-profile', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+    recordFlag: (body: RecordSafetyFlagInput) =>
+      request<DiabetesContextResponse>('/diabetes-profile/flags', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    flagHistory: () => request<DiabetesSafetyFlag[]>('/diabetes-profile/flags'),
   },
 
   evidence: {

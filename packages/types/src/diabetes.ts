@@ -48,8 +48,17 @@ export const diagnosisSourceSchema = z.enum([
   'self_reported',
   'clinician',
   'imported',
-  /** Recorded by the platform rather than answered by anyone. Never treat as fact. */
+  /**
+   * The platform filled the gap itself. Migration 0013 backfilled every
+   * account that predated the profile layer this way. Never treat as fact.
+   */
   'assumed',
+  /**
+   * Nobody has said yet. Distinct from `assumed`, which is a claim that could
+   * be wrong; this is the absence of a claim, and it is why a new account's
+   * evidence screen declines to interpret anything.
+   */
+  'unanswered',
 ]);
 export type DiagnosisSource = z.infer<typeof diagnosisSourceSchema>;
 
@@ -91,6 +100,19 @@ export const diabetesProfileSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 export type DiabetesProfile = z.infer<typeof diabetesProfileSchema>;
+
+/**
+ * Whether a person has actually told the platform what they have.
+ *
+ * Drives the setup prompt, and is deliberately not `careMode === 'unknown'`:
+ * someone can answer "I am not sure" and still have been asked, and asking
+ * them again every time they open the app would be nagging rather than care.
+ */
+export function profileNeedsSetup(profile: {
+  diagnosisSource: DiagnosisSource;
+}): boolean {
+  return profile.diagnosisSource === 'unanswered';
+}
 
 /** What a client may change. Care mode is derived, never accepted from a browser. */
 export const updateDiabetesProfileSchema = z.object({

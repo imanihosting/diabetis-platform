@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   careModeCapabilities,
+  profileNeedsSetup,
   careModeSchema,
   deriveCareMode,
   deriveSafetyTier,
@@ -109,6 +110,25 @@ describe('careModeCapabilities', () => {
     for (const mode of careModeSchema.options) {
       expect(() => careModeCapabilities(mode, [])).not.toThrow();
     }
+  });
+});
+
+describe('profileNeedsSetup', () => {
+  it('is true only when nobody has answered', () => {
+    expect(profileNeedsSetup({ diagnosisSource: 'unanswered' })).toBe(true);
+  });
+
+  it('is false once someone answers, even if the answer is "not sure"', () => {
+    // Answering "I am not sure" is a real answer. Treating it as unanswered
+    // would prompt the same person for the same thing on every visit, which is
+    // nagging rather than care.
+    expect(profileNeedsSetup({ diagnosisSource: 'self_reported' })).toBe(false);
+  });
+
+  it('is false for the accounts backfilled before the question existed', () => {
+    // They cannot be asked retroactively, and prompting them would imply they
+    // had skipped something they were never offered.
+    expect(profileNeedsSetup({ diagnosisSource: 'assumed' })).toBe(false);
   });
 });
 

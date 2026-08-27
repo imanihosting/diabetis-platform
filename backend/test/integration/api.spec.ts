@@ -723,6 +723,16 @@ describe('API end to end', () => {
         [email],
       );
       userId = rows[0].id;
+
+      // A new account starts as `unknown` and the engine is not run for it.
+      // Answering the question is what a real user does before any of this
+      // means anything, so the suite does it too rather than reaching into
+      // the database to fake it.
+      await http()
+        .put('/api/diabetes-profile')
+        .set(auth())
+        .send({ diabetesType: 'type_2' })
+        .expect(200);
     });
 
     /**
