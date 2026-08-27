@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import type { LoginInput, RegisterInput } from '@wellovue/types';
 import { api, ApiError, refreshSession, tokenStore } from '@/lib/api';
+import { hasSessionHint } from './useSessionHint';
 
 /**
  * Resolves the signed-in user.
@@ -12,12 +13,24 @@ import { api, ApiError, refreshSession, tokenStore } from '@/lib/api';
  * Before giving up, this tries to renew the session from the HttpOnly refresh
  * cookie — that is what keeps a reload from logging the person out, without
  * any credential being readable by script.
+ *
+ * A visitor with no session is not asked to prove it. The refresh cookie is
+ * HttpOnly and unreadable, but it is always written alongside a readable hint
+ * with the same lifetime, so the absence of the hint is a reliable "there is
+ * nothing to renew". Skipping the call saves a round trip on every anonymous
+ * page view and, more visibly, stops the sign-in page from printing an
+ * expected 401 into the browser console: a production page whose console has
+ * a red line in it on first load teaches people to ignore red lines.
+ *
+ * A hint without a usable cookie still behaves: the refresh returns 401, the
+ * hint is cleared, and the next load takes the quiet path.
  */
 export function useCurrentUser() {
   return useQuery({
     queryKey: ['currentUser'],
     queryFn: async () => {
       if (!tokenStore.get()) {
+        if (!hasSessionHint()) return null;
         const renewed = await refreshSession();
         if (!renewed) return null;
       }

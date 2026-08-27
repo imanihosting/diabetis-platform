@@ -45,6 +45,64 @@ const envSchema = z.object({
 
   METABOLIC_ENGINE_URL: z.string().url().default('http://localhost:8000'),
   METABOLIC_ENGINE_TOKEN: z.string().optional(),
+
+  /**
+   * Whether an X-Forwarded-For header may be believed.
+   *
+   * Off by default, and that default is the safe one: when nothing trustworthy
+   * sets the header, anyone can, and a rate limiter that keys on a
+   * client-supplied string is worse than none — it is bypassable by the only
+   * people it is meant to stop. Turn this on only once every request reaches
+   * the backend through a proxy that overwrites the header (nginx, Caddy,
+   * Cloudflare, an ALB). See infra/README.md.
+   */
+  TRUST_PROXY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
+   * Refuse to start when the database connection is encrypted but unverified.
+   *
+   * Encryption without verification stops passive eavesdropping and does
+   * nothing about an active attacker who can answer as the database. The
+   * platform currently runs against a self-signed certificate on the VM, so
+   * this is opt-in rather than implied by NODE_ENV: turning it on before the
+   * CA-signed certificate is in place would stop the service booting. It is
+   * the switch to flip on the way to production, and the startup warning says
+   * so on every boot until then.
+   */
+  REQUIRE_VERIFIED_DB_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
+   * Warn above this many milliseconds of actual statement execution.
+   *
+   * Separate from connection acquisition, which is timed and reported on its
+   * own. Raise it on a machine that reaches the database over a VPN: every
+   * query there carries ~55ms of round trip that will not exist once the
+   * backend is deployed beside the database, and warnings nobody can act on
+   * are how people learn to stop reading warnings.
+   */
+  SLOW_QUERY_WARN_MS: z.coerce.number().int().positive().default(250),
+  SLOW_ACQUIRE_WARN_MS: z.coerce.number().int().positive().default(1000),
+
+  // Rate limits. Configurable because the right number depends on how the
+  // service is fronted, and because the test suite needs to reach them
+  // deliberately without waiting fifteen minutes.
+  THROTTLE_GLOBAL_LIMIT: z.coerce.number().int().positive().default(300),
+  THROTTLE_GLOBAL_TTL_S: z.coerce.number().int().positive().default(60),
+  /** Sign-in and registration. Deliberately tight: this is the brute-force surface. */
+  THROTTLE_AUTH_LIMIT: z.coerce.number().int().positive().default(10),
+  THROTTLE_AUTH_TTL_S: z.coerce.number().int().positive().default(900),
+  /** Session refresh. Looser: several tabs legitimately refresh at once. */
+  THROTTLE_REFRESH_LIMIT: z.coerce.number().int().positive().default(60),
+  THROTTLE_REFRESH_TTL_S: z.coerce.number().int().positive().default(900),
+  /** Unauthenticated writes that reach a human or a table: waitlist, contact. */
+  THROTTLE_WRITE_LIMIT: z.coerce.number().int().positive().default(5),
+  THROTTLE_WRITE_TTL_S: z.coerce.number().int().positive().default(3600),
 });
 
 export type Env = z.infer<typeof envSchema>;

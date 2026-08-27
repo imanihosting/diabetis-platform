@@ -1,0 +1,70 @@
+name: CI
+
+# No job here reads issue titles, PR bodies, branch names, or any other
+# attacker-controlled string into a shell. Everything runs from the checked-out
+# tree with fixed commands, so there is nothing to inject into.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded run tells you about a commit nobody is looking at any more.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Types, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci`, never `npm install`. The lockfile is authoritative and the
+      # install is reproducible; see the trap in HANDOVER.md about what
+      # `npm install` does under a path containing a space.
+      - name: Install
+        run: npm ci
+
+      # The other workspaces compile against the shared contract package, so it
+      # has to be built before anything typechecks.
+      - name: Build shared contract
+        run: npm run build --workspace @wellovue/types
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test --workspace backend
+
+      # Catches a broken page before it reaches a deployment rather than after.
+      - name: Build frontend
+        run: npm run build --workspace frontend
+
+  integration:
+    name: Integration suite
+    runs-on: ubuntu-latest
+    # Builds four images and brings up PostgreSQL, MinIO and the engine.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Brings up its own PostgreSQL with the production extension versions,
+      # MinIO, and the metabolic engine, migrates, runs the backend and engine
+      # suites, then tears the whole thing down. Nothing touches the
+      # provisioned VMs.
+      - name: Full stack tests
+        run: npm run test:docker

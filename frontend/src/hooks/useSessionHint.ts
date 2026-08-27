@@ -32,6 +32,18 @@ export function useSessionHint(): boolean {
   return hinted;
 }
 
+/**
+ * The same question, answered synchronously.
+ *
+ * `useSessionHint` resolves after mount so server and client markup agree.
+ * Query functions run after mount already and need the answer immediately, so
+ * they read the cookie directly.
+ */
+export function hasSessionHint(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.split('; ').some((c) => c.startsWith(`${HINT}=`));
+}
+
 /** Clears the hint when the session it described turns out to be gone. */
 export function clearSessionHint(): void {
   document.cookie = `${HINT}=; Max-Age=0; Path=/; SameSite=Lax`;

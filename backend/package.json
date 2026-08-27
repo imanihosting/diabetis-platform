@@ -2,7 +2,7 @@
   "name": "backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Core API \u2014 identity, consent, ingestion, timeline, experiments, audit.",
+  "description": "Core API — identity, consent, ingestion, timeline, experiments, audit.",
   "scripts": {
     "build": "npm run build --workspace @wellovue/types && nest build",
     "start": "node dist/main.js",
@@ -24,6 +24,7 @@
     "@nestjs/platform-express": "^11.2.3",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/terminus": "^11.1.1",
+    "@nestjs/throttler": "^6.5.0",
     "@wellovue/types": "*",
     "argon2": "^0.41.1",
     "cookie-parser": "^1.4.7",

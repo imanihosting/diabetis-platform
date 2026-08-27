@@ -8,6 +8,8 @@ import {
 import { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ENV, type Env } from '../config/env';
 
+
+
 /**
  * Thin typed wrapper over a node-postgres pool.
  *
@@ -20,7 +22,23 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
   private readonly pool: Pool;
 
+  /**
+   * Thresholds for the two warnings in `query`.
+   *
+   * Execution and acquisition are timed separately because they fail for
+   * unrelated reasons: a slow statement wants an index, a slow acquisition
+   * wants a bigger pool or a connection that stopped being dropped. Measured
+   * against the production VM, the login lookup executes in 0.048ms and the
+   * client observes ~100ms, so nearly everything seen from a developer machine
+   * is VPN round-trip rather than work.
+   */
+  private readonly slowQueryMs: number;
+  private readonly slowAcquireMs: number;
+
   constructor(@Inject(ENV) env: Env) {
+    this.slowQueryMs = env.SLOW_QUERY_WARN_MS;
+    this.slowAcquireMs = env.SLOW_ACQUIRE_WARN_MS;
+
     // node-pg lets `sslmode` in the URL override an explicit `ssl` option and
     // reads `require` more strictly than libpq. Strip it and decide here, so
     // the same DATABASE_URL works for psql, psycopg, and node alike.
@@ -35,7 +53,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           ? false
           : { rejectUnauthorized: env.DATABASE_SSL_REJECT_UNAUTHORIZED },
       max: 20,
-      idleTimeoutMillis: 30_000,
+      // Establishing a connection to the database costs ~700ms measured from a
+      // developer machine: a TCP handshake and a TLS handshake across the VPN.
+      // Dropping idle clients after 30 seconds meant a quiet service paid that
+      // again on the next request, and the cost landed on whichever query
+      // happened to be first. Ten minutes keeps a warm client through normal
+      // gaps in traffic.
+      idleTimeoutMillis: 600_000,
+      // Without keepalive probes the firewall between here and the VM silently
+      // drops an idle connection, and the pool only finds out when it hands
+      // that dead client to a request. This is the same failure the metabolic
+      // engine shows as `discarding closed connection`.
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 30_000,
       connectionTimeoutMillis: 10_000,
       application_name: 'wellovue-backend',
     });
@@ -58,13 +88,37 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     text: string,
     params: unknown[] = [],
   ): Promise<T[]> {
-    const started = Date.now();
-    const result = await this.pool.query<T>(text, params);
-    const elapsed = Date.now() - started;
-    if (elapsed > 500) {
-      this.logger.warn(`Slow query (${elapsed}ms): ${text.slice(0, 120)}`);
+    // Waiting for a client and running the statement are timed separately,
+    // because they fail for unrelated reasons and the fix for one does nothing
+    // for the other. Timing them together produced warnings like
+    // `Slow query (1571ms): select 1 as ok`, which is not a slow query at all:
+    // `select 1` executes in microseconds and the time was a fresh TLS
+    // handshake. A warning that names the wrong culprit sends the next person
+    // hunting for an index that would have changed nothing.
+    const requested = Date.now();
+    const client = await this.pool.connect();
+    const acquired = Date.now();
+    try {
+      const result = await client.query<T>(text, params);
+      const executed = Date.now();
+
+      const waited = acquired - requested;
+      const ran = executed - acquired;
+
+      if (waited > this.slowAcquireMs) {
+        this.logger.warn(
+          `Slow connection acquire (${waited}ms) — pool exhausted, or a new ` +
+            'TCP/TLS handshake. Not the statement.',
+        );
+      }
+      if (ran > this.slowQueryMs) {
+        this.logger.warn(`Slow query (${ran}ms): ${text.slice(0, 120)}`);
+      }
+
+      return result.rows;
+    } finally {
+      client.release();
     }
-    return result.rows;
   }
 
   /** Returns the single expected row, or null. Throws if more than one row comes back. */

@@ -63,9 +63,38 @@ The PostgreSQL VM currently presents its default self-signed certificate, so
 connections are encrypted but unverified (`sslmode=require` plus
 `DATABASE_SSL_REJECT_UNAUTHORIZED=false`).
 
-**Before production:** issue a CA-signed server certificate, set
-`DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and change the URL to
-`sslmode=verify-full`.
+Encryption without verification stops someone reading the traffic and does
+nothing about someone answering as the database. For a health record that is
+the half that matters, so this is a go-live blocker rather than a hardening
+nice-to-have.
+
+The backend now says so on every boot. While `DATABASE_SSL_REJECT_UNAUTHORIZED`
+is false it logs a warning naming the risk; setting `REQUIRE_VERIFIED_DB_TLS=true`
+turns that warning into a refusal to start. It is opt-in rather than implied by
+`NODE_ENV`, because the running deployment has always had this condition and
+enforcing it on upgrade would take the service down rather than fix it.
+
+**The sequence:**
+
+1. Issue a CA-signed certificate for the database host. An internal CA is fine;
+   what matters is that the client can verify a chain it was configured to
+   trust. `verify-full` also checks the hostname against the certificate, so
+   the certificate must be issued for the name the URL connects to. Connecting
+   by bare IP (`10.10.5.185`) cannot satisfy that, so this step includes giving
+   the host a DNS name and using it in `DATABASE_URL`.
+2. Install the certificate and key on the VM, point `ssl_cert_file` and
+   `ssl_key_file` at them, and reload PostgreSQL.
+3. Distribute the CA certificate to every client that connects: the backend
+   container, the metabolic engine container, and the migration runner.
+4. Change `DATABASE_URL` to `sslmode=verify-full`, set
+   `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and set `REQUIRE_VERIFIED_DB_TLS=true`.
+5. Verify before trusting it. `npm run db:verify-tls` connects and reports what
+   the connection actually negotiated; it exits non-zero if the certificate did
+   not verify. Run it from a machine that is not the database host.
+
+Note that the Python engine reads `sslmode` straight from the URL, so step 4
+covers it too — psycopg honours `verify-full` natively and needs no separate
+flag.
 
 ## Object storage
 
@@ -136,10 +165,26 @@ carry a baked-in `localhost:4000` pointing at itself. The handler reads
 ### Still outstanding
 
 - **PostgreSQL TLS is unverified.** The VM presents its default self-signed
-  certificate. Issue a CA-signed one, set
-  `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and move the URL to
-  `sslmode=verify-full`.
+  certificate. Follow the sequence under [TLS](#tls) above; the backend warns
+  about it on every boot until it is done.
+- **Rate limits are per process.** The throttler counts in memory, so N backend
+  replicas mean N independent budgets and an attacker gets N times the
+  attempts. Correct for the single container running today, wrong the moment a
+  second one starts. Redis is already in the compose file and unused;
+  `@nest-lab/throttler-storage-redis` is the change to make before scaling out.
+- **Client addresses are not visible to the rate limiter yet.** Requests reach
+  the backend through the frontend's `/api` proxy, which cannot see the
+  caller's socket address and deliberately strips the forwarding headers the
+  caller sent, since it has no way to tell a real one from a forged one.
+  IP-keyed limits therefore currently apply per proxy rather than per visitor.
+  The per-account limit on sign-in is unaffected and works today. Put a real
+  reverse proxy in front, have it overwrite `X-Forwarded-For`, then set
+  `TRUST_PROXY=true` to make the address-keyed limits meaningful.
+
+### Resolved
+
 - **Shared infrastructure credentials.** The VM `support` login and the MinIO
-  root account are used by systems beyond this platform, so they are not
-  rotated from here. They appeared in this repository's early history and
-  should be rotated by whoever owns that infrastructure.
+  root account appeared in this repository's early history. They have since
+  been rotated by the infrastructure owner. The old history is still reachable
+  by SHA on GitHub, so the rotation is what makes those values worthless rather
+  than their removal from the repository.

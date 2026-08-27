@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Post, Req, UsePipes } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ThrottleScope, THROTTLE_WRITE } from '../common/guards/throttle.guard';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import {
@@ -20,6 +21,9 @@ export class SupportController {
   ) {}
 
   @Public()
+  // Reaches a table a human reads. Five an hour per address is more than a
+  // person needs and far less than a spam run wants.
+  @ThrottleScope(THROTTLE_WRITE)
   @Post()
   @HttpCode(200)
   @ApiOperation({ summary: 'Send a message from the contact page' })

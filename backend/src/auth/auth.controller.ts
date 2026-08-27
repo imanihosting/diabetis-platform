@@ -10,6 +10,11 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ThrottleScope,
+  THROTTLE_AUTH,
+  THROTTLE_REFRESH,
+} from '../common/guards/throttle.guard';
 import type { Request, Response } from 'express';
 import {
   loginSchema,
@@ -61,6 +66,9 @@ export class AuthController {
   }
 
   @Public()
+  // Keyed on address plus the submitted email, so an attacker cannot work
+  // around the limit by rotating either one alone.
+  @ThrottleScope(THROTTLE_AUTH)
   @Post('register')
   @ApiOperation({ summary: 'Create a patient account' })
   @UsePipes(new ZodValidationPipe(registerSchema))
@@ -72,6 +80,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottleScope(THROTTLE_AUTH)
   @Post('login')
   @HttpCode(200)
   @ApiOperation({ summary: 'Exchange credentials for a session' })
@@ -84,6 +93,9 @@ export class AuthController {
   }
 
   @Public()
+  // Looser than login: several tabs legitimately refresh at the same moment,
+  // and possession of the rotating cookie is already the check that matters.
+  @ThrottleScope(THROTTLE_REFRESH)
   @Post('refresh')
   @HttpCode(200)
   @ApiOperation({

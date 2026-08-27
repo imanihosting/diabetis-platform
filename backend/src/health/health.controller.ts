@@ -1,11 +1,19 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import { DatabaseService } from '../database/database.service';
 import { StorageService } from '../storage/storage.service';
 import { EngineClient } from '../engine/engine.client';
 
 @ApiTags('health')
+// Docker probes these every ten seconds from the same address as everything
+// else behind the proxy. Counting them would spend the budget on ourselves.
+//
+// Bare @SkipThrottle() skips the throttler named 'default' and only that one.
+// That is the whole exemption here because the named limits are opt-in: this
+// controller declares no scope, so none of them apply to it.
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(

@@ -21,6 +21,7 @@
     "test": "npm run test --workspaces --if-present",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "db:status": "node --env-file-if-exists=.env scripts/migrate.mjs status",
+    "db:verify-tls": "node --env-file-if-exists=.env scripts/verify-db-tls.mjs",
     "infra:up": "docker compose -f infra/docker/docker-compose.yml up -d redis",
     "infra:down": "docker compose -f infra/docker/docker-compose.yml down",
     "docker:up": "docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build",

@@ -33,6 +33,22 @@ async function proxy(request: NextRequest): Promise<Response> {
   headers.delete('connection');
   headers.delete('content-length');
 
+  // Forwarding headers arrive here straight from the caller, and nothing in
+  // front of this route rewrites them. Passing them through would let anyone
+  // hand the backend an address of their choosing, which matters because the
+  // backend's rate limiter keys on exactly that: a caller could rotate the
+  // header and get a fresh budget on every request.
+  //
+  // They are dropped rather than set, because a Next route handler cannot see
+  // the client's socket address and inventing a value would be a lie. The
+  // backend then keys on this proxy's address and refuses to read the header
+  // at all unless TRUST_PROXY says a real proxy owns it. Once one is in front
+  // of the deployment, it becomes the thing that sets these, and it is what
+  // the backend is configured to trust.
+  for (const header of ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip', 'forwarded']) {
+    headers.delete(header);
+  }
+
   const hasBody = !['GET', 'HEAD'].includes(request.method);
 
   const response = await fetch(target, {

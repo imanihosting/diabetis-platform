@@ -222,11 +222,17 @@ The mono cut is reserved for measured values.
 - The Evidence screen, reading live findings through `GET /api/evidence`
 - Public site: landing, About, How this works, Contact, Privacy, Terms, Cookies
 - Waitlist and contact endpoints, both public, validated, audited
+- Rate limiting on every public endpoint, keyed on address and, for sign-in,
+  on the target account as well
+- GitHub Actions CI: types, lint, unit tests, frontend build, and the full
+  Docker integration stack
 
 ## 9. What is not
 
 - Prediction accountability API. Tables and immutability guards exist; no
   endpoints.
+- **Deployment.** There is CI but no CD, and no hosting is assumed. Everything
+  is containerised and environment-driven; nothing decides where it runs.
 - Future Sandbox, Living Trials, Clinician Evidence Room.
 - Mobile app.
 - Contact messages land in `support.contact_messages` with **no notification**.
@@ -237,8 +243,8 @@ The mono cut is reserved for measured values.
 | Decision | Current state |
 |---|---|
 | Legal review of Privacy and Terms | **Required before launch.** Five placeholders: `[LEGAL ENTITY]`, `[JURISDICTION]`, `[HOSTING PROVIDER]`, `[EMAIL PROVIDER]`, `[LIABILITY CAP]` |
-| PostgreSQL TLS | Encrypted but unverified (VM's self-signed cert). Needs a CA-signed cert, then `verify-full` and `DATABASE_SSL_REJECT_UNAUTHORIZED=true` |
-| Shared VM and MinIO root credentials | Appeared in early git history. History was rewritten and force-pushed, but GitHub still serves the old commit by SHA. **Rotate them, and ask GitHub Support to purge unreachable objects** |
+| PostgreSQL TLS | Encrypted but unverified (VM's self-signed cert). Warned about on every boot; `REQUIRE_VERIFIED_DB_TLS=true` turns the warning into a refusal to start. Full sequence in `infra/README.md` |
+| Shared VM and MinIO root credentials | Appeared in early git history and have since been **rotated** by the infrastructure owner. GitHub still serves the old commit by SHA, so the rotation is what makes the values worthless; purging unreachable objects is tidying, not remediation |
 | Embedding dimension | `vector(1536)` is a placeholder. Fix before the first production migration; changing it later rewrites the table |
 | Auth provider | Local JWT. Credentials are isolated in `identity.credentials`, so moving to OIDC means dropping one table |
 | Infra names | Database, roles and S3 prefix still carry the old product name |
