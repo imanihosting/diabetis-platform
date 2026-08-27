@@ -1,6 +1,6 @@
 # Handover
 
-State of Wellovue as of 27 August 2026, at commit `00cb9e0` plus Ticket 5.
+State of Wellovue as of 27 August 2026, at commit `6cccc0a` plus launch hardening.
 
 Read this before changing anything. Several decisions below look arbitrary and
 are not, and a few traps in this repo will cost you an hour if you meet them
@@ -128,7 +128,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 71 unit, no infrastructure needed
+npm test                  # 75 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -139,7 +139,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 71 | no |
+| `backend/test/*.spec.ts` | 75 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -148,7 +148,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/diabetes-profile.spec.ts` | 14 | yes |
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
-| `backend/test/integration/throttle.spec.ts` | 5 | yes |
+| `backend/test/integration/throttle.spec.ts` | 7 | yes |
 | `metabolic-engine/tests` | 29 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -419,33 +419,53 @@ work if wanted.
 
 ## 10. Go-live blockers
 
-Neither is code, and neither has moved.
-
 **PostgreSQL TLS is encrypted but unverified.** The VM presents a self-signed
 certificate. The backend warns about it on every boot;
 `REQUIRE_VERIFIED_DB_TLS=true` turns that into a refusal to start once a
 CA-signed certificate is in place. `npm run db:verify-tls` reports the real
 state and exits non-zero.
 
-It also names a blocker nothing else had: `DATABASE_URL` connects to the bare
+The long pole is not the certificate. `DATABASE_URL` connects to the bare
 address `10.10.5.185`, and **no certificate can satisfy `verify-full` against
 an IP literal** — there is no name to check it against and SNI cannot carry
-one. The host needs a DNS name before the certificate is worth buying. Full
-sequence in `infra/README.md`.
+one. The host needs a DNS name before a certificate is worth buying, which is
+the only item on this list with a lead time. Setting
+`REQUIRE_VERIFIED_DB_TLS=true` while the URL is still an IP now refuses to
+start *with that reason*, rather than failing the TLS handshake and sending the
+next person after their certificate for a week. Full sequence in
+`infra/README.md`, reordered so the DNS name is step one.
 
-**Rate limiting is per process and cannot see real client addresses.** The
-throttler counts in memory, so N replicas mean N independent budgets. Redis is
-in the compose file and unused; `@nest-lab/throttler-storage-redis` is the
-change to make before scaling out.
+**Rate limiting is now shared, and half-keyed.** Counts live in Redis when
+`REDIS_URL` is set, so replicas share one budget;
+`REQUIRE_SHARED_RATE_LIMIT=true` refuses to start without it, which is the
+switch to flip when a second replica appears. When Redis is configured and then
+stops answering, counts fall back to the process rather than failing open or
+closed — verified against the running stack: with Redis stopped the tenth
+failed sign-in still returns 429, one line is logged rather than one per
+request, and recovery announces itself.
 
-Separately, every browser request reaches the backend through the frontend's
-`/api` proxy, which cannot see the caller's socket address and deliberately
-strips the forwarding headers the caller sent, since it has no way to tell a
-real one from a forged one. Address-keyed limits are therefore per-proxy. The
-per-account limit on sign-in works today either way. Put a real reverse proxy
-in front, have it overwrite `X-Forwarded-For`, then set `TRUST_PROXY=true`.
+What is still missing is the key, not the count. Every browser request reaches
+the backend through the frontend's `/api` proxy, which cannot see the caller's
+socket address and strips the forwarding headers it was sent, since it cannot
+tell a real one from a forged one. Address-keyed limits are therefore per
+proxy. The per-account limit on sign-in works today either way. Put a real
+reverse proxy in front, have it overwrite `X-Forwarded-For`, then set
+`TRUST_PROXY=true`.
 
----
+**Legal placeholders are still in the pages, on purpose, and now cannot ship.**
+`node scripts/check-launch-blockers.mjs` fails while any of the five remain,
+and `.github/workflows/release-gate.yml` runs it on a version tag. It is not on
+every push deliberately: it fails today, and a permanently red CI is one nobody
+reads, which would cost the ordinary checks their meaning to protect a launch
+nobody has scheduled. Filling the blanks in is not the same as legal review.
+
+**Checking a deployment.** `npm run canary -- <base-url>` reports whether
+something should carry traffic, entirely over HTTP — no shell on the host, no
+container environment. Health failures (process, database, object storage) fail
+it anywhere; posture failures (verified TLS, shared limits) are warnings unless
+`--require-production`, because both are states the platform runs in on purpose
+and a gate that goes red for the shipped configuration gets switched off.
+`/api/health/posture` is what it reads.
 
 ## 11. Open decisions
 
@@ -470,10 +490,13 @@ no longer a ticket in that sequence — it is a choice between four things, and
 the order is a judgement somebody should make deliberately rather than by
 picking up whatever is nearest:
 
-1. **The go-live blockers in §10.** Neither is code. The database TLS one is
-   blocked on a DNS name before a certificate is worth buying, so it has a lead
-   time nothing else here has, and it is the only item on this list that can be
-   started today and finished by somebody else.
+1. **The rest of the go-live blockers in §10.** The code side is done: rate
+   limits are shared, both unsafe states refuse to start behind a flag, a
+   canary checks a deployment from outside, and the legal placeholders cannot
+   ship. What is left is not code — a DNS name for the database host, a
+   certificate for it, a reverse proxy that sets `X-Forwarded-For`, and the
+   five legal facts plus a lawyer to read the result. The DNS name is the only
+   item with a lead time, and it blocks the certificate.
 2. **Exporting the packet.** It is a web page and nothing else. A printed sheet
    is what actually gets carried into an appointment, and the page was built
    for a printer without anybody testing it against one.

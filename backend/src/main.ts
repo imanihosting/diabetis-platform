@@ -16,6 +16,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ENV, type Env } from './config/env';
+import { connectsToBareAddress } from './config/database-url';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -35,6 +36,7 @@ async function bootstrap(): Promise<void> {
   }
 
   warnAboutDatabaseTls(env, logger);
+  warnAboutRateLimitStorage(env, logger);
   // cookie-parser is applied in AppModule so tests share the behaviour.
   app.enableCors({
     origin: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
@@ -83,16 +85,58 @@ async function bootstrap(): Promise<void> {
  * because a risk nobody is reminded of is a risk nobody fixes.
  */
 function warnAboutDatabaseTls(env: Env, logger: Logger): void {
+  // Checked before the verification state, because it is the more useful
+  // answer when both are wrong. `verify-full` checks the certificate was
+  // issued for the host being connected to, and RFC 6066 does not allow an IP
+  // address in SNI — so there is no name to check and no certificate that can
+  // help. Someone who sets REQUIRE_VERIFIED_DB_TLS=true against an IP literal
+  // would otherwise get a TLS handshake failure and go looking for a problem
+  // with their certificate, which is the wrong week of work.
+  if (env.REQUIRE_VERIFIED_DB_TLS && connectsToBareAddress(process.env.DATABASE_URL)) {
+    throw new Error(
+      'Refusing to start: REQUIRE_VERIFIED_DB_TLS=true but DATABASE_URL points ' +
+        'at a bare IP address. No certificate can satisfy verify-full against ' +
+        'an IP literal — there is no name to check it against, and SNI cannot ' +
+        'carry one. The database host needs a DNS name first. See infra/README.md.',
+    );
+  }
+
   if (env.DATABASE_SSL_REJECT_UNAUTHORIZED) return;
 
   const message =
     'Database TLS is ENCRYPTED BUT UNVERIFIED ' +
     '(DATABASE_SSL_REJECT_UNAUTHORIZED=false). An attacker who can answer as ' +
-    'the database will not be detected. Install a CA-signed certificate, set ' +
-    'sslmode=verify-full, then set DATABASE_SSL_REJECT_UNAUTHORIZED=true and ' +
-    'REQUIRE_VERIFIED_DB_TLS=true. See infra/README.md.';
+    'the database will not be detected. Give the host a DNS name, install a ' +
+    'CA-signed certificate, set sslmode=verify-full, then set ' +
+    'DATABASE_SSL_REJECT_UNAUTHORIZED=true and REQUIRE_VERIFIED_DB_TLS=true. ' +
+    'See infra/README.md.';
 
   if (env.REQUIRE_VERIFIED_DB_TLS) {
+    throw new Error(`Refusing to start: ${message}`);
+  }
+  logger.warn(message);
+}
+
+/**
+ * Says, on every boot, whether the rate limiter's counts are shared.
+ *
+ * The same shape as the TLS warning above, because it is the same kind of
+ * problem: a state the platform runs in today which stops being acceptable at
+ * a specific, knowable moment. For TLS that moment is going to production; for
+ * this it is the second replica. Counting in one process means every replica
+ * has its own budget, so the login limit that makes credential stuffing
+ * expensive quietly multiplies by the deployment size.
+ */
+function warnAboutRateLimitStorage(env: Env, logger: Logger): void {
+  if (env.REDIS_URL) return;
+
+  const message =
+    'Rate limits are COUNTED PER PROCESS (REDIS_URL is not set). This is ' +
+    'correct for a single backend and wrong for more than one: N replicas ' +
+    'give an attacker N times the attempts. Set REDIS_URL, then ' +
+    'REQUIRE_SHARED_RATE_LIMIT=true. See infra/README.md.';
+
+  if (env.REQUIRE_SHARED_RATE_LIMIT) {
     throw new Error(`Refusing to start: ${message}`);
   }
   logger.warn(message);

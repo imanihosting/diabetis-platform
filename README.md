@@ -215,7 +215,12 @@ fails closed: an unrecognised template is gated, never allowed.
 - [x] Clinician packet: thirty or ninety days on one page — findings with their
       limitations, glucose, lab trends, every experiment beside the expectation
       recorded before it ran, and what is worth raising
-- [x] Rate limiting on public endpoints, and CI on every push
+- [x] Rate limiting on public endpoints, shared across replicas in Redis and
+      falling back to per-process counts rather than failing open when Redis
+      stops answering
+- [x] A canary that checks a deployment from outside over HTTP, and a release
+      gate that refuses to ship a page still saying `[LEGAL ENTITY]`
+- [x] CI on every push
 - [x] Containerised stack and an isolated Docker test environment
 
 **Not built.** The loop is closed; these are the things around it.

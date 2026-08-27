@@ -101,6 +101,31 @@ describe('rate limiting', () => {
     }
   });
 
+  it('reports the posture a deploy gate checks from outside', async () => {
+    // The canary asserts these over HTTP rather than by reading a container's
+    // environment. Both are states the platform runs in deliberately today, so
+    // neither fails readiness — see scripts/canary.mjs, which is the thing
+    // that goes red, and only with --require-production.
+    const res = await http().get('/api/health/posture').expect(200);
+
+    expect(res.body).toHaveProperty('databaseTlsVerified');
+    expect(res.body).toHaveProperty('trustProxy');
+    expect(res.body.rateLimit).toHaveProperty('configured');
+    expect(res.body.rateLimit).toHaveProperty('sharedAcrossReplicas');
+
+    // The integration stack has no REDIS_URL, so counts are per process and
+    // the endpoint says so rather than claiming a guarantee it does not have.
+    expect(res.body.rateLimit.configured).toBe(false);
+    expect(res.body.rateLimit.sharedAcrossReplicas).toBe(false);
+  });
+
+  it('answers the posture probe without a token, like the other probes', async () => {
+    // A load balancer has no credentials. Nothing here is a secret: it reports
+    // which of two publicly documented configurations is in force, both of
+    // which are already described in the README.
+    await http().get('/api/health/posture').expect(200);
+  });
+
   it('never throttles the health probes', async () => {
     // Containers poll these every ten seconds from the same address as
     // everything else behind the proxy. Counting them would spend the budget

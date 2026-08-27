@@ -33,7 +33,9 @@
     "test:docker:down": "docker compose -f infra/docker/docker-compose.test.yml down -v --remove-orphans",
     "test:stack:up": "docker compose -f infra/docker/docker-compose.test.yml up -d --build postgres minio minio-init migrate metabolic-engine-test",
     "test:integration": "npm run test:integration --workspace backend",
-    "test:docker:keep": "KEEP_UP=1 bash scripts/test-docker.sh"
+    "test:docker:keep": "KEEP_UP=1 bash scripts/test-docker.sh",
+    "canary": "node scripts/canary.mjs",
+    "check:launch": "node scripts/check-launch-blockers.mjs"
   },
   "devDependencies": {
     "pg": "^8.13.1"

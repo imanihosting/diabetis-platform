@@ -86,23 +86,27 @@ enforcing it on upgrade would take the service down rather than fix it.
 
 **The sequence:**
 
-1. Issue a CA-signed certificate for the database host. An internal CA is fine;
-   what matters is that the client can verify a chain it was configured to
-   trust. `verify-full` also checks the hostname against the certificate, so
-   the certificate must be issued for the name the URL connects to. Connecting
-   by bare IP (`10.10.5.185`) cannot satisfy that, so this step includes giving
-   the host a DNS name and using it in `DATABASE_URL`.
-2. Install the certificate and key on the VM, point `ssl_cert_file` and
+1. **Give the database host a DNS name.** This is first because it is the only
+   step with a lead time, and nothing after it can start without it.
+   `verify-full` checks the certificate against the host being connected to,
+   and RFC 6066 does not permit an IP literal in SNI — so `10.10.5.185` has no
+   name to check and no certificate can fix that. The backend refuses to start
+   with a message saying exactly this if `REQUIRE_VERIFIED_DB_TLS=true` is set
+   while `DATABASE_URL` still points at a bare address, rather than letting the
+   handshake fail and sending somebody after their certificate for a week.
+2. Issue a CA-signed certificate for that name. An internal CA is fine; what
+   matters is that the client can verify a chain it was configured to trust.
+3. Install the certificate and key on the VM, point `ssl_cert_file` and
    `ssl_key_file` at them, and reload PostgreSQL.
-3. Distribute the CA certificate to every client that connects: the backend
+4. Distribute the CA certificate to every client that connects: the backend
    container, the metabolic engine container, and the migration runner.
-4. Change `DATABASE_URL` to `sslmode=verify-full`, set
+5. Change `DATABASE_URL` to `sslmode=verify-full`, set
    `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and set `REQUIRE_VERIFIED_DB_TLS=true`.
-5. Verify before trusting it. `npm run db:verify-tls` connects and reports what
+6. Verify before trusting it. `npm run db:verify-tls` connects and reports what
    the connection actually negotiated; it exits non-zero if the certificate did
    not verify. Run it from a machine that is not the database host.
 
-Note that the Python engine reads `sslmode` straight from the URL, so step 4
+Note that the Python engine reads `sslmode` straight from the URL, so step 5
 covers it too — psycopg honours `verify-full` natively and needs no separate
 flag.
 
@@ -154,6 +158,54 @@ rewrites are resolved when the app is built, so a containerised frontend would
 carry a baked-in `localhost:4000` pointing at itself. The handler reads
 `BACKEND_URL` at run time, so one image works in every environment.
 
+## Rate limiting
+
+Counts live in Redis when `REDIS_URL` is set, which makes one budget shared by
+every replica. Without it they live in the backend process: correct for the one
+container running today, and wrong the moment a second starts, because N
+replicas would give an attacker N times the attempts against the same account.
+
+`REQUIRE_SHARED_RATE_LIMIT=true` turns running without Redis into a refusal to
+start. It is the same shape as `REQUIRE_VERIFIED_DB_TLS` and for the same
+reason: the unsafe state is the one the platform runs in today, so making it
+fatal by default would stop a working deployment for a condition it has always
+had. Flip it at the moment a second replica appears. Until then the boot
+warning repeats, because a risk nobody is reminded of is a risk nobody fixes.
+
+**When Redis is configured and then stops answering**, the counts fall back to
+the backend's own memory. That is deliberate and it is the third of three
+possible behaviours, the other two being worse. Failing open would delete
+brute-force protection at the moment the system is already unwell, silently.
+Failing closed would turn a Redis blip into a total outage of a health record
+somebody may be reading in an appointment. Falling back keeps the limits
+enforced and stops them being shared — the state the platform had before Redis
+existed, which is known and survivable. The degradation is logged once per
+outage rather than once per request, and `/api/health/posture` reports
+`rateLimit.configured: true` with `sharedAcrossReplicas: false` while it lasts.
+
+Verified against the running stack rather than assumed: with Redis stopped, the
+tenth failed sign-in for one account still returns 429, one error line is
+logged, and the recovery line appears when Redis comes back.
+
+## Checking a deployment from outside
+
+```bash
+npm run canary -- http://localhost:4000
+npm run canary -- https://api.example.com --require-production
+```
+
+`scripts/canary.mjs` takes a base URL and reports whether a deployment should
+carry traffic. Health checks — process up, database and object storage
+reachable — fail it anywhere. Posture checks — verified database TLS, shared
+rate limits — are warnings by default and failures under
+`--require-production`, because both are states the platform runs in on purpose
+today and a gate that goes red for the configuration something shipped with is
+a gate that gets switched off.
+
+Everything is observed over HTTP. Nothing needs a shell on the host or the
+environment of a container, so the same command works against the compose
+stack, a staging box, and whatever production turns out to be.
+
 ## Security posture
 
 | Concern | How it is handled |
@@ -171,25 +223,23 @@ carry a baked-in `localhost:4000` pointing at itself. The handler reads
 | Audit integrity | Append-only at the database level; writes commit in the same transaction as the data they describe. |
 | Engine authentication | Service-token auth may only be disabled when `ENVIRONMENT=development`; anywhere else a missing token fails startup. |
 | Dependency advisories | `npm audit` clean. Pinned minimums for transitives live in the root `overrides`. |
+| Rate limit counts | Shared across replicas in Redis when `REDIS_URL` is set; per process otherwise, and the backend says which on every boot and at `/api/health/posture`. |
 
 ### Still outstanding
 
 - **PostgreSQL TLS is unverified.** The VM presents its default self-signed
   certificate. Follow the sequence under [TLS](#tls) above; the backend warns
   about it on every boot until it is done.
-- **Rate limits are per process.** The throttler counts in memory, so N backend
-  replicas mean N independent budgets and an attacker gets N times the
-  attempts. Correct for the single container running today, wrong the moment a
-  second one starts. Redis is already in the compose file and unused;
-  `@nest-lab/throttler-storage-redis` is the change to make before scaling out.
-- **Client addresses are not visible to the rate limiter yet.** Requests reach
-  the backend through the frontend's `/api` proxy, which cannot see the
-  caller's socket address and deliberately strips the forwarding headers the
-  caller sent, since it has no way to tell a real one from a forged one.
-  IP-keyed limits therefore currently apply per proxy rather than per visitor.
-  The per-account limit on sign-in is unaffected and works today. Put a real
-  reverse proxy in front, have it overwrite `X-Forwarded-For`, then set
-  `TRUST_PROXY=true` to make the address-keyed limits meaningful.
+- **Client addresses are the remaining half of rate limiting.** The counts are
+  shared now (see [Rate limiting](#rate-limiting)), but they are keyed on an
+  address the backend cannot yet see. Requests reach it through the frontend's
+  `/api` proxy, which strips the forwarding headers the caller sent because it
+  cannot tell a real one from a forged one, so address-keyed limits apply per
+  proxy rather than per visitor. The per-account limit on sign-in is unaffected
+  and works today.
+  Put a real reverse proxy in front, have it overwrite `X-Forwarded-For`, then
+  set `TRUST_PROXY=true`. Express is configured to trust exactly one hop, so a
+  client cannot prepend its own entry and choose which bucket it lands in.
 
 ### Resolved
 

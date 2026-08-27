@@ -78,6 +78,21 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
 
   /**
+   * Refuse to start when rate limits are counted per process rather than shared.
+   *
+   * The same shape as REQUIRE_VERIFIED_DB_TLS, and for the same reason: the
+   * unsafe state is the one the platform runs in today, so making it fatal by
+   * default would stop a working deployment for a condition it has always had.
+   * One backend counting in memory is correct; two are not, because an attacker
+   * then gets the limit twice over. Turn this on at the same moment a second
+   * replica appears, and the boot warning repeats until somebody does.
+   */
+  REQUIRE_SHARED_RATE_LIMIT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
    * Warn above this many milliseconds of actual statement execution.
    *
    * Separate from connection acquisition, which is timed and reported on its

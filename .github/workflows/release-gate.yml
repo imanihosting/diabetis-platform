@@ -1,0 +1,32 @@
+name: Release gate
+
+# Deliberately not on every push.
+#
+# These checks fail today and are meant to: the platform has known launch
+# blockers, written down in HANDOVER.md §10 and §11, and they are not defects
+# to be fixed on the way past. Running them on every commit would leave CI red
+# permanently, and a permanently red CI is a CI nobody reads — which would cost
+# the ordinary checks their meaning to protect a launch that has not been
+# scheduled.
+#
+# So they gate the release instead. Tag a version or run this by hand, and
+# nothing ships while a user-facing page still says [LEGAL ENTITY].
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launch-blockers:
+    name: No unfilled placeholders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-launch-blockers.mjs

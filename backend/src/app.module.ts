@@ -32,6 +32,7 @@ import {
   THROTTLE_REFRESH,
   THROTTLE_WRITE,
 } from './common/guards/throttle.guard';
+import { createThrottlerStorage } from './common/guards/throttle-storage';
 import { ENV, type Env } from './config/env';
 import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
 
@@ -48,11 +49,13 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     // the right number depends on what fronts the service, and the test suite
     // has to be able to reach a limit without waiting fifteen minutes.
     //
-    // Storage is in-process. That is correct for one container and wrong for
-    // several: N replicas mean N independent budgets, so an attacker gets N
-    // times the attempts. Redis is already in the compose file and unused;
-    // wiring @nest-lab/throttler-storage-redis is the change to make before
-    // running more than one backend. Noted in infra/README.md.
+    // Counts live in Redis when REDIS_URL is set, so every replica shares one
+    // budget. Without it they live in this process, which is correct for a
+    // single container and wrong for several — N replicas would mean N
+    // independent budgets and N times the attempts. `REQUIRE_SHARED_RATE_LIMIT`
+    // turns running without Redis into a refusal to start, which is the switch
+    // to flip when scaling past one. See ResilientThrottlerStorage for what
+    // happens when Redis is configured and then stops answering.
     ThrottlerModule.forRootAsync({
       inject: [ENV],
       useFactory: (env: Env) => ({
@@ -62,6 +65,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
           { name: THROTTLE_REFRESH, ttl: env.THROTTLE_REFRESH_TTL_S * 1000, limit: env.THROTTLE_REFRESH_LIMIT },
           { name: THROTTLE_WRITE, ttl: env.THROTTLE_WRITE_TTL_S * 1000, limit: env.THROTTLE_WRITE_LIMIT },
         ],
+        storage: createThrottlerStorage(env.REDIS_URL),
       }),
     }),
 
