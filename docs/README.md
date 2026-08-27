@@ -20,6 +20,7 @@ The carried-forward direction is:
 - [Technical Architecture](./technical-architecture.md)
 - [Data Model](./data-model.md)
 - [Build Roadmap](./build-roadmap.md)
+- [Diabetes-Wide Platform Expansion](./diabetes-wide-platform.md)
 
 ## Product Thesis
 
@@ -28,4 +29,3 @@ Most diabetes tools track what happened. This platform should help a person unde
 The product primitive is not "log glucose." It is:
 
 > Turn everyday diabetes data into personal, testable metabolic evidence.
-
