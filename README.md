@@ -187,20 +187,36 @@ fails closed: an unrecognised template is gated, never allowed.
 
 ## Status
 
-Phase 0 and the foundations of Phases 1–2 are in place:
+**Built.**
 
 - [x] Monorepo, shared contract package, local development environment
-- [x] PostgreSQL 17 + TimescaleDB + pgvector, ten domain schemas, migrations
+- [x] PostgreSQL 17 + TimescaleDB + pgvector, eleven domain schemas, migrations
 - [x] Authentication, audit logging, consent tables
 - [x] Glucose entry, CSV import from CGM/meter exports, meal logging with photos,
-      medication records, activity events
+      medication records, activity events, lab and body measurements
 - [x] Unified metabolic timeline
-- [x] Pattern engine v1 with structured findings
-- [x] Containerised stack and an isolated Docker test environment
+- [x] Pattern engine with structured findings, behind a detector registry
+- [x] Evidence screen reading live findings through `GET /api/evidence`
+- [x] Diabetes care profile: Type 1, Type 2, gestational, prediabetes and
+      unknown are all representable, and every care mode without reviewed
+      detectors is refused twice — once by the API, once by the engine
+- [x] Prediabetes evidence: HbA1c and weight trends, fasting glucose trend,
+      activity consistency, meal timing
+- [x] Experiment safety: every proposal is classified against the care profile,
+      persisted with its decision, and re-checked by database constraints
 - [x] Rate limiting on public endpoints, and CI on every push
-- [x] Evidence screen wired to the pattern engine through `GET /api/evidence`
-- [ ] Prediction accountability API (tables and guards exist)
-- [ ] Future Sandbox, Living Trials, Clinician Evidence Room
+- [x] Containerised stack and an isolated Docker test environment
+
+**Not built.** The loop the product promises is not closed yet: findings exist,
+and the steps that turn one into a tested answer do not.
+
+- [ ] Proposing an experiment from a finding — the endpoint exists, no screen
+      calls it
+- [ ] Prediction accountability: tables and immutability guards exist, no
+      endpoints, so nothing is recorded before an experiment runs
+- [ ] Measuring an experiment against the prediction that preceded it
+- [ ] Clinician evidence packet
+- [ ] Gestational and Type 1 workflows, both of which need clinical review first
 
 ## Open decisions
 

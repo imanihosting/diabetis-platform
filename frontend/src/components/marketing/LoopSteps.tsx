@@ -1,3 +1,13 @@
+/**
+ * The loop, with the parts that do not exist yet marked as not existing.
+ *
+ * The loop is the product thesis and describing it is honest. Describing it in
+ * the present tense when half of it is unbuilt is not, and this product's own
+ * position is that showing the limits is the trust signal rather than a
+ * disclaimer to bury. A reader who signs up expecting step five and finds it
+ * missing has been told something about the product that no amount of careful
+ * copy elsewhere can undo.
+ */
 const STEPS = [
   {
     n: 1,
@@ -18,21 +28,25 @@ const STEPS = [
     n: 4,
     title: 'Weigh the explanations',
     body: 'A pattern usually has more than one cause. Competing explanations are kept side by side rather than collapsed into one story.',
+    building: true,
   },
   {
     n: 5,
     title: 'Propose a safe test',
-    body: 'Where uncertainty is worth resolving, you get a small experiment you can run in a week, and a prediction recorded before it starts.',
+    body: 'Where uncertainty is worth resolving, a small experiment you can run in a week, with a prediction recorded before it starts. The safety rules that decide what may be proposed are built and enforced; the screen that proposes one is not.',
+    building: true,
   },
   {
     n: 6,
     title: 'Measure the result',
-    body: 'What happened is compared against what was predicted. The prediction cannot be edited afterwards, so the score is real.',
+    body: 'What happened, compared against what was predicted. The database already refuses to let a prediction be edited after the fact; nothing writes one yet.',
+    building: true,
   },
   {
     n: 7,
     title: 'Turn it into evidence',
     body: 'What held up becomes something you can act on, and something your clinician can read in a minute.',
+    building: true,
   },
 ];
 
@@ -55,6 +69,11 @@ export function LoopSteps() {
           </p>
           <h3 className="text-lede font-semibold text-[var(--ink)] sm:col-span-3">
             {step.title}
+            {step.building && (
+              <span className="mt-1 block text-sm font-normal text-[var(--ink-faint)]">
+                Being built
+              </span>
+            )}
           </h3>
           <p className="max-w-[62ch] leading-relaxed text-[var(--ink-muted)] sm:col-span-8">
             {step.body}

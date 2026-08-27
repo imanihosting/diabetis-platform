@@ -7,7 +7,9 @@
  * between evidence and advice.
  *
  * The numbers here are the real output of the pattern engine against the
- * seeded demo record, not illustrative figures.
+ * seeded demo record, not illustrative figures, and the suggestions are the
+ * strings the engine actually emits — every one of which names something the
+ * product can record today.
  */
 export function Finding() {
   const limitations = [
@@ -17,7 +19,7 @@ export function Finding() {
   ];
 
   const improve = [
-    'Run a trial: the same meal, alternating a walk and no walk',
+    'Alternate walking and not walking after a similar meal, and log both',
     'Record how long and how briskly you walked',
   ];
 

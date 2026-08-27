@@ -91,9 +91,17 @@ export default function AboutPage() {
 
       <Prose eyebrow="Where it is" heading="Early, and honest about it.">
         <p>
-          The timeline, imports, meal and medication logging, and the first
-          pattern engine are working today. The sandbox for simulating a choice
-          before you make it, and the full clinician packet, are not finished.
+          The timeline, imports, meal, medication and lab logging, and the
+          pattern engine are working today, for Type 2 and for prediabetes.
+          Wellovue knows which kind of diabetes it is reading for and refuses
+          to interpret the ones it has no reviewed model for.
+        </p>
+        <p>
+          The rest of the loop is not finished. You cannot yet propose an
+          experiment from a finding, nothing records a prediction before one
+          runs, no result is scored against a prediction, and there is no
+          clinician packet. The safety rules underneath those are built and
+          enforced, which is a different thing from the feature existing.
         </p>
         <p>
           If you want to use it now, bring a CSV from your meter or CGM. If you

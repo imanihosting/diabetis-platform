@@ -166,7 +166,14 @@ export default function LandingPage() {
         aside={
           <Reveal>
             <div className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
-              <p className="text-sm text-[var(--ink-faint)]">Proposed trial</p>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <p className="text-sm text-[var(--ink-faint)]">Proposed trial</p>
+                {/* Every other panel on this page renders real components
+                    against real seeded data. This one cannot: it is a design
+                    for something unbuilt, and leaving it unlabelled would make
+                    it the one screenshot the product faked. */}
+                <p className="text-sm text-[var(--ink-faint)]">Being built</p>
+              </div>
               <p className="mt-4 text-[clamp(1.25rem,1rem+0.9vw,1.6rem)] leading-snug">
                 The same breakfast for six days. Walk after three of them,
                 chosen at random.
@@ -191,9 +198,16 @@ export default function LandingPage() {
         }
       >
         <p>
-          The prediction is written down before the trial begins and cannot be
-          edited afterwards. When the six days are up, what happened is
-          measured against what was predicted.
+          The prediction will be written down before the trial begins and will
+          not be editable afterwards. When the six days are up, what happened
+          gets measured against what was predicted.
+        </p>
+        <p>
+          This part is not finished. The safety rules that decide which
+          experiments may be proposed are built and enforced twice over, and
+          the database already refuses to let a prediction be altered after the
+          fact. What is missing is the screen that proposes one and the step
+          that scores it.
         </p>
         <p>
           Over time that produces something unusual: a record of how often this

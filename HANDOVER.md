@@ -109,6 +109,17 @@ type checker nobody enforces drifts within a week.
 
 These have all cost time once already.
 
+**Editing an applied migration used to brick the runner.** A checksum is
+recorded when a migration runs, and any later change to the file made
+`db:migrate` exit 1 — including correcting a comment, which meant the pressure
+was to leave documentation wrong rather than touch the file. The runner now
+records a second checksum over the SQL with comments and whitespace stripped, so
+a prose fix re-records itself and a statement change still refuses. Rows written
+before that are backfilled automatically, since a matching raw checksum proves
+the file is byte-identical to what ran. `npm run db:repair` is the escape hatch
+for a file already edited before any of this existed; it verifies nothing,
+because the original contents are gone, and says so.
+
 **`npm install` is broken here.** The directory name contains a space, and npm
 11.6.2 silently produces an incomplete dependency tree under such a path: 526
 packages instead of 767, with packages missing their own dependencies. It
@@ -220,6 +231,9 @@ The mono cut is reserved for measured values.
 - The unified metabolic timeline
 - Pattern engine v1 producing structured findings
 - The Evidence screen, reading live findings through `GET /api/evidence`
+- Diabetes care profile, with every unsupported care mode refused twice
+- Prediabetes evidence, and lab/body-measurement capture behind it
+- Experiment safety, enforced in the request path and by database constraints
 - Public site: landing, About, How this works, Contact, Privacy, Terms, Cookies
 - Waitlist and contact endpoints, both public, validated, audited
 - Rate limiting on every public endpoint, keyed on address and, for sign-in,

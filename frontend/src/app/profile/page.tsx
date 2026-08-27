@@ -47,7 +47,7 @@ const TYPES = [
   {
     value: 'prediabetes',
     label: 'Prediabetes',
-    detail: 'Recorded. Detectors for it are being built and are not ready to be relied on.',
+    detail: 'Lab, weight, fasting glucose and activity trends. Wellovue produces evidence for this.',
   },
   {
     value: 'other_specific',
