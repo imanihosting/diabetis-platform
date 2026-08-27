@@ -5,4 +5,5 @@ export * from './nutrition';
 export * from './clinical';
 export * from './timeline';
 export * from './insights';
+export * from './diabetes';
 export * from './experiments';

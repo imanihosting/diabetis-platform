@@ -97,6 +97,17 @@ async function main() {
     [userId, await argon2.hash(DEMO_PASSWORD, { type: argon2.argon2id })],
   );
 
+  // Without a profile the demo user reads as care mode `unknown`, which
+  // switches the evidence screen off — and the whole point of this seed is an
+  // evidence screen with a known answer on it.
+  await client.query(
+    `insert into clinical.diabetes_profiles
+       (user_id, diabetes_type, care_mode, diagnosis_source)
+     values ($1, 'type_2', 'type_2_standard', 'self_reported')
+     on conflict (user_id) do nothing`,
+    [userId],
+  );
+
   const now = new Date();
   const start = new Date(now.getTime() - DAYS * 24 * 60 * 60 * 1000);
 

@@ -3,9 +3,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ENV, type Env } from '../config/env';
+import { DiabetesProfileModule } from '../diabetes-profile/diabetes-profile.module';
 
 @Module({
   imports: [
+    // Registration creates the account and its diabetes profile in one
+    // transaction, so AuthService needs the profile service.
+    DiabetesProfileModule,
     JwtModule.registerAsync({
       inject: [ENV],
       useFactory: (env: Env) => ({

@@ -17,6 +17,7 @@ import type {
 import { ENV, type Env } from '../config/env';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
+import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
 
 interface UserRow {
   id: string;
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly db: DatabaseService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
+    private readonly profiles: DiabetesProfileService,
   ) {}
 
   async register(input: RegisterInput): Promise<AuthResponse> {
@@ -61,6 +63,12 @@ export class AuthService {
         'insert into identity.credentials (user_id, password_hash) values ($1, $2)',
         [created.id, passwordHash],
       );
+
+      // In the same transaction as the account. A user without a profile reads
+      // as care mode `unknown`, which switches the evidence screen off, and
+      // arriving in that state through a half-completed registration is not a
+      // safety decision anybody made.
+      await this.profiles.createForNewUser(created.id, client);
 
       await this.audit.record(
         {

@@ -1,6 +1,12 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { orderFindings, type EvidenceQuery, type PatternResponse } from '@wellovue/types';
+import {
+  orderFindings,
+  type EvidenceQuery,
+  type PatternResponse,
+  type StructuredFinding,
+} from '@wellovue/types';
 import { EngineClient } from '../engine/engine.client';
+import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
 
 /**
  * The bridge between the Evidence surface and the metabolic engine.
@@ -14,9 +20,25 @@ import { EngineClient } from '../engine/engine.client';
 export class EvidenceService {
   private readonly logger = new Logger(EvidenceService.name);
 
-  constructor(private readonly engine: EngineClient) {}
+  constructor(
+    private readonly engine: EngineClient,
+    private readonly profiles: DiabetesProfileService,
+  ) {}
 
   async findings(userId: string, range: EvidenceQuery): Promise<PatternResponse> {
+    // The care mode decides whether the pattern engine runs at all, and it is
+    // read from the server's own record rather than taken from the request.
+    // Every detector in the engine today models Type 2 physiology; running
+    // them over a Type 1 or gestational record would produce confident
+    // findings from the wrong model of the body, and the person reading them
+    // would have no way to tell. Falling back to Type 2 logic is the specific
+    // failure this gate exists to prevent.
+    const { capabilities } = await this.profiles.context(userId);
+
+    if (!capabilities.evidenceEnabled) {
+      return this.unsupported(userId, capabilities.careMode, capabilities.unsupportedReason);
+    }
+
     let response: PatternResponse;
 
     try {
@@ -47,5 +69,46 @@ export class EvidenceService {
     // presentation decision, and it is made once here so every surface that
     // reads this endpoint shows the same record in the same order.
     return { ...response, findings: orderFindings(response.findings) };
+  }
+
+  /**
+   * The answer for a care mode the platform cannot yet interpret.
+   *
+   * Deliberately shaped like every other finding: a summary, a limitation, and
+   * what would change it. "We do not analyse this yet" is a real answer and
+   * belongs in the same frame as the others, not behind an error state. A 404
+   * or an empty list would let the screen imply the question was never asked.
+   */
+  private unsupported(
+    userId: string,
+    careMode: string,
+    reason: string | null,
+  ): PatternResponse {
+    const finding: StructuredFinding = {
+      findingType: 'care_mode_unsupported',
+      summary:
+        reason ??
+        'Wellovue does not yet produce findings for this care mode.',
+      effectEstimate: null,
+      effectUnit: null,
+      confidence: 0,
+      sampleCount: 0,
+      limitations: [
+        `No detector has been reviewed for the care mode "${careMode}"`,
+        'Your data is still being recorded and nothing has been lost',
+      ],
+      clinicianReviewRecommended: false,
+      wouldImproveWith: [
+        'Confirm what kind of diabetes you have in your profile',
+        'Ask your clinician whether Wellovue is a useful record to bring to an appointment',
+      ],
+    };
+
+    return {
+      userId,
+      generatedAt: new Date(),
+      modelVersion: 'care-mode-gate',
+      findings: [finding],
+    };
   }
 }

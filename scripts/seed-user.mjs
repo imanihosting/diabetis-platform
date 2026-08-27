@@ -96,6 +96,18 @@ async function main() {
   );
   console.log('  before:', before.rows[0]);
 
+  // An account created before migration 0013, or one whose profile was never
+  // written, reads as care mode `unknown` and gets no findings at all. Seeding
+  // data into it and then seeing an unsupported screen would look like the
+  // seed failed.
+  await client.query(
+    `insert into clinical.diabetes_profiles
+       (user_id, diabetes_type, care_mode, diagnosis_source)
+     values ($1, 'type_2', 'type_2_standard', 'assumed')
+     on conflict (user_id) do nothing`,
+    [userId],
+  );
+
   const now = new Date();
   const start = new Date(now.getTime() - DAYS * 24 * 60 * 60 * 1000);
 
