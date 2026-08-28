@@ -207,6 +207,32 @@ describe('the developer stack is not a deployable one', () => {
   });
 });
 
+describe('a launch build cannot bake in the wrong site URL', () => {
+  const dockerfile = read('frontend/Dockerfile');
+
+  it('refuses anything that is not a public https origin', () => {
+    // The value reaches every canonical link, every og:url, robots.txt and the
+    // sitemap. Wrong, the site serves perfectly and never ranks: no error, no
+    // warning, nothing on the page to look at. It is the most expensive
+    // silent failure available to this build.
+    expect(dockerfile).toMatch(/https:\/\/\*\)/);
+    expect(dockerfile).toContain('Refusing to build');
+  });
+
+  it('says why a compose file cannot be trusted to set it', () => {
+    // `docker compose build --build-arg NAME`, with the value taken from the
+    // environment, overrides the `args:` block. A platform that forwards its
+    // environment as build arguments therefore replaces it silently. Coolify
+    // does exactly that, and did.
+    expect(dockerfile).toMatch(/OVERRIDES the `args:` block/);
+  });
+
+  it('only applies to a launch build', () => {
+    // A developer building with the default localhost URL must be unaffected.
+    expect(dockerfile).toMatch(/if \[ "\$PUBLIC_LAUNCH" = "true" \]; then[\s\S]{0,200}NEXT_PUBLIC_SITE_URL/);
+  });
+});
+
 describe('the Coolify file resolves its paths from the repository root', () => {
   const coolify = read('infra/docker/docker-compose.coolify.yml');
 

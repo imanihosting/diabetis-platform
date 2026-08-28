@@ -93,9 +93,28 @@ REDIS_URL   BACKEND_URL   METABOLIC_ENGINE_URL
 NEXT_PUBLIC_APP_URL   DATABASE_CA_CERT   PGSSLROOTCERT
 ```
 
-`NEXT_PUBLIC_SITE_URL` is absent on purpose too. It is a **build argument**,
-already fixed to `https://wellovue.com`; Next inlines it during the build, so
-setting it as an environment variable would silently do nothing.
+### `NEXT_PUBLIC_SITE_URL` — set it, and set it correctly
+
+This one is an exception to the list above, and it is the most dangerous
+variable on the page.
+
+```
+NEXT_PUBLIC_SITE_URL=https://wellovue.com
+```
+
+The compose file already sets it as a build argument, but Coolify forwards
+every variable you define as a `--build-arg` on the command line — and a CLI
+build argument **overrides** the `args:` block in a compose file. So if this is
+defined in Coolify with any other value, that value is what gets compiled in.
+
+It reaches every canonical link, every `og:url`, `robots.txt` and the whole
+sitemap. Wrong, the site serves perfectly and never ranks: no error, no
+warning, nothing on the page to look at.
+
+A launch build now refuses to compile unless it is an `https://` origin, so a
+mistake here fails loudly instead of shipping. Setting it to
+`https://wellovue.com` is the simplest way to be right whichever mechanism
+wins.
 
 ## 4. Cloudflare
 
