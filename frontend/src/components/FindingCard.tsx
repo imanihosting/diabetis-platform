@@ -3,6 +3,7 @@ import { EvidenceBadge } from '@/components/EvidenceBadge';
 import { FindingTrace } from '@/components/FindingTrace';
 import { PostMealMeasurements } from '@/components/PostMealMeasurements';
 import { DataQualityPanel } from '@/components/DataQualityPanel';
+import { CompetingExplanations } from '@/components/CompetingExplanations';
 import { ProposeExperiment } from '@/components/ProposeExperiment';
 import { Disclosure } from '@/components/Disclosure';
 
@@ -97,6 +98,12 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
                   ['The engine returned no limitations for this finding. Treat it with caution.']
             }
           />
+
+          {/* Before the record quality and before the experiment. Somebody
+              deciding what a finding means should meet the alternatives while
+              they are still deciding, not after they have been offered a test
+              of the first explanation. */}
+          <CompetingExplanations explanations={finding.competingExplanations} />
 
           {/* Beside the limitations, because it is one: it says which half of
               the judgement was weak, the pattern or the watching. */}

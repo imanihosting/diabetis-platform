@@ -112,6 +112,9 @@ export class EvidenceService {
       // answering, not a detector. Empty rather than absent so the shape
       // matches every other finding the surfaces receive.
       comparison: [],
+      // Nothing to explain another way: this is the care-mode gate answering,
+      // not a detector reporting a pattern it found.
+      competingExplanations: [],
       // No glucose was read, so there is no record whose completeness could be
       // reported. Null rather than a zero coverage, which would read as "we
       // looked and found nothing" instead of "this was never the question".

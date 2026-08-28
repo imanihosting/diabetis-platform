@@ -51,6 +51,7 @@ function finding(over: Partial<StructuredFinding> = {}): StructuredFinding {
     limitations: ['An observed association'],
     clinicianReviewRecommended: false,
     comparison: [],
+    competingExplanations: [],
     dataQuality: quality(),
     pValue: null,
     wouldImproveWith: [],

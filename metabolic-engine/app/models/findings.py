@@ -157,6 +157,41 @@ class GroupMeasure(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class CompetingExplanation(BaseModel):
+    """Something other than the finding that could produce the same pattern.
+
+    Drawn from a reviewed catalogue in `app/engines/explanations.py`, never
+    generated. A competing explanation is a clinical claim about why somebody's
+    glucose did what it did, and a sentence assembled at request time is a
+    claim nobody approved.
+
+    The four fields exist because naming an alternative is not enough to be
+    useful. A reader needs to know why it could produce this pattern, what a
+    record would look like if it were true, what is missing from theirs, and
+    whether they can do anything about that.
+    """
+
+    label: str
+    why: str
+    supported_by: str = Field(serialization_alias="supportedBy")
+    missing: str
+
+    capture: str | None = None
+    """What to log to separate this explanation from the finding, if anything.
+
+    Null means the product cannot capture it today, and that is said plainly
+    rather than hidden. An explanation asking for data with nowhere to go would
+    send somebody looking for a control that does not exist — but "nobody
+    measured this" is still worth telling them, which is why the explanation
+    stays on the list instead of being dropped.
+
+    Every non-null value is a string from `suggestions.py`, checked by a test,
+    so the promise that it can be captured is one something else verifies.
+    """
+
+    model_config = {"populate_by_name": True}
+
+
 class DataQuality(BaseModel):
     """How complete the glucose record behind a finding actually is.
 
@@ -248,6 +283,21 @@ class StructuredFinding(BaseModel):
 
     Empty for findings that are not a glucose comparison — a lab trend has no
     target band to sit against, and drawing one would be decoration.
+    """
+
+    competing_explanations: list[CompetingExplanation] = Field(
+        default_factory=list, serialization_alias="competingExplanations"
+    )
+    """What else could produce this pattern.
+
+    Attached in one place, in `detect_all`, rather than by each detector — a
+    detector that forgets would ship a finding presenting an association as
+    though it had no alternatives, and that is the specific failure this list
+    exists to prevent.
+
+    Empty for a finding with no effect estimate. There is no pattern to explain
+    another way when nothing was measured, and offering four alternatives for a
+    result that does not exist would read as though one did.
     """
 
     data_quality: DataQuality | None = Field(

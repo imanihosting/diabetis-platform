@@ -394,6 +394,44 @@ export const dataQualitySchema = z.object({
 });
 export type DataQuality = z.infer<typeof dataQualitySchema>;
 
+/**
+ * Something other than the finding that could produce the same pattern.
+ *
+ * Mirrors `CompetingExplanation` in `metabolic-engine/app/models/findings.py`.
+ * These two are the same contract in two languages and must be changed
+ * together.
+ *
+ * Drawn from a reviewed catalogue in the engine, never generated, and never
+ * written here. A competing explanation is a clinical claim about why
+ * somebody's glucose did what it did, and the frontend is the one place it
+ * must never be composed — a surface may lay these out and must not add to
+ * them.
+ *
+ * Four fields because naming an alternative is not enough to be useful. A
+ * reader needs to know why it could produce this pattern, what a record would
+ * look like if it were true, what is missing from theirs, and whether they can
+ * do anything about that.
+ */
+export const competingExplanationSchema = z.object({
+  label: z.string().min(1),
+  /** Why this could produce the pattern the finding describes. */
+  why: z.string().min(1),
+  /** What a record would look like if this were the reason. */
+  supportedBy: z.string().min(1),
+  /** What is missing from this person's record today. */
+  missing: z.string().min(1),
+  /**
+   * What to log to separate this from the finding, or null.
+   *
+   * Null means the product cannot capture it today, said plainly rather than
+   * hidden. An explanation asking for data with nowhere to go would send
+   * somebody looking for a control that does not exist — but "nobody measured
+   * this" is still worth telling them, which is why it stays on the list.
+   */
+  capture: z.string().nullable().default(null),
+});
+export type CompetingExplanation = z.infer<typeof competingExplanationSchema>;
+
 export const structuredFindingSchema = z.object({
   findingType: z.string().min(1),
   summary: z.string().min(1),
@@ -408,6 +446,15 @@ export const structuredFindingSchema = z.object({
 
   /** The groups compared, when the finding compared any. Empty for lab trends. */
   comparison: z.array(groupMeasureSchema).default([]),
+
+  /**
+   * What else could produce this pattern.
+   *
+   * Empty for a finding with no effect estimate: there is nothing to explain
+   * another way when nothing was measured, and offering alternatives for a
+   * result that does not exist would read as though one did.
+   */
+  competingExplanations: z.array(competingExplanationSchema).default([]),
 
   /**
    * How complete the record behind this finding is, when it is a glucose one.

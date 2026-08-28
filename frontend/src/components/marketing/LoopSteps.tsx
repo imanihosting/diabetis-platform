@@ -7,8 +7,23 @@
  * disclaimer to bury. A reader who signs up expecting step five and finds it
  * missing has been told something about the product that no amount of careful
  * copy elsewhere can undo.
+ *
+ * `building` is what marks a step as unbuilt, and no step carries it now:
+ * step four was the last, and it came off when competing explanations shipped.
+ * The flag stays because the next unbuilt step will need it, and because
+ * deleting the mechanism is how a product ends up with no way to say "not yet"
+ * at the moment it most needs one. Put it back before describing something
+ * that does not exist, not after.
  */
-const STEPS = [
+interface Step {
+  n: number;
+  title: string;
+  body: string;
+  /** Set on a step that is described but not built. See the note above. */
+  building?: boolean;
+}
+
+const STEPS: Step[] = [
   {
     n: 1,
     title: 'Collect',
@@ -27,8 +42,7 @@ const STEPS = [
   {
     n: 4,
     title: 'Weigh the explanations',
-    body: 'A pattern usually has more than one cause. Competing explanations are kept side by side rather than collapsed into one story.',
-    building: true,
+    body: 'A pattern usually has more than one cause. Every finding carries the other reasons that could produce it, each saying what would show it up, what is missing from your record, and whether that is something you can start logging — from a reviewed list, never written on the spot.',
   },
   {
     n: 5,

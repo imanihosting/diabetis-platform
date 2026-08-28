@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   COVERAGE_FOR_MODERATE,
+  competingExplanationSchema,
   COVERAGE_FOR_STRONG,
   COVERAGE_FOR_WEAK,
   POST_MEAL_WINDOW_MINUTES,
@@ -312,5 +313,75 @@ describe('data quality contract', () => {
   it('lets coverage lower a claim and never raise one', () => {
     expect(evidenceStrength(4, 0.99, 1.0)).toBe('insufficient');
     expect(evidenceStrength(12, 0.95, 1.0)).toBe(evidenceStrength(12, 0.95));
+  });
+});
+
+/**
+ * Competing explanations: a reviewed catalogue, and the contract that carries it.
+ *
+ * The engine's own tests prove the catalogue covers every detector and that
+ * nothing asks for data the product cannot hold. This end checks the wire: a
+ * field the contract does not know is stripped by zod and simply never reaches
+ * a reader, which for this list means a finding arriving as though it had no
+ * alternatives at all.
+ */
+describe('competing explanations contract', () => {
+  it('sends every field under the name the contract reads', () => {
+    const body = classBody(FINDINGS, 'CompetingExplanation');
+
+    const aliased = [...body.matchAll(/serialization_alias="([A-Za-z]+)"/g)].map((m) => m[1]);
+    const plain = [...body.matchAll(/^ {4}(label|why|missing|capture): /gm)].map((m) => m[1]);
+
+    expect(new Set([...aliased, ...plain])).toEqual(
+      new Set(Object.keys(competingExplanationSchema.shape)),
+    );
+  });
+
+  it('declares the field on the finding under the name the engine sends', () => {
+    expect(classBody(FINDINGS, 'StructuredFinding')).toContain(
+      'serialization_alias="competingExplanations"',
+    );
+  });
+
+  it('carries a null capture rather than dropping the explanation', () => {
+    // The honest half: an explanation the product cannot capture is still
+    // worth telling somebody, so null has to be a legal value rather than a
+    // reason to leave it out.
+    const parsed = competingExplanationSchema.parse({
+      label: 'Sleep the night before',
+      why: 'Short sleep raises glucose the following day.',
+      supportedBy: 'Sleep timing and duration for each night',
+      missing: 'Sleep is not recorded',
+      capture: null,
+    });
+    expect(parsed.capture).toBeNull();
+  });
+
+  it('defaults to an empty list on a finding that has none', () => {
+    const finding = structuredFindingSchema.parse({
+      findingType: 'insufficient_data',
+      summary: 'Not enough readings.',
+      effectEstimate: null,
+      effectUnit: null,
+      confidence: 0,
+      sampleCount: 0,
+      limitations: ['No glucose data'],
+    });
+    expect(finding.competingExplanations).toEqual([]);
+  });
+
+  it('refuses an explanation that does not answer all four questions', () => {
+    // A label with nothing behind it is the shape this catalogue exists to
+    // prevent: it names an alternative without telling anybody what would
+    // separate it from the finding.
+    expect(
+      competingExplanationSchema.safeParse({
+        label: 'Something else',
+        why: '',
+        supportedBy: '',
+        missing: '',
+        capture: null,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 235 unit, no infrastructure needed
+npm test                  # 248 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 100 | no |
+| `backend/test/*.spec.ts` | 105 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -161,8 +161,8 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `frontend/test/*.spec.ts(x)` | 135 | no |
-| `metabolic-engine/tests` | 91 | no |
+| `frontend/test/*.spec.ts(x)` | 143 | no |
+| `metabolic-engine/tests` | 104 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
 `npm run test:integration`. **Wait for the migrate container to finish** before
@@ -542,20 +542,77 @@ path changed. Type 1 and gestational remain unsupported.
 
 ---
 
+## 6c. Competing Explanations v1
+
+Shipped, and it took the last **"Being built"** label off the public site.
+Engine is `pattern-engine-v1.4.0`.
+
+Every finding that measured something now carries the reviewed alternatives
+that could produce the same pattern. A detector reporting "meals followed by a
+walk were followed by a smaller rise" has found an association between two
+groups a person created by living their life; those groups differ in more than
+the walk, and reporting the association without naming that is how it gets read
+as a cause.
+
+**Nothing is generated.** `app/engines/explanations.py` is a catalogue,
+reviewed as a set, in the same category as `suggestions.py` and for the same
+reason: a competing explanation is a clinical claim about why somebody's
+glucose did what it did, and a sentence assembled at request time is a claim
+nobody approved. The frontend composes none of it — a test greps both surfaces
+for clinical vocabulary and fails if either has started writing.
+
+**Each entry answers four questions**, because naming an alternative is not
+enough to use it: why it could produce this, what a record would look like if
+it were true, what is missing from this one, and whether the product can
+capture that.
+
+**The capture field is a reference, not a boolean.** `capture` names a value
+from `suggestions.py`, where every entry names the endpoint that stores it, and
+a test asserts every non-null capture is one of them. A boolean would be
+somebody's opinion at the time of writing and would stay true-looking long
+after the capture path was removed. `None` means the product cannot record it —
+sleep, illness, sensor sessions, which laboratory ran an assay — and the
+explanation says so plainly rather than being dropped. "Nobody measured this"
+is a real answer; asking somebody to log something with nowhere to put it sends
+them looking for a control that does not exist.
+
+**Attached in one place.** `_with_explanations` in `detect_all`, not in each
+detector, because a detector that forgot would present an association as though
+it had no alternatives and nothing about writing one reminds you. Only for
+findings with an effect estimate: offering four alternatives for a result that
+does not exist would read as though one did.
+
+**Two tests are the whole enforcement**, and both were checked by breaking them
+deliberately:
+
+- every detector in the registry has catalogue entries or is named in
+  `NO_EXPLANATIONS_NEEDED`, so a new detector cannot ship without somebody
+  deciding which; and
+- every `capture` is something the product actually records.
+
+**`building` stayed in `LoopSteps`** after the last label came off. Deleting
+the mechanism is how a product ends up with no way to say "not yet" at the
+moment it most needs one. Put it back before describing something unbuilt.
+
+---
+
 ## 7. The public pages must not promise what is not built
 
 `PRODUCT.md` says the page renders the real thing, and that a health product
 faking its own screenshots has already told you something. That is enforced by
 convention rather than by code, so it needs watching.
 
-One of the seven loop steps on `/how-it-works` is still marked **"Being
-built"**: weighing competing explanations against each other. Everything else
-on the public pages describes something that exists. The landing page's finding
-quotes the strings the engine actually emits.
+No loop step on `/how-it-works` carries a **"Being built"** label any more:
+step four, weighing competing explanations, was the last and it came off when
+that shipped (§6c). Everything on the public pages now describes something that
+exists. The landing page's finding quotes the strings the engine actually
+emits, and a test asserts no step carries the flag while also asserting the
+flag still exists to be used.
 
-Two labels have come off, each when the thing it covered started existing: the
-proposed-trial panel in Ticket 4, the clinician summary in Ticket 5. That is
-the only reason a label should ever come off. Both panels are typeset
+Three labels have come off, each when the thing it covered started existing:
+the proposed-trial panel in Ticket 4, the clinician summary in Ticket 5, and
+weighing the explanations in Competing Explanations v1. That is the only reason
+a label should ever come off. Both panels are typeset
 illustrations of real screens rather than screenshots of them, and their
 figures are the demo record's own.
 
@@ -579,8 +636,8 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 100 unit tests,
-184 integration, 91 engine, twenty migrations, six guard triggers, eleven
+readers evaluating the platform and it quotes specific numbers: 105 unit tests,
+184 integration, 104 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
 
@@ -891,9 +948,9 @@ and a gate that goes red for the shipped configuration gets switched off.
 ## 12. Where to pick up
 
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** tracks the
-loop, and the loop is closed. What is left is a choice between three things.
-Pick deliberately rather than by whatever is nearest — they have very different
-shapes, and two of them are not code.
+loop, and the loop is closed. What is left is a choice between two
+things, and neither of them is engine work. Pick deliberately rather than by
+whatever is nearest — they have very different shapes.
 
 **The most recent review of the engine** (28 August) said it well: the engine
 is safe and directionally right, but it understands "patterns in diabetes data"
@@ -902,21 +959,16 @@ more than it understands diabetes. Its first three recommendations shipped in
 refusing an unresolvable zone, and a version bump. Its fourth, richer post-meal
 features, is Post-Meal Intelligence v1 and has shipped, along with the v1.1
 follow-up that put those measurements in the clinician packet (§6a). Its fifth,
-data quality and CGM coverage, has shipped too (§6b). Both of that review's
-remaining recommendations are now done.
+data quality and CGM coverage, has shipped too (§6b). Every recommendation from
+that review is now done, and Competing Explanations v1 (§6c) closed the last
+unbuilt step of the product loop.
 
-1. **Weighing competing explanations.** Step four, and the only "Being built"
-   label left. It needs the treatment `suggestions.py` got — a reviewed
-   per-detector catalogue enforced by engine tests, not free text — because a
-   competing explanation is a clinical claim and the frontend is the one place
-   it must never be written. See §6.
-
-2. **Exporting the clinician packet.** A printed sheet is what gets carried
+1. **Exporting the clinician packet.** A printed sheet is what gets carried
    into an appointment, and the page was built for a printer without anybody
    testing it against one. Reuse the server packet; do not build a second
    report path.
 
-3. **The rest of the go-live blockers in §10**, none of which is code: a DNS
+2. **The rest of the go-live blockers in §10**, none of which is code: a DNS
    name for the database host, a reverse proxy that sets `X-Forwarded-For`,
    and the five legal facts plus a lawyer. The DNS name is the only item here
    with a lead time.

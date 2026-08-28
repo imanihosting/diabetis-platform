@@ -13,6 +13,7 @@ import {
   postMealCaveat,
   postMealMeasurements,
   type ClinicianPacket,
+  type CompetingExplanation,
   type DataQuality,
   type DiscussionPoint,
   type GroupMeasure,
@@ -433,6 +434,8 @@ function Finding({ finding }: { finding: StructuredFinding }) {
 
       <Quality finding={finding} />
 
+      <OtherReasons explanations={finding.competingExplanations} />
+
       {finding.limitations.length > 0 && (
         <div className="mt-4 border-t border-rule pt-3">
           <h4 className="text-xs uppercase tracking-wide text-ink-faint">
@@ -441,6 +444,53 @@ function Finding({ finding }: { finding: StructuredFinding }) {
           <List items={finding.limitations} className="mt-2" />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What else could have produced this pattern, in the packet's shorter form.
+ *
+ * The evidence page opens each of these to say why it could produce the
+ * pattern and what is missing; here they are one line apiece. That is not a
+ * space saving. A clinician reading a finding already knows why meal
+ * composition confounds a meal comparison — what they need from this page is
+ * which confounders this particular record cannot rule out, and a paragraph
+ * explaining each one would slow down the reader who needed it least.
+ *
+ * What is kept is the part they cannot know: whether the missing data is
+ * something the person could start recording, or something nothing here can
+ * hold. That is the difference between a conversation about logging and a
+ * caveat that will still be true next quarter.
+ */
+function OtherReasons({ explanations }: { explanations: CompetingExplanation[] }) {
+  if (explanations.length === 0) return null;
+
+  return (
+    <div className="mt-4 break-inside-avoid border-t border-rule pt-3">
+      <h4 className="text-xs uppercase tracking-wide text-ink-faint">
+        Other possible reasons
+      </h4>
+
+      <ul className="mt-2 space-y-1.5">
+        {explanations.map((explanation) => (
+          <li
+            key={explanation.label}
+            className="flex max-w-prose gap-2 text-xs leading-relaxed text-ink-muted"
+          >
+            <span aria-hidden className="text-ink-faint">
+              &#8213;
+            </span>
+            <span>
+              <span className="text-ink">{explanation.label}.</span>{' '}
+              {explanation.missing}
+              {explanation.capture === null && (
+                <span className="text-ink-faint"> (not recorded by Wellovue)</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

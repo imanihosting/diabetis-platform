@@ -20,7 +20,14 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from app.engines import coverage, glucose_data, prediabetes, registry, suggestions
+from app.engines import (
+    coverage,
+    explanations,
+    glucose_data,
+    prediabetes,
+    registry,
+    suggestions,
+)
 from app.engines.meal_response import MealResponse, post_meal_responses
 from app.engines.post_meal import post_meal_metrics
 from app.engines.thresholds import (
@@ -31,7 +38,7 @@ from app.engines.thresholds import (
 )
 from app.models.findings import CurvePoint, DataQuality, GroupMeasure, StructuredFinding
 
-MODEL_VERSION = "pattern-engine-v1.3.0"
+MODEL_VERSION = "pattern-engine-v1.4.0"
 """Bumped when output changes, not when code does.
 
 v1.1.0 reads hour-of-day on the account's timezone rather than on UTC, which
@@ -61,6 +68,12 @@ arithmetic moved — no estimate, no confidence, no p-value — but what the
 platform is willing to claim from it did, which is exactly the kind of change a
 version exists to mark. A prediction made under v1.2.0 was made by a build that
 could not see how complete its own record was.
+
+v1.4.0 attaches the reviewed competing explanations to every finding that
+measured something. Additive — no estimate, confidence, coverage or word moves
+— but it changes what the output says, which is the point: a finding that
+reports an association without naming what else could produce it is asking to
+be read as cause, and every finding before this build did exactly that.
 """
 
 Window = tuple[datetime, datetime] | None
@@ -193,7 +206,26 @@ def detect_all(
     # answer worth showing the user.
     candidates: list[StructuredFinding | None] = [d.run(inputs) for d in permitted]
 
-    return [f for f in candidates if f is not None]
+    return [_with_explanations(f) for f in candidates if f is not None]
+
+
+def _with_explanations(finding: StructuredFinding) -> StructuredFinding:
+    """Attaches the reviewed alternatives for this kind of finding.
+
+    Done here rather than in each detector because a detector that forgot would
+    present an association as though it had none, and nothing about writing a
+    detector reminds you. One place, applied to everything, and a test that the
+    catalogue covers every detector in the registry.
+
+    Only for a finding that measured something. There is no pattern to explain
+    another way when nothing was found, and offering four alternatives for a
+    result that does not exist would read as though one did.
+    """
+    if finding.effect_estimate is None:
+        return finding
+
+    finding.competing_explanations = explanations.for_finding(finding.finding_type)
+    return finding
 
 
 def _localise(frame: pd.DataFrame, column: str, timezone: str) -> pd.DataFrame:
