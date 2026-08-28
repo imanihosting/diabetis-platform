@@ -157,6 +157,74 @@ class GroupMeasure(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class DataQuality(BaseModel):
+    """How complete the glucose record behind a finding actually is.
+
+    A sample count answers "how much was recorded". It cannot answer "how much
+    of the period was watched", and those come apart badly: ten thousand
+    readings clustered into four days of a month look like overwhelming
+    evidence and describe an eighth of it. This object is the second question,
+    and `evidence_strength()` uses it as a ceiling — coverage can lower what a
+    finding is called and can never raise it.
+
+    Present only on findings computed from glucose. A lab trend has no sampling
+    window to be complete, and attaching a coverage figure to one would invite
+    a reader to discount it for missing readings it never needed.
+    """
+
+    coverage: float = Field(ge=0.0, le=1.0)
+    """The fraction of the window this finding is about that was observed.
+
+    Which window that is depends on the finding, and that is the whole design.
+    A morning-glucose finding is judged on the mornings; a meal-response
+    finding on the meals. Judging every finding on whole-window coverage would
+    fail every person using a meter rather than a sensor, including the ones
+    who test faithfully before and after each meal — who have excellent
+    coverage of the only windows their findings are about.
+    """
+
+    coverage_basis: str = Field(serialization_alias="coverageBasis")
+    """What `coverage` is a fraction of, in the reader's words."""
+
+    days_with_data: int = Field(ge=0, serialization_alias="daysWithData")
+    days_in_window: int = Field(ge=0, serialization_alias="daysInWindow")
+
+    sparse_days: int = Field(ge=0, serialization_alias="sparseDays")
+    """Days with readings, but too few to describe the day."""
+
+    largest_gap_hours: float = Field(ge=0.0, serialization_alias="largestGapHours")
+    """The longest stretch with no reading at all.
+
+    Reported next to overnight coverage rather than instead of it, because a
+    long gap is a sensor that came off for somebody wearing one and an ordinary
+    night for somebody who is not.
+    """
+
+    duplicate_readings: int = Field(ge=0, serialization_alias="duplicateReadings")
+    """Readings sharing a timestamp with another.
+
+    Usually a re-import. They inflate a sample count without adding an
+    observation, which is precisely the way a count can overstate a record.
+    """
+
+    regular_fraction: float = Field(ge=0.0, le=1.0, serialization_alias="regularFraction")
+    """How much of the sampling kept to the record's own usual rhythm.
+
+    Measured against this person's median interval rather than an absolute
+    cadence, because otherwise every meter user is "irregular" for not being a
+    sensor. It asks whether they sampled the way they usually sample.
+    """
+
+    median_interval_minutes: float | None = Field(
+        default=None, serialization_alias="medianIntervalMinutes"
+    )
+
+    primary_source: str = Field(serialization_alias="primarySource")
+    """Where most of these readings came from: `cgm`, `meter`, `mixed`, `unknown`."""
+
+    model_config = {"populate_by_name": True}
+
+
 class StructuredFinding(BaseModel):
     finding_type: str = Field(serialization_alias="findingType")
     summary: str
@@ -180,6 +248,16 @@ class StructuredFinding(BaseModel):
 
     Empty for findings that are not a glucose comparison — a lab trend has no
     target band to sit against, and drawing one would be decoration.
+    """
+
+    data_quality: DataQuality | None = Field(
+        default=None, serialization_alias="dataQuality"
+    )
+    """How complete the record behind this finding is, when it is a glucose one.
+
+    Null for a finding computed from something else — labs, logged activity —
+    rather than zeroed, because "no coverage" and "coverage is not a question
+    here" are different and a reader must not have to guess which.
     """
 
     p_value: float | None = Field(default=None, serialization_alias="pValue")

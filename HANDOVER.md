@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 215 unit, no infrastructure needed
+npm test                  # 231 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 94 | no |
+| `backend/test/*.spec.ts` | 100 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -161,8 +161,8 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `frontend/test/*.spec.ts(x)` | 121 | no |
-| `metabolic-engine/tests` | 69 | no |
+| `frontend/test/*.spec.ts(x)` | 131 | no |
+| `metabolic-engine/tests` | 91 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
 `npm run test:integration`. **Wait for the migrate container to finish** before
@@ -455,6 +455,72 @@ The window reads as words in a sentence and figures in a cell —
 
 ---
 
+## 6b. CGM Coverage and Evidence Quality
+
+Shipped. Every glucose finding now carries `dataQuality`, and coverage caps how
+strong one may be called. Engine is `pattern-engine-v1.3.0`.
+
+**The rule, in one sentence:** a finding must never look strong because there
+are many readings, when those readings are clustered, incomplete, or missing
+the window the finding is about. A sample count answers "how much was
+recorded" and cannot answer "how much of the period was watched", and the two
+come apart in the direction that flatters — a sensor worn hard for four days of
+a month produces thousands of readings and describes an eighth of it.
+
+**A ceiling, never a promotion.** `evidence_strength()` takes an optional
+coverage and returns the weaker of the two answers. A complete record is a
+precondition for trusting a result, not evidence for one, so perfect coverage
+over four readings is still insufficient. Omitting coverage gives exactly the
+answer the function gave before it existed, which is what every lab finding and
+every hand-built test input gets.
+
+**Nothing else moved.** No effect estimate, confidence, p-value or summary
+changes. What changes is the word beside them, and only downward. The demo
+record — dense CGM, meals every day — keeps all four findings at exactly the
+strengths and estimates it had under v1.2.0; `test_a_complete_record_keeps_
+every_word_it_had` runs each detector with and without a window and compares
+the findings both ways, which is the before and after of shipping this.
+
+**A finding is judged on the window it is about, and that is the whole design.**
+Three bases, measured three different ways on purpose:
+
+| Basis | Fraction of | Measured as |
+|---|---|---|
+| `POST_MEAL` | logged meals | meals whose response was watched long enough to time |
+| `MORNING` | mornings in the period | mornings with a reading at all |
+| `WHOLE_WINDOW` | the whole period | time within half a max-gap of a reading |
+
+Whole-window coverage would fail every person who tests with a meter rather
+than wearing a sensor — including the ones who test faithfully before and after
+every meal, and who therefore have complete coverage of the only windows their
+findings concern. A meter user testing four times a day covers 6% of a month
+and 100% of their mornings, and both numbers are true.
+
+The morning basis is presence, not continuity, because that is what the finding
+is built from: a morning-glucose pattern takes one average per morning, so a
+morning with a single waking reading is a morning it can use. Measuring
+unbroken hours would mark down the exact record the detector was written for.
+
+**The post-meal denominator is every meal logged, not every meal with a
+response.** Those differ by the meals with no glucose near them at all, which
+are the ones the figure most needs to count. A first cut divided by the meals
+that produced a response and reported a record with two thirds of its meals
+unwatched as complete; a test caught it. The numerator reuses
+`measurable_responses()` from the post-meal work rather than reimplementing
+"watched long enough", so a coverage figure cannot disagree with the
+measurements printed beside it.
+
+**Thresholds are a first cut and have not had clinical review.** They live in
+`thresholds.py` beside the shape thresholds and are mirrored in `insights.ts`;
+`backend/test/post-meal-metrics.spec.ts` fails if the two disagree. They decide
+a word, never a refusal and never a number.
+
+**Care-mode gating, experiment safety and prediction immutability are
+untouched.** Nothing in `registry.py`, the experiment tables or the prediction
+path changed. Type 1 and gestational remain unsupported.
+
+---
+
 ## 7. The public pages must not promise what is not built
 
 `PRODUCT.md` says the page renders the real thing, and that a health product
@@ -492,8 +558,8 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 94 unit tests,
-184 integration, 69 engine, twenty migrations, six guard triggers, eleven
+readers evaluating the platform and it quotes specific numbers: 100 unit tests,
+184 integration, 91 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
 
@@ -804,7 +870,7 @@ and a gate that goes red for the shipped configuration gets switched off.
 ## 12. Where to pick up
 
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** tracks the
-loop, and the loop is closed. What is left is a choice between four things.
+loop, and the loop is closed. What is left is a choice between three things.
 Pick deliberately rather than by whatever is nearest — they have very different
 shapes, and two of them are not code.
 
@@ -814,36 +880,35 @@ more than it understands diabetes. Its first three recommendations shipped in
 `4c34810` and `71964d7` — timezone-aware hours, timezone-aware CSV import,
 refusing an unresolvable zone, and a version bump. Its fourth, richer post-meal
 features, is Post-Meal Intelligence v1 and has shipped, along with the v1.1
-follow-up that put those measurements in the clinician packet; see §6a. The one
-that remains is 1 below, and it is the agreed next ticket.
+follow-up that put those measurements in the clinician packet (§6a). Its fifth,
+data quality and CGM coverage, has shipped too (§6b). Both of that review's
+remaining recommendations are now done.
 
-1. **Data quality and CGM coverage.** Sensor coverage, gaps, sampling density,
-   days worn, fingerstick versus CGM — folded into evidence strength rather
-   than left as sample count and confidence. Deliberately its own ticket:
-   it changes what every existing confidence number means, so it should not
-   ride along with anything else. It is the agreed next ticket.
-
-   It now has one more caller than it did. `PostMealMetrics.n` counts meals
-   watched for at least three quarters of the post-meal window, which is a
-   coverage measure the engine computes and then uses for exactly one purpose.
-   Whatever coverage model this ticket builds should absorb it rather than sit
-   beside it.
-
-2. **Weighing competing explanations.** Step four, and the only "Being built"
+1. **Weighing competing explanations.** Step four, and the only "Being built"
    label left. It needs the treatment `suggestions.py` got — a reviewed
    per-detector catalogue enforced by engine tests, not free text — because a
    competing explanation is a clinical claim and the frontend is the one place
    it must never be written. See §6.
 
-3. **Exporting the clinician packet.** A printed sheet is what gets carried
+2. **Exporting the clinician packet.** A printed sheet is what gets carried
    into an appointment, and the page was built for a printer without anybody
    testing it against one. Reuse the server packet; do not build a second
    report path.
 
-4. **The rest of the go-live blockers in §10**, none of which is code: a DNS
+3. **The rest of the go-live blockers in §10**, none of which is code: a DNS
    name for the database host, a reverse proxy that sets `X-Forwarded-For`,
    and the five legal facts plus a lawyer. The DNS name is the only item here
    with a lead time.
+
+**Two things the coverage work leaves open**, neither big enough to be its own
+item above. The shape and coverage thresholds have not had clinical review and
+are marked as such in `thresholds.py`; they decide a word rather than a number,
+which is why shipping them unreviewed was defensible and why reviewing them is
+still worth doing. And coverage caps strength but does not touch `confidence`,
+which is deliberate — confidence is the engine's statistical claim and a
+prediction records it — but it does mean a low-coverage finding reports a
+confident number beside a weak word. That reads oddly and is honest; if it
+should change, change it knowingly.
 
 Gestational and Type 1 stay parked behind clinical review regardless of how
 ready the engine looks. That gate is doing its job; do not route around it.

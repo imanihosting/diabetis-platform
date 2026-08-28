@@ -12,12 +12,14 @@ decides anything — which is why the findings say so and point at recording the
 next one rather than at interpreting this one.
 """
 
+from collections.abc import Sequence
+
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from app.engines import suggestions
-from app.engines.meal_response import post_meal_responses
+from app.engines import coverage, suggestions
+from app.engines.meal_response import MealResponse, post_meal_responses
 from app.engines.registry import DetectorFn, DetectorInputs
 from app.engines.thresholds import (
     MIN_DAYS_FOR_ACTIVITY_CONSISTENCY,
@@ -25,7 +27,42 @@ from app.engines.thresholds import (
     MIN_SAMPLES_FOR_ANY_FINDING,
     WEIGHT_TREND_DAYS,
 )
-from app.models.findings import StructuredFinding
+from app.models.findings import DataQuality, StructuredFinding
+
+
+def _quality(
+    inputs: DetectorInputs,
+    basis: str,
+    responses: Sequence[MealResponse] = (),
+    meals_logged: int | None = None,
+) -> DataQuality | None:
+    """How complete the glucose record is for the window this finding is about.
+
+    None when the caller did not say what window the frames cover, which is
+    what every hand-built test input does — those get the finding they got
+    before coverage existed rather than one claiming zero coverage.
+    """
+    if inputs.window_start is None or inputs.window_end is None:
+        return None
+    return coverage.assess(
+        inputs.glucose,
+        inputs.window_start,
+        inputs.window_end,
+        basis,
+        responses,
+        meals_logged,
+    )
+
+
+def _qualified(limitations: list[str], quality: DataQuality | None) -> list[str]:
+    """The finding's limitations, with the coverage caveat if there is one.
+
+    The lab detectors do not call this. An HbA1c trend has no sampling window
+    to be complete, and marking one down for missing glucose readings it never
+    reads would be a coverage figure applied to the wrong question.
+    """
+    note = coverage.coverage_limitation(quality)
+    return [*limitations, note] if note else limitations
 
 
 def _linear_trend(
@@ -225,6 +262,7 @@ def fasting_glucose_trend(inputs: DetectorInputs) -> StructuredFinding | None:
     ]
     daily = morning.groupby(morning["measured_at"].dt.date)["value_mmol"].mean()
     n_days = int(len(daily))
+    quality = _quality(inputs, coverage.MORNING)
 
     if n_days < MIN_SAMPLES_FOR_ANY_FINDING:
         return StructuredFinding(
@@ -237,8 +275,9 @@ def fasting_glucose_trend(inputs: DetectorInputs) -> StructuredFinding | None:
             effect_unit=None,
             confidence=0.0,
             sample_count=n_days,
-            limitations=["Too few mornings with readings"],
+            limitations=_qualified(["Too few mornings with readings"], quality),
             would_improve_with=[suggestions.LOG_WAKING_GLUCOSE],
+            data_quality=quality,
         )
 
     times = pd.to_datetime(pd.Series(daily.index.astype(str)), utc=True)
@@ -261,11 +300,15 @@ def fasting_glucose_trend(inputs: DetectorInputs) -> StructuredFinding | None:
         effect_unit="mmol/L per 30 days",
         confidence=round(confidence, 2),
         sample_count=n_days,
-        limitations=[
-            "Daily averages across the 05:00-09:00 window, not true fasting values",
-            "A reading taken after eating early would be counted as a morning value",
-        ],
+        limitations=_qualified(
+            [
+                "Daily averages across the 05:00-09:00 window, not true fasting values",
+                "A reading taken after eating early would be counted as a morning value",
+            ],
+            quality,
+        ),
         would_improve_with=[suggestions.LOG_WAKING_GLUCOSE, suggestions.LOG_HBA1C],
+        data_quality=quality,
         p_value=float(p_value),
     )
 
@@ -343,6 +386,8 @@ def meal_timing_association(inputs: DetectorInputs) -> StructuredFinding | None:
     if n == 0:
         return None
 
+    quality = _quality(inputs, coverage.POST_MEAL, responses, len(inputs.meals))
+
     if n < MIN_SAMPLES_FOR_ANY_FINDING:
         return StructuredFinding(
             finding_type="meal_timing_association",
@@ -354,11 +399,14 @@ def meal_timing_association(inputs: DetectorInputs) -> StructuredFinding | None:
             effect_unit=None,
             confidence=0.0,
             sample_count=n,
-            limitations=["Too few meals with paired glucose readings"],
+            limitations=_qualified(
+                ["Too few meals with paired glucose readings"], quality
+            ),
             would_improve_with=[
                 suggestions.LOG_MEALS_PROMPTLY,
                 suggestions.LOG_AROUND_MEALS,
             ],
+            data_quality=quality,
         )
 
     hours = np.array([float(r["hour"]) for r in responses])
@@ -375,8 +423,11 @@ def meal_timing_association(inputs: DetectorInputs) -> StructuredFinding | None:
             effect_unit=None,
             confidence=0.0,
             sample_count=n,
-            limitations=["Every meal was logged at the same time of day"],
+            limitations=_qualified(
+                ["Every meal was logged at the same time of day"], quality
+            ),
             would_improve_with=[suggestions.LOG_MEALS_ACROSS_THE_DAY],
+            data_quality=quality,
         )
 
     correlation, p_value = stats.pearsonr(hours, rises)
@@ -392,15 +443,19 @@ def meal_timing_association(inputs: DetectorInputs) -> StructuredFinding | None:
         effect_unit="correlation between meal hour and glucose rise",
         confidence=round(float(min(0.75, (1.0 - float(p_value)) * 0.8)), 2),
         sample_count=n,
-        limitations=[
-            "An association across meals that differ in what they contained",
-            "Correlation describes a tendency, not a cause",
-            "The hour a meal is logged is not always the hour it was eaten",
-        ],
+        limitations=_qualified(
+            [
+                "An association across meals that differ in what they contained",
+                "Correlation describes a tendency, not a cause",
+                "The hour a meal is logged is not always the hour it was eaten",
+            ],
+            quality,
+        ),
         would_improve_with=[
             suggestions.LOG_MEAL_CARBS,
             suggestions.ALTERNATE_MEAL_TIMING,
         ],
+        data_quality=quality,
         p_value=float(p_value),
     )
 

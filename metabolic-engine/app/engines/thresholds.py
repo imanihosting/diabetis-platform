@@ -84,12 +84,108 @@ review. They decide a word, never a refusal or a number.
 """
 
 
-def evidence_strength(sample_count: int, confidence: float) -> str:
-    """Maps sample size and confidence onto the single word shown to the user.
+# --- Coverage and evidence quality ------------------------------------------
+#
+# How complete the glucose record is, which is a different question from how
+# many readings it holds. Ten thousand readings clustered into four days say
+# nothing about the fortnight either side of them, and a sample count cannot
+# tell those apart.
+
+COVERAGE_MAX_GAP_MINUTES = 30
+"""The longest gap between readings that still counts as continuous watching.
+
+A CGM reports every five to fifteen minutes, so thirty is generous to it and
+unreachable for a meter — which is the honest answer for whole-window coverage.
+A person testing four times a day has not observed the other twenty-three
+hours, and a coverage figure that pretended otherwise would be the exact
+flattery this module exists to remove. What rescues that person is not a looser
+gap: it is that a finding is judged on the window it is actually about. See
+`coverage_basis`.
+"""
+
+SPARSE_DAY_MIN_READINGS = 4
+"""Below this, a day has been sampled rather than watched.
+
+Four is the classic pre-meal fingerstick day. It is a low bar on purpose: this
+counts days that are thin even by meter standards, not days that fall short of
+a CGM.
+"""
+
+LARGE_GAP_HOURS = 6
+"""A gap this long is a hole in the record rather than a night's sleep.
+
+Six hours will catch a sensor that fell off and will not catch somebody who
+slept eight hours without a CGM, which is why it is reported alongside the
+overnight coverage rather than instead of it.
+"""
+
+IRREGULAR_INTERVAL_TOLERANCE = 2.0
+"""How far an interval may stray from the record's own median and still count
+as regular — a factor, either way. Absolute minutes would describe a CGM and
+call every meter irregular; a ratio asks whether the person sampled the way
+they usually sample."""
+
+# Coverage below these fractions caps how strong a finding may be called. A
+# ceiling, never a promotion: coverage can lower a claim and can never raise
+# one, because a complete record is a precondition for trusting a result and
+# not evidence for it.
+#
+# NOT clinically reviewed. They are a first cut, deliberately conservative, and
+# they decide a word rather than a number: no effect estimate, confidence or
+# p-value moves because of them.
+COVERAGE_FOR_WEAK = 0.25
+COVERAGE_FOR_MODERATE = 0.50
+COVERAGE_FOR_STRONG = 0.70
+
+
+def coverage_ceiling(coverage: float) -> str:
+    """The strongest a finding may be called, given how complete its record is.
+
+    Mirrors `coverageCeiling()` in @wellovue/types.
+    """
+    if coverage < COVERAGE_FOR_WEAK:
+        return "insufficient"
+    if coverage < COVERAGE_FOR_MODERATE:
+        return "weak"
+    if coverage < COVERAGE_FOR_STRONG:
+        return "moderate"
+    return "strong"
+
+
+_STRENGTH_ORDER = ("insufficient", "weak", "moderate", "strong")
+
+
+def weaker_of(a: str, b: str) -> str:
+    """Whichever of two strengths claims less."""
+    return a if _STRENGTH_ORDER.index(a) <= _STRENGTH_ORDER.index(b) else b
+
+
+def evidence_strength(
+    sample_count: int, confidence: float, coverage: float | None = None
+) -> str:
+    """Maps sample size, confidence and record completeness onto one word.
 
     Mirrors `evidenceStrength()` in @wellovue/types so the API, web app, and
     reports can never disagree about how strong a finding is.
+
+    `coverage` is optional and defaults to not applying, which is exactly what
+    this did before it existed: a caller that omits it gets the old answer
+    rather than a silently harsher one. It is absent for findings that are not
+    about glucose at all — a lab trend has no sampling window to be complete.
+
+    When present it can only lower the answer. Many readings clustered into a
+    few days are still many readings, and the sample count is right to say so;
+    what it cannot say is that the rest of the period was observed. This is the
+    line that stops a finding looking strong because a sensor ran hot for a
+    weekend.
     """
+    by_sample = _strength_by_sample(sample_count, confidence)
+    if coverage is None:
+        return by_sample
+    return weaker_of(by_sample, coverage_ceiling(coverage))
+
+
+def _strength_by_sample(sample_count: int, confidence: float) -> str:
     if sample_count < MIN_SAMPLES_FOR_ANY_FINDING:
         return "insufficient"
     if sample_count < MIN_SAMPLES_FOR_MODERATE or confidence < 0.6:

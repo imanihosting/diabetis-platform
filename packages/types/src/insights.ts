@@ -178,13 +178,16 @@ export function postMealWindowLabel(style: 'figures' | 'words' = 'figures'): str
  * numbers everywhere in this product — it is what makes a column of them line
  * up — and a word set in it reads as a code rather than as English.
  */
-export interface PostMealMeasurement {
+export interface Measurement {
   key: string;
   label: string;
   value: string;
   unit: string | null;
   measure: boolean;
 }
+
+/** The post-meal rows are `Measurement`s; so are the data-quality rows. */
+export type PostMealMeasurement = Measurement;
 
 /**
  * A group's post-meal response as labelled rows, or null when it has none.
@@ -344,6 +347,53 @@ export const groupMeasureSchema = z.object({
 });
 export type GroupMeasure = z.infer<typeof groupMeasureSchema>;
 
+/**
+ * How complete the glucose record behind a finding actually is.
+ *
+ * Mirrors `DataQuality` in `metabolic-engine/app/models/findings.py`. These two
+ * are the same contract in two languages and must be changed together.
+ *
+ * A sample count answers "how much was recorded" and cannot answer "how much of
+ * the period was watched". Those come apart in the direction that flatters: ten
+ * thousand readings clustered into four days of a month look overwhelming and
+ * describe an eighth of it. `findingStrength` uses `coverage` as a ceiling —
+ * it can lower what a finding is called and can never raise it.
+ *
+ * Null on findings that are not computed from glucose. A lab trend has no
+ * sampling window to be complete, and a coverage figure attached to one would
+ * invite a reader to discount it for missing readings it never needed.
+ */
+export const dataQualitySchema = z.object({
+  /**
+   * The share of the window this finding is about that was observed.
+   *
+   * Which window depends on the finding, and that is the design: a morning
+   * finding is judged on mornings, a meal finding on meals. Judging everything
+   * on whole-period coverage would mark down every person who tests with a
+   * meter rather than wearing a sensor, including those who test faithfully
+   * around every meal and so have complete coverage of the windows their
+   * findings are actually about.
+   */
+  coverage: z.number().min(0).max(1),
+  /** What `coverage` is a fraction of, in the reader's words. */
+  coverageBasis: z.string().min(1),
+
+  daysWithData: z.number().int().min(0),
+  daysInWindow: z.number().int().min(0),
+  /** Days with readings, but too few to describe the day. */
+  sparseDays: z.number().int().min(0),
+  /** The longest stretch with no reading at all. */
+  largestGapHours: z.number().min(0),
+  /** Readings sharing a timestamp: a count that grew without an observation. */
+  duplicateReadings: z.number().int().min(0),
+  /** How much of the sampling kept to this record's own usual rhythm. */
+  regularFraction: z.number().min(0).max(1),
+  medianIntervalMinutes: z.number().nullable().default(null),
+  /** Where most readings came from: `cgm`, `meter`, `mixed`, `unknown`. */
+  primarySource: z.string().min(1),
+});
+export type DataQuality = z.infer<typeof dataQualitySchema>;
+
 export const structuredFindingSchema = z.object({
   findingType: z.string().min(1),
   summary: z.string().min(1),
@@ -360,6 +410,15 @@ export const structuredFindingSchema = z.object({
   comparison: z.array(groupMeasureSchema).default([]),
 
   /**
+   * How complete the record behind this finding is, when it is a glucose one.
+   *
+   * Null for a finding computed from something else rather than zeroed,
+   * because "no coverage" and "coverage is not a question here" are different
+   * and a reader must not have to guess which.
+   */
+  dataQuality: dataQualitySchema.nullable().default(null),
+
+  /**
    * Reported, but not as a limitation.
    *
    * It used to be a sentence inside `limitations`, which made a list of things
@@ -373,6 +432,115 @@ export const structuredFindingSchema = z.object({
 });
 export type StructuredFinding = z.infer<typeof structuredFindingSchema>;
 
+/**
+ * How complete the record is, as labelled rows.
+ *
+ * Same job `postMealMeasurements` does, and shared for the same reason: the
+ * person and their clinician read these numbers on different pages and must
+ * not meet them under different names.
+ *
+ * The problem rows — sparse days, duplicates — appear only when there is a
+ * problem. A quality panel that lists "0 duplicate readings" on every finding
+ * trains a reader to skip the panel, and then it is not there on the finding
+ * where it said something.
+ */
+export function dataQualityMeasurements(quality: DataQuality): Measurement[] {
+  const rows: Measurement[] = [
+    {
+      key: 'coverage',
+      label: 'Coverage',
+      value: String(Math.round(quality.coverage * 100)),
+      unit: `% of ${quality.coverageBasis}`,
+      measure: true,
+    },
+    {
+      key: 'days',
+      label: 'Days with readings',
+      value: `${quality.daysWithData} of ${quality.daysInWindow}`,
+      unit: null,
+      measure: true,
+    },
+    {
+      key: 'largestGap',
+      label: 'Longest gap',
+      value: quality.largestGapHours.toFixed(1),
+      unit: 'hours',
+      measure: true,
+    },
+    {
+      key: 'source',
+      label: 'Mostly from',
+      value: sourceLabel(quality.primarySource),
+      unit: null,
+      measure: false,
+    },
+  ];
+
+  if (quality.medianIntervalMinutes !== null) {
+    rows.splice(3, 0, {
+      key: 'interval',
+      label: 'Usual interval',
+      value: String(Math.round(quality.medianIntervalMinutes)),
+      unit: 'min',
+      measure: true,
+    });
+  }
+
+  if (quality.sparseDays > 0) {
+    rows.push({
+      key: 'sparseDays',
+      label: 'Thinly sampled days',
+      value: String(quality.sparseDays),
+      unit: null,
+      measure: true,
+    });
+  }
+
+  if (quality.duplicateReadings > 0) {
+    rows.push({
+      key: 'duplicates',
+      label: 'Duplicate readings',
+      value: String(quality.duplicateReadings),
+      unit: null,
+      measure: true,
+    });
+  }
+
+  return rows;
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  cgm: 'A sensor',
+  meter: 'A meter',
+  mixed: 'Both a sensor and a meter',
+  other: 'Another source',
+  unknown: 'An unrecorded source',
+};
+
+/**
+ * Where the readings came from, in words.
+ *
+ * Reported because it changes what every other figure means. Two hours of
+ * coverage in a day is a thin record from a sensor and an ordinary one from a
+ * meter, and a coverage figure read without knowing which is half a sentence.
+ */
+export function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? SOURCE_LABELS.unknown;
+}
+
+/**
+ * The one line a reader sees before deciding whether to look closer.
+ *
+ * A restatement of `coverage` and its basis, in the same category as
+ * `findingPresentation`: it introduces no claim the engine has not made. The
+ * engine adds its own limitation sentence when coverage is low; this is the
+ * neutral statement of fact that appears whatever the number.
+ */
+export function dataQualityHeadline(quality: DataQuality): string {
+  const percent = Math.round(quality.coverage * 100);
+  return `Glucose was recorded for ${percent}% of ${quality.coverageBasis}.`;
+}
+
 export const evidenceStrengthSchema = z.enum([
   'insufficient',
   'weak',
@@ -382,17 +550,64 @@ export const evidenceStrengthSchema = z.enum([
 export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 
 /**
- * Maps sample count and confidence onto the single word shown to the user.
- * Kept in shared code so the API, web app, and reports never disagree.
+ * Coverage below these fractions caps how strong a finding may be called.
+ *
+ * Mirrors the constants in `metabolic-engine/app/engines/thresholds.py`. Not
+ * clinically reviewed: a first cut, deliberately conservative, and they decide
+ * a word rather than a number — no effect estimate, confidence or p-value
+ * moves because of them.
+ */
+export const COVERAGE_FOR_WEAK = 0.25;
+export const COVERAGE_FOR_MODERATE = 0.5;
+export const COVERAGE_FOR_STRONG = 0.7;
+
+const STRENGTHS: EvidenceStrength[] = ['insufficient', 'weak', 'moderate', 'strong'];
+
+/** The strongest a finding may be called, given how complete its record is. */
+export function coverageCeiling(coverage: number): EvidenceStrength {
+  if (coverage < COVERAGE_FOR_WEAK) return 'insufficient';
+  if (coverage < COVERAGE_FOR_MODERATE) return 'weak';
+  if (coverage < COVERAGE_FOR_STRONG) return 'moderate';
+  return 'strong';
+}
+
+/** Whichever of two strengths claims less. */
+export function weakerOf(a: EvidenceStrength, b: EvidenceStrength): EvidenceStrength {
+  return STRENGTHS.indexOf(a) <= STRENGTHS.indexOf(b) ? a : b;
+}
+
+/**
+ * Maps sample count, confidence and record completeness onto the single word.
+ *
+ * Kept in shared code so the API, web app, and reports never disagree, and
+ * mirrored by `evidence_strength()` in the engine's `thresholds.py`.
+ *
+ * `coverage` is optional and omitting it means "do not apply a ceiling", which
+ * is exactly what this did before coverage existed. It is absent for findings
+ * that are not about glucose at all.
+ *
+ * When present it can only lower the answer. Many readings clustered into a
+ * few days are still many readings and the sample count is right to say so;
+ * what a count cannot say is that the rest of the period was observed. This is
+ * the line that stops a finding looking strong because a sensor ran hot for a
+ * weekend.
  */
 export function evidenceStrength(
   sampleCount: number,
   confidence: number,
+  coverage?: number | null,
 ): EvidenceStrength {
-  if (sampleCount < 5) return 'insufficient';
-  if (sampleCount < 10 || confidence < 0.6) return 'weak';
-  if (sampleCount < 20 || confidence < 0.8) return 'moderate';
-  return 'strong';
+  const bySample: EvidenceStrength =
+    sampleCount < 5
+      ? 'insufficient'
+      : sampleCount < 10 || confidence < 0.6
+        ? 'weak'
+        : sampleCount < 20 || confidence < 0.8
+          ? 'moderate'
+          : 'strong';
+
+  if (coverage === undefined || coverage === null) return bySample;
+  return weakerOf(bySample, coverageCeiling(coverage));
 }
 
 /**
@@ -453,12 +668,28 @@ const STRENGTH_ORDER: Record<EvidenceStrength, number> = {
  * sample count: the engine returns those when a comparison group is too thin
  * to describe. `evidenceStrength(8, 0)` would call that "weak evidence", which
  * overstates it — there is no evidence yet, only a count of what was logged.
+ *
+ * Where the finding carries data quality, its coverage caps the answer. That
+ * is the second way a count overstates: a record with plenty of readings and
+ * none of them in the window being analysed has counted a great deal and
+ * observed very little.
  */
 export function findingStrength(
-  finding: Pick<StructuredFinding, 'effectEstimate' | 'sampleCount' | 'confidence'>,
+  finding: Pick<StructuredFinding, 'effectEstimate' | 'sampleCount' | 'confidence'> & {
+    /**
+     * Optional so a caller holding a partial finding — a badge, a fixture —
+     * still typechecks. Absent means no ceiling, which is what this did before
+     * coverage existed.
+     */
+    dataQuality?: DataQuality | null;
+  },
 ): EvidenceStrength {
   if (finding.effectEstimate === null) return 'insufficient';
-  return evidenceStrength(finding.sampleCount, finding.confidence);
+  return evidenceStrength(
+    finding.sampleCount,
+    finding.confidence,
+    finding.dataQuality?.coverage,
+  );
 }
 
 /**

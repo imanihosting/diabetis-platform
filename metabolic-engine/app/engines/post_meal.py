@@ -82,6 +82,19 @@ def post_meal_metrics(
     )
 
 
+def measurable_responses(
+    responses: Sequence[MealResponse],
+) -> list[MealResponse]:
+    """The meals watched long enough for their timings to mean anything.
+
+    Exported because coverage asks the same question these measurements do —
+    "was this meal actually observed?" — and two definitions of it drifting
+    apart would put a coverage figure beside a set of measurements that
+    disagreed with it. See `app.engines.coverage`.
+    """
+    return [r for r in responses if _measure(r) is not None]
+
+
 class _Measured:
     """One meal's timings. A small class rather than a tuple because five
     positional floats at the call site is how the wrong two get swapped."""

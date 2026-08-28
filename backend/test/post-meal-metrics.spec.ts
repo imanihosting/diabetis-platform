@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  COVERAGE_FOR_MODERATE,
+  COVERAGE_FOR_STRONG,
+  COVERAGE_FOR_WEAK,
   POST_MEAL_WINDOW_MINUTES,
+  dataQualitySchema,
+  evidenceStrength,
   groupMeasureSchema,
   knownPostMealShapes,
   postMealMetricsSchema,
@@ -220,5 +225,92 @@ describe('post-meal shape labels', () => {
     const unknown = postMealShapeLabel('biphasic');
     expect(unknown.label).toBe('Biphasic');
     expect(unknown.description.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Coverage: the second half of the same duplication problem.
+ *
+ * `DataQuality` and the coverage thresholds exist in both languages, and the
+ * thresholds decide what the platform is willing to claim. A silent
+ * disagreement here means the engine computes a ceiling the interface does not
+ * apply, or the reverse — and the symptom is a finding labelled differently in
+ * the packet and on the screen, which is worse than either being wrong alone.
+ */
+describe('data quality contract', () => {
+  const THRESHOLDS = engineSource(join('engines', 'thresholds.py'));
+
+  const declared = (name: string): number => {
+    const match = THRESHOLDS.match(new RegExp(`^${name}\\s*=\\s*([0-9.]+)`, 'm'));
+    if (!match) throw new Error(`${name} is not declared in thresholds.py`);
+    return Number(match[1]);
+  };
+
+  it('sends every field under the name the contract reads', () => {
+    const body = classBody(FINDINGS, 'DataQuality');
+
+    const aliased = [...body.matchAll(/serialization_alias="([A-Za-z]+)"/g)].map((m) => m[1]);
+    const plain = [...body.matchAll(/^ {4}(coverage): /gm)].map((m) => m[1]);
+
+    expect(new Set([...aliased, ...plain])).toEqual(
+      new Set(Object.keys(dataQualitySchema.shape)),
+    );
+  });
+
+  it('caps strength at the same coverage the engine does', () => {
+    expect(declared('COVERAGE_FOR_WEAK')).toBe(COVERAGE_FOR_WEAK);
+    expect(declared('COVERAGE_FOR_MODERATE')).toBe(COVERAGE_FOR_MODERATE);
+    expect(declared('COVERAGE_FOR_STRONG')).toBe(COVERAGE_FOR_STRONG);
+  });
+
+  it('declares the field on the finding under the name the engine sends', () => {
+    expect(classBody(FINDINGS, 'StructuredFinding')).toContain(
+      'serialization_alias="dataQuality"',
+    );
+  });
+
+  it('lets a finding through with or without it', () => {
+    const quality = {
+      coverage: 0.42,
+      coverageBasis: 'logged meals',
+      daysWithData: 10,
+      daysInWindow: 30,
+      sparseDays: 2,
+      largestGapHours: 19.5,
+      duplicateReadings: 0,
+      regularFraction: 0.98,
+      medianIntervalMinutes: 15,
+      primarySource: 'cgm',
+    };
+
+    expect(dataQualitySchema.parse(quality).coverage).toBe(0.42);
+
+    // A lab trend has no sampling window to be complete, and an engine build
+    // older than this one sends no such key at all.
+    const without = structuredFindingSchema.parse({
+      findingType: 'hba1c_trend',
+      summary: 'HbA1c has fallen.',
+      effectEstimate: -1.1,
+      effectUnit: 'mmol/mol',
+      confidence: 0.7,
+      sampleCount: 4,
+      limitations: ['Four results'],
+    });
+    expect(without.dataQuality).toBeNull();
+  });
+
+  it('never lets a partial record be called strong evidence', () => {
+    // The rule the whole ticket exists for, asserted on the shared function
+    // that the API, the web app and the packet all call.
+    expect(evidenceStrength(500, 0.99)).toBe('strong');
+    expect(evidenceStrength(500, 0.99, 0.1)).toBe('insufficient');
+    expect(evidenceStrength(500, 0.99, 0.4)).toBe('weak');
+    expect(evidenceStrength(500, 0.99, 0.6)).toBe('moderate');
+    expect(evidenceStrength(500, 0.99, 0.9)).toBe('strong');
+  });
+
+  it('lets coverage lower a claim and never raise one', () => {
+    expect(evidenceStrength(4, 0.99, 1.0)).toBe('insufficient');
+    expect(evidenceStrength(12, 0.95, 1.0)).toBe(evidenceStrength(12, 0.95));
   });
 });

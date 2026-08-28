@@ -2,6 +2,7 @@ import { findingPresentation, type StructuredFinding } from '@wellovue/types';
 import { EvidenceBadge } from '@/components/EvidenceBadge';
 import { FindingTrace } from '@/components/FindingTrace';
 import { PostMealMeasurements } from '@/components/PostMealMeasurements';
+import { DataQualityPanel } from '@/components/DataQualityPanel';
 import { ProposeExperiment } from '@/components/ProposeExperiment';
 import { Disclosure } from '@/components/Disclosure';
 
@@ -96,6 +97,10 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
                   ['The engine returned no limitations for this finding. Treat it with caution.']
             }
           />
+
+          {/* Beside the limitations, because it is one: how complete the
+              record was is why the badge above says what it says. */}
+          <DataQualityPanel quality={finding.dataQuality} />
 
           {finding.wouldImproveWith.length > 0 && (
             <Section title="What would sharpen this" items={finding.wouldImproveWith} />

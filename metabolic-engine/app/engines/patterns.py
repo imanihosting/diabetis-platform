@@ -12,14 +12,15 @@ Design rules this module follows:
 """
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from app.engines import glucose_data, prediabetes, registry, suggestions
+from app.engines import coverage, glucose_data, prediabetes, registry, suggestions
 from app.engines.meal_response import MealResponse, post_meal_responses
 from app.engines.post_meal import post_meal_metrics
 from app.engines.thresholds import (
@@ -28,9 +29,9 @@ from app.engines.thresholds import (
     TARGET_HIGH_MMOL,
     WALK_PROXIMITY_MINUTES,
 )
-from app.models.findings import CurvePoint, GroupMeasure, StructuredFinding
+from app.models.findings import CurvePoint, DataQuality, GroupMeasure, StructuredFinding
 
-MODEL_VERSION = "pattern-engine-v1.2.0"
+MODEL_VERSION = "pattern-engine-v1.3.0"
 """Bumped when output changes, not when code does.
 
 v1.1.0 reads hour-of-day on the account's timezone rather than on UTC, which
@@ -51,7 +52,52 @@ sample count moves, which is why it is a minor rather than another point
 release. It is still a version, because the output a prediction was made
 against is part of what that prediction meant, and a packet quoting v1.1.0 was
 answering with strictly less about the same meals.
+
+v1.3.0 attaches data quality to every glucose finding and lets coverage cap how
+strong one may be called. This one does change output: a record whose readings
+are clustered into part of the window now reports the same effect estimate and
+the same confidence as before, and a weaker word beside them. Nothing about the
+arithmetic moved — no estimate, no confidence, no p-value — but what the
+platform is willing to claim from it did, which is exactly the kind of change a
+version exists to mark. A prediction made under v1.2.0 was made by a build that
+could not see how complete its own record was.
 """
+
+Window = tuple[datetime, datetime] | None
+"""The period a detector is judging completeness against.
+
+Optional, and None means "do not report data quality at all" rather than "zero
+coverage". A caller that constructs frames by hand and asks a detector a
+question directly — which every engine test does — gets exactly the finding it
+got before coverage existed.
+"""
+
+
+def _quality(
+    glucose: pd.DataFrame,
+    window: Window,
+    basis: str,
+    responses: Sequence[MealResponse] = (),
+    meals_logged: int | None = None,
+) -> DataQuality | None:
+    """How complete this record is for the window this finding is about."""
+    if window is None:
+        return None
+    return coverage.assess(
+        glucose, window[0], window[1], basis, responses, meals_logged
+    )
+
+
+def _qualified(limitations: list[str], quality: DataQuality | None) -> list[str]:
+    """The finding's limitations, with the coverage caveat if there is one.
+
+    Appended rather than prepended: what a finding cannot account for is about
+    the analysis, and how complete the record was is about the data underneath
+    it. A reader meets the reasoning first.
+    """
+    note = coverage.coverage_limitation(quality)
+    return [*limitations, note] if note else limitations
+
 
 _EMPTY_LABS = pd.DataFrame(
     columns=["id", "test_name", "value_numeric", "unit", "collected_at", "source"]
@@ -129,8 +175,17 @@ def detect_all(
     activity = _localise(activity, "occurred_at", timezone)
     labs = _localise(labs, "collected_at", timezone)
 
+    # The window travels with the frames because coverage is a fraction of it.
+    # Localised alongside them, so a "day" here is a day on the reader's clock
+    # rather than a day that happens to start at midnight UTC.
+    zone = ZoneInfo(timezone) if timezone else UTC
     inputs = registry.DetectorInputs(
-        glucose=glucose, meals=meals, activity=activity, labs=labs
+        glucose=glucose,
+        meals=meals,
+        activity=activity,
+        labs=labs,
+        window_start=start.astimezone(zone),
+        window_end=end.astimezone(zone),
     )
 
     # A detector returns None when the signal it needs is absent entirely —
@@ -165,10 +220,13 @@ def _localise(frame: pd.DataFrame, column: str, timezone: str) -> pd.DataFrame:
 
 
 def _post_meal_response(
-    glucose: pd.DataFrame, meals: pd.DataFrame
+    glucose: pd.DataFrame,
+    meals: pd.DataFrame,
+    window: Window = None,
 ) -> StructuredFinding | None:
     responses = post_meal_responses(glucose, meals)
     n = len(responses)
+    quality = _quality(glucose, window, coverage.POST_MEAL, responses, len(meals))
 
     if n < MIN_SAMPLES_FOR_ANY_FINDING:
         return StructuredFinding(
@@ -181,14 +239,18 @@ def _post_meal_response(
             effect_unit=None,
             confidence=0.0,
             sample_count=n,
-            limitations=[
-                "Too few meals with paired glucose readings",
-                "A meal needs a reading shortly before and within 2 hours after",
-            ],
+            limitations=_qualified(
+                [
+                    "Too few meals with paired glucose readings",
+                    "A meal needs a reading shortly before and within 2 hours after",
+                ],
+                quality,
+            ),
             would_improve_with=[
                 suggestions.LOG_MEALS_PROMPTLY,
                 suggestions.LOG_AROUND_MEALS,
             ],
+            data_quality=quality,
         )
 
     rises = np.array([r["rise"] for r in responses], dtype=float)
@@ -221,10 +283,11 @@ def _post_meal_response(
         effect_unit="mmol/L rise from baseline",
         confidence=round(confidence, 2),
         sample_count=n,
-        limitations=limitations,
+        limitations=_qualified(limitations, quality),
         would_improve_with=[
             suggestions.LOG_MEAL_CARBS,
         ],
+        data_quality=quality,
         comparison=[
             _group("A typical meal", responses)
         ],
@@ -285,7 +348,10 @@ def _group(label: str, responses: Sequence[MealResponse]) -> GroupMeasure:
 
 
 def _post_meal_walk_effect(
-    glucose: pd.DataFrame, meals: pd.DataFrame, activity: pd.DataFrame
+    glucose: pd.DataFrame,
+    meals: pd.DataFrame,
+    activity: pd.DataFrame,
+    window: Window = None,
 ) -> StructuredFinding | None:
     """Compares meals followed by activity against meals that were not.
 
@@ -297,6 +363,7 @@ def _post_meal_walk_effect(
     if not responses:
         return None
 
+    quality = _quality(glucose, window, coverage.POST_MEAL, responses, len(meals))
     starts = activity[activity["event_type"] == "exercise_started"]["occurred_at"]
 
     with_walk: list[float] = []
@@ -328,11 +395,12 @@ def _post_meal_walk_effect(
             effect_unit=None,
             confidence=0.0,
             sample_count=n_with + n_without,
-            limitations=["Too few meals in one or both groups"],
+            limitations=_qualified(["Too few meals in one or both groups"], quality),
             would_improve_with=[
                 suggestions.paired_meals_needed(MIN_SAMPLES_FOR_ANY_FINDING),
                 suggestions.ALTERNATE_WALKING,
             ],
+            data_quality=quality,
         )
 
     difference = float(np.mean(with_walk) - np.mean(without_walk))
@@ -354,11 +422,15 @@ def _post_meal_walk_effect(
         effect_unit="mmol/L difference in glucose rise",
         confidence=round(confidence, 2),
         sample_count=n_with + n_without,
-        limitations=[
-            "This is an observed association, not a controlled comparison",
-            "Meals in the two groups were not matched for size or composition",
-            "Activity intensity and duration were not accounted for",
-        ],
+        limitations=_qualified(
+            [
+                "This is an observed association, not a controlled comparison",
+                "Meals in the two groups were not matched for size or composition",
+                "Activity intensity and duration were not accounted for",
+            ],
+            quality,
+        ),
+        data_quality=quality,
         would_improve_with=[
             suggestions.ALTERNATE_WALKING,
             suggestions.LOG_ACTIVITY_MINUTES,
@@ -372,13 +444,16 @@ def _post_meal_walk_effect(
 
 
 def _late_meal_effect(
-    glucose: pd.DataFrame, meals: pd.DataFrame
+    glucose: pd.DataFrame,
+    meals: pd.DataFrame,
+    window: Window = None,
 ) -> StructuredFinding | None:
     """Whether meals after 20:00 are followed by a different response."""
     responses = post_meal_responses(glucose, meals)
     if not responses:
         return None
 
+    quality = _quality(glucose, window, coverage.POST_MEAL, responses, len(meals))
     late = [float(r["rise"]) for r in responses if int(r["hour"]) >= 20]
     earlier = [float(r["rise"]) for r in responses if int(r["hour"]) < 20]
     late_group = [r for r in responses if r["hour"] >= 20]
@@ -397,8 +472,11 @@ def _late_meal_effect(
             effect_unit=None,
             confidence=0.0,
             sample_count=len(late) + len(earlier),
-            limitations=["Too few meals in one or both time groups"],
+            limitations=_qualified(
+                ["Too few meals in one or both time groups"], quality
+            ),
             would_improve_with=[suggestions.LOG_MEALS_ACROSS_THE_DAY],
+            data_quality=quality,
         )
 
     difference = float(np.mean(late) - np.mean(earlier))
@@ -416,10 +494,14 @@ def _late_meal_effect(
         effect_unit="mmol/L difference in glucose rise",
         confidence=round(confidence, 2),
         sample_count=len(late) + len(earlier),
-        limitations=[
-            "Late and earlier meals differ in composition as well as timing",
-            "Sleep data was not included in this comparison",
-        ],
+        limitations=_qualified(
+            [
+                "Late and earlier meals differ in composition as well as timing",
+                "Sleep data was not included in this comparison",
+            ],
+            quality,
+        ),
+        data_quality=quality,
         comparison=[
             _group("Meals after 20:00", late_group),
             _group("Earlier meals", earlier_group),
@@ -431,12 +513,15 @@ def _late_meal_effect(
     )
 
 
-def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
+def _morning_glucose_pattern(
+    glucose: pd.DataFrame, window: Window = None
+) -> StructuredFinding:
     """Describes waking glucose (05:00-09:00) across the window."""
     morning = glucose[
         (glucose["measured_at"].dt.hour >= 5) & (glucose["measured_at"].dt.hour < 9)
     ]
     n_days = int(morning["measured_at"].dt.date.nunique()) if not morning.empty else 0
+    quality = _quality(glucose, window, coverage.MORNING)
 
     if n_days < MIN_SAMPLES_FOR_ANY_FINDING:
         return StructuredFinding(
@@ -449,8 +534,9 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
             effect_unit=None,
             confidence=0.0,
             sample_count=n_days,
-            limitations=["Too few mornings with readings"],
+            limitations=_qualified(["Too few mornings with readings"], quality),
             would_improve_with=[suggestions.LOG_WAKING_GLUCOSE],
+            data_quality=quality,
         )
 
     daily_means = morning.groupby(morning["measured_at"].dt.date)["value_mmol"].mean()
@@ -477,7 +563,8 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
         effect_unit="mmol/L average morning glucose",
         confidence=round(float(min(0.9, n_days / 30 * 0.9)), 2),
         sample_count=n_days,
-        limitations=limitations,
+        limitations=_qualified(limitations, quality),
+        data_quality=quality,
         # Persistently raised morning glucose is a pattern worth a clinician's
         # eyes; the platform surfaces it rather than interpreting it.
         clinician_review_recommended=above_target_days >= max(3, n_days // 2),
@@ -506,22 +593,28 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
 # new findings on the screen of every user who only records glucose.
 
 
+def _window(i: registry.DetectorInputs) -> Window:
+    if i.window_start is None or i.window_end is None:
+        return None
+    return (i.window_start, i.window_end)
+
+
 def _morning_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
-    return _morning_glucose_pattern(i.glucose)
+    return _morning_glucose_pattern(i.glucose, _window(i))
 
 
 def _post_meal_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
-    return None if i.meals.empty else _post_meal_response(i.glucose, i.meals)
+    return None if i.meals.empty else _post_meal_response(i.glucose, i.meals, _window(i))
 
 
 def _late_meal_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
-    return None if i.meals.empty else _late_meal_effect(i.glucose, i.meals)
+    return None if i.meals.empty else _late_meal_effect(i.glucose, i.meals, _window(i))
 
 
 def _walk_detector(i: registry.DetectorInputs) -> StructuredFinding | None:
     if i.meals.empty or i.activity.empty:
         return None
-    return _post_meal_walk_effect(i.glucose, i.meals, i.activity)
+    return _post_meal_walk_effect(i.glucose, i.meals, i.activity, _window(i))
 
 
 _TYPE_2 = registry.TYPE_2_CARE_MODES

@@ -6,9 +6,12 @@ import {
   REPORT_PERIODS,
   careModeLabel,
   findingPresentation,
+  dataQualityHeadline,
+  dataQualityMeasurements,
   postMealCaveat,
   postMealMeasurements,
   type ClinicianPacket,
+  type DataQuality,
   type DiscussionPoint,
   type GroupMeasure,
   type LabSeries,
@@ -426,6 +429,8 @@ function Finding({ finding }: { finding: StructuredFinding }) {
 
       <PostMeal groups={finding.comparison} />
 
+      <Quality quality={finding.dataQuality} />
+
       {finding.limitations.length > 0 && (
         <div className="mt-4 border-t border-rule pt-3">
           <h4 className="text-xs uppercase tracking-wide text-ink-faint">
@@ -434,6 +439,45 @@ function Finding({ finding }: { finding: StructuredFinding }) {
           <List items={finding.limitations} className="mt-2" />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * How complete the record behind a finding is.
+ *
+ * Fully expanded here, unlike the evidence page, where the detail sits behind
+ * a disclosure. A clinician deciding how much weight to give a finding is
+ * exactly the reader who wants the longest gap and the sampling interval, and
+ * this page has to survive being printed — a disclosure on paper is a section
+ * that does not exist.
+ *
+ * Rows come from the same `dataQualityMeasurements()` the evidence page uses.
+ */
+function Quality({ quality }: { quality: DataQuality | null }) {
+  if (!quality) return null;
+
+  return (
+    <div className="mt-4 break-inside-avoid border-t border-rule pt-3">
+      <h4 className="text-xs uppercase tracking-wide text-ink-faint">
+        Record behind this finding
+      </h4>
+
+      <p className="mt-2 max-w-prose text-xs leading-relaxed text-ink-muted">
+        {dataQualityHeadline(quality)}
+      </p>
+
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {dataQualityMeasurements(quality).map((row) => (
+          <Fragment key={row.key}>
+            <dt className="text-xs text-ink-faint">{row.label}</dt>
+            <dd className="text-xs text-ink">
+              <span className={row.measure ? 'measure' : undefined}>{row.value}</span>
+              {row.unit && <span className="ml-1 text-ink-faint">{row.unit}</span>}
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
     </div>
   );
 }

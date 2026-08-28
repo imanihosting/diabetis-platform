@@ -19,6 +19,7 @@ new care mode says so in one place, next to the code whose assumptions changed.
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import pandas as pd
 
@@ -61,6 +62,20 @@ class DetectorInputs:
     meals: pd.DataFrame
     activity: pd.DataFrame
     labs: pd.DataFrame
+
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    """The period these frames were loaded for, on the reader's clock.
+
+    Needed because coverage is a fraction of something, and the something is
+    the requested window. The frames alone cannot say it: a record with three
+    days of readings looks identical whether it was asked for over three days
+    or over three months, and those are opposite answers.
+
+    Optional so that a caller constructing inputs by hand — every existing test
+    — gets the behaviour it had before coverage existed, which is a finding
+    with no data-quality attached rather than one claiming zero coverage.
+    """
 
 
 # A detector returns None when the signal it needs is absent entirely, which is
