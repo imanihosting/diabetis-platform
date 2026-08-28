@@ -10,6 +10,25 @@ import { experimentSchema } from './experiments';
  * only phrase an existing finding — it must not create one. See
  * docs/technical-architecture.md, "Metabolic Intelligence Service".
  */
+/**
+ * One group a finding compared, in glucose a reader would recognise.
+ *
+ * Absolute mmol/L rather than a rise, because a rise of 3.1 says nothing about
+ * whether the person ended up in range and 6.0 rising to 9.1 says it exactly.
+ * That is what lets a finding be drawn against the target band instead of
+ * printed as a sentence with a number in it.
+ *
+ * `baselineMmol` is null for a level rather than a movement — morning glucose
+ * has nowhere to rise from — and a chart draws one mark instead of a curve.
+ */
+export const groupMeasureSchema = z.object({
+  label: z.string(),
+  n: z.number().int().min(0),
+  baselineMmol: z.number().nullable().default(null),
+  peakMmol: z.number().nullable().default(null),
+});
+export type GroupMeasure = z.infer<typeof groupMeasureSchema>;
+
 export const structuredFindingSchema = z.object({
   findingType: z.string().min(1),
   summary: z.string().min(1),
@@ -21,6 +40,19 @@ export const structuredFindingSchema = z.object({
   limitations: z.array(z.string()),
   /** Set when the finding touches anything a clinician should weigh in on. */
   clinicianReviewRecommended: z.boolean().default(false),
+
+  /** The groups compared, when the finding compared any. Empty for lab trends. */
+  comparison: z.array(groupMeasureSchema).default([]),
+
+  /**
+   * Reported, but not as a limitation.
+   *
+   * It used to be a sentence inside `limitations`, which made a list of things
+   * the finding cannot account for read as a lab report — and a p-value is not
+   * a limitation, it is a statistic. Its own field so a surface can put it
+   * where a technical detail belongs, or leave it out entirely.
+   */
+  pValue: z.number().nullable().default(null),
   /** What the user could log to make this answer sharper. */
   wouldImproveWith: z.array(z.string()).default([]),
 });
@@ -252,6 +284,83 @@ export function proposalFromFinding(
 ): ExperimentProposal | null {
   if (finding.effectEstimate === null) return null;
   return FINDING_EXPERIMENTS[finding.findingType] ?? null;
+}
+
+/**
+ * What a finding is called, and what kind of diabetes question it answers.
+ *
+ * `findingType` is the engine's own identifier and it belongs in the record —
+ * a clinician quotes it, the packet keys on it, and it must not drift. It does
+ * not belong on a screen: `late_evening_meal_response` tells somebody with
+ * diabetes nothing about their evening meal.
+ *
+ * This is a display name for an enum, in the same category as `careModeLabel`
+ * and nothing like a finding. It restates what the detector already measures;
+ * it makes no claim the engine has not already made, and it must never be
+ * where a new one is introduced. Anything that interprets a person's data
+ * belongs in the engine, behind the review that gets it there.
+ *
+ * The lens exists because the same number means different things in different
+ * physiology. "A 3.1 mmol/L larger rise" is a post-meal response question, and
+ * saying so is what separates a diabetes platform from an analytics dashboard
+ * that happens to be pointed at glucose.
+ */
+export interface FindingPresentation {
+  title: string;
+  lens: string;
+}
+
+const FINDING_PRESENTATION: Record<string, FindingPresentation> = {
+  late_evening_meal_response: {
+    title: 'Late meals and glucose rise',
+    lens: 'Post-meal glucose response',
+  },
+  post_meal_walk_effect: {
+    title: 'Walking after meals',
+    lens: 'Activity and post-meal response',
+  },
+  post_meal_response: {
+    title: 'Your typical meal response',
+    lens: 'Post-meal glucose response',
+  },
+  morning_glucose_pattern: {
+    title: 'Morning glucose',
+    lens: 'Fasting and waking glucose',
+  },
+  hba1c_trend: { title: 'HbA1c over time', lens: 'Long-term glucose control' },
+  weight_trend: { title: 'Weight over time', lens: 'Metabolic risk factors' },
+  fasting_glucose_trend: {
+    title: 'Waking glucose over time',
+    lens: 'Fasting and waking glucose',
+  },
+  activity_consistency: { title: 'How regular your activity is', lens: 'Activity patterns' },
+  meal_timing_association: {
+    title: 'Meal timing and glucose rise',
+    lens: 'Post-meal glucose response',
+  },
+  care_mode_unsupported: {
+    title: 'Not yet interpreted for your care profile',
+    lens: 'Care profile',
+  },
+};
+
+/**
+ * Falls back to the identifier made readable rather than to the identifier.
+ *
+ * A detector added tomorrow without an entry here shows "Sleep and morning
+ * glucose", not `sleep_morning_glucose`. The fallback is deliberately plain so
+ * that a missing entry looks unfinished to whoever ships the detector, without
+ * ever showing a reader a database value.
+ */
+export function findingPresentation(findingType: string): FindingPresentation {
+  const known = FINDING_PRESENTATION[findingType];
+  if (known) return known;
+
+  const words = findingType.replace(/_/g, ' ').trim();
+  return {
+    title: words.charAt(0).toUpperCase() + words.slice(1),
+    lens: 'Pattern in your data',
+  };
 }
 
 /** Every template this map can produce. Used to prove none of them is unsafe. */

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import {
   REPORT_PERIODS,
   careModeLabel,
+  findingPresentation,
   type ClinicianPacket,
   type DiscussionPoint,
   type LabSeries,
@@ -393,7 +394,17 @@ function Finding({ finding }: { finding: StructuredFinding }) {
   return (
     <div className="surface-raised p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <span className="measure text-xs text-ink-faint">{finding.findingType}</span>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-ink-faint">
+            {findingPresentation(finding.findingType).lens}
+          </p>
+          <h3 className="mt-1 text-sm font-medium text-ink">
+            {findingPresentation(finding.findingType).title}
+          </h3>
+          {/* The identifier stays, quietly. A clinician quotes it back and the
+              packet keys on it; it is a reference, not a heading. */}
+          <p className="measure mt-1 text-xs text-ink-faint">{finding.findingType}</p>
+        </div>
         <EvidenceBadge finding={finding} />
       </div>
 

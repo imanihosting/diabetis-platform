@@ -104,6 +104,11 @@ export class EvidenceService {
         'Your data is still being recorded and nothing has been lost',
       ],
       clinicianReviewRecommended: false,
+      // Not a comparison and not a statistic: this is the care-mode gate
+      // answering, not a detector. Empty rather than absent so the shape
+      // matches every other finding the surfaces receive.
+      comparison: [],
+      pValue: null,
       wouldImproveWith: [
         'Confirm what kind of diabetes you have in your profile',
         'Ask your clinician whether Wellovue is a useful record to bring to an appointment',

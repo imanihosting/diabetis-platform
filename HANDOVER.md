@@ -225,6 +225,29 @@ so can never be measured, and a measurement that leaves its trial running with
 the answer already known. One experiment has exactly one prediction, by unique
 index.
 
+**The engine names findings; the contract titles them.** `findingType` is the
+record's identifier and belongs in the record — a clinician quotes it and the
+packet keys on it — but it is not a heading, and `late_evening_meal_response`
+told a person with diabetes nothing. `findingPresentation()` in the shared
+contract supplies a title and a diabetes lens for each. It is a display name
+for an enum, in the same category as `careModeLabel`, and it must never be
+where a new claim is introduced: anything that interprets somebody's data
+belongs in the engine, behind the review that gets it there. That line is the
+whole reason the map is a lookup and not a sentence generator.
+
+**A finding carries the glucose it compared, not only the difference.**
+Detectors used to compute baselines, peaks and group sizes and then throw them
+away, keeping one number — which is why the interface could only ever render a
+sentence with one number in it. `comparison` on `StructuredFinding` carries the
+groups as absolute mmol/L, so a finding can be drawn against the target band. A
+difference of 1.1 says nothing about whether either group ended up in range;
+the band says it immediately. Findings that are not glucose comparisons, like
+lab trends, carry an empty list and draw no chart.
+
+**A p-value is a statistic, not a limitation.** It used to be a sentence inside
+`limitations`, which made the evidence screen read as a lab report. It has its
+own field and sits behind a disclosure.
+
 **A finding comes from a model, never from a language model.** Every finding
 carries an effect estimate, confidence, sample count and explicit limitations.
 When data is thin the answer is "not enough data" plus what to log.

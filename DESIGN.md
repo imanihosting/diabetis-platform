@@ -174,6 +174,22 @@ Axis labels are `.measure`, `text-xs`, `--ink-faint`. Series are ink unless the
 value carries zone meaning, in which case the zone colour applies and a label
 accompanies it.
 
+**Every finding that compares glucose is drawn against the band.** A difference
+of 1.1 mmol/L between two groups says nothing about whether either group ended
+up in range; two curves against the target band say it immediately, and that is
+the difference between a statistic and something about a person's body. The
+numbers come from the detector — measured baselines and peaks, never
+interpolated — and a curve's control point sits *at* its peak rather than above
+it, so the drawing never shows a value higher than the one measured.
+
+A finding with no comparison draws no chart. Lab trends have no band to sit
+against, and an empty axis would imply the data exists and is flat.
+
+**The wash is held below full strength on small frames.** The target range runs
+3.9 to 10, so on a short chart the band fills most of the height and stops
+reading as a band a reading sits inside. Held at 70% against paper, as the hero
+trace is.
+
 ---
 
 ## 10. Using the width
@@ -194,7 +210,33 @@ Stacks to one column below `lg`. Prose inside either column stays at 52ch.
 
 ---
 
-## 11. The icon
+## 11. Naming what the engine found
+
+`findingType` is the record's identifier: a clinician quotes it, the packet
+keys on it, and it must not drift. It is not a heading.
+`late_evening_meal_response` tells somebody with diabetes nothing about their
+evening meal.
+
+Every surface shows the title and lens from `findingPresentation()` in the
+shared contract, with the identifier kept as a quiet reference in the clinician
+packet where somebody would actually cite it. The map is a display name for an
+enum, in the same category as `careModeLabel`. It restates what a detector
+already measures and must never be where a new claim is introduced — anything
+that interprets a person's data belongs in the engine, behind the review that
+gets it there.
+
+The lens exists because the same number means different things in different
+physiology. "A 3.1 mmol/L larger rise" is a post-meal glucose response
+question, and saying so is what separates this from an analytics dashboard
+pointed at glucose.
+
+A p-value is a statistic, not a limitation. Listing it among the things a
+finding cannot account for is what made the evidence screen read as a lab
+report. It has its own field and lives behind a disclosure.
+
+---
+
+## 12. The icon
 
 `frontend/src/app/icon.svg`, with `apple-icon.png` rendered from it at 180px.
 It is `RangeMark` squared: a trace spiking above target and settling back into
@@ -221,7 +263,7 @@ written as `--name` in the comments in that file.
 
 ---
 
-## 12. What would make this wrong
+## 13. What would make this wrong
 
 A quick self-check before shipping a surface:
 

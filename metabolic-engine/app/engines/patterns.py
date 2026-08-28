@@ -27,7 +27,7 @@ from app.engines.thresholds import (
     TARGET_HIGH_MMOL,
     WALK_PROXIMITY_MINUTES,
 )
-from app.models.findings import StructuredFinding
+from app.models.findings import GroupMeasure, StructuredFinding
 
 MODEL_VERSION = "pattern-engine-v1.0.0"
 
@@ -165,6 +165,29 @@ def _post_meal_response(
         would_improve_with=[
             suggestions.LOG_MEAL_CARBS,
         ],
+        comparison=[
+            _group(
+                "A typical meal",
+                [(float(r["baseline"]), float(r["peak"])) for r in responses],
+            )
+        ],
+    )
+
+
+def _group(label: str, curve: list[tuple[float, float]]) -> GroupMeasure:
+    """A comparison group from its (baseline, peak) pairs.
+
+    Means rather than medians, to match the difference the finding reports —
+    a chart drawn from medians beside a claim computed from means would be two
+    different comparisons on one card.
+    """
+    if not curve:
+        return GroupMeasure(label=label, n=0)
+    return GroupMeasure(
+        label=label,
+        n=len(curve),
+        baseline_mmol=round(float(np.mean([b for b, _ in curve])), 2),
+        peak_mmol=round(float(np.mean([pk for _, pk in curve])), 2),
     )
 
 
@@ -185,6 +208,11 @@ def _post_meal_walk_effect(
 
     with_walk: list[float] = []
     without_walk: list[float] = []
+    # Baselines and peaks alongside the rises. The difference is the finding;
+    # these are what let it be drawn against the target band, which is the only
+    # form in which a reader can see whether either group ended up in range.
+    with_walk_curve: list[tuple[float, float]] = []
+    without_walk_curve: list[tuple[float, float]] = []
     for response in responses:
         meal_time = response["meal_started_at"]
         walked = any(
@@ -192,6 +220,9 @@ def _post_meal_walk_effect(
             for t in starts
         )
         (with_walk if walked else without_walk).append(float(response["rise"]))
+        (with_walk_curve if walked else without_walk_curve).append(
+            (float(response["baseline"]), float(response["peak"]))
+        )
 
     n_with, n_without = len(with_walk), len(without_walk)
 
@@ -236,12 +267,16 @@ def _post_meal_walk_effect(
             "This is an observed association, not a controlled comparison",
             "Meals in the two groups were not matched for size or composition",
             "Activity intensity and duration were not accounted for",
-            f"Statistical p-value: {float(p_value):.3f}",
         ],
         would_improve_with=[
             suggestions.ALTERNATE_WALKING,
             suggestions.LOG_ACTIVITY_MINUTES,
         ],
+        comparison=[
+            _group("Meals followed by a walk", with_walk_curve),
+            _group("Meals without one", without_walk_curve),
+        ],
+        p_value=float(p_value),
     )
 
 
@@ -255,6 +290,12 @@ def _late_meal_effect(
 
     late = [float(r["rise"]) for r in responses if int(r["hour"]) >= 20]
     earlier = [float(r["rise"]) for r in responses if int(r["hour"]) < 20]
+    late_curve = [
+        (float(r["baseline"]), float(r["peak"])) for r in responses if int(r["hour"]) >= 20
+    ]
+    earlier_curve = [
+        (float(r["baseline"]), float(r["peak"])) for r in responses if int(r["hour"]) < 20
+    ]
 
     too_few_late = len(late) < MIN_SAMPLES_FOR_ANY_FINDING
     too_few_earlier = len(earlier) < MIN_SAMPLES_FOR_ANY_FINDING
@@ -291,8 +332,12 @@ def _late_meal_effect(
         limitations=[
             "Late and earlier meals differ in composition as well as timing",
             "Sleep data was not included in this comparison",
-            f"Statistical p-value: {float(p_value):.3f}",
         ],
+        comparison=[
+            _group("Meals after 20:00", late_curve),
+            _group("Earlier meals", earlier_curve),
+        ],
+        p_value=float(p_value),
         would_improve_with=[
             suggestions.ALTERNATE_MEAL_TIMING,
         ],
@@ -349,6 +394,12 @@ def _morning_glucose_pattern(glucose: pd.DataFrame) -> StructuredFinding:
         # Persistently raised morning glucose is a pattern worth a clinician's
         # eyes; the platform surfaces it rather than interpreting it.
         clinician_review_recommended=above_target_days >= max(3, n_days // 2),
+        # A level rather than a rise: there is no baseline to move from, so the
+        # value sits in `peak` and a chart draws one mark against the band
+        # instead of a curve.
+        comparison=[
+            GroupMeasure(label="Morning average", n=n_days, peak_mmol=round(mean_morning, 2))
+        ],
         would_improve_with=[
             suggestions.LOG_MEDICATION_TIMING,
         ],

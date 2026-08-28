@@ -186,7 +186,6 @@ def lab_trend_detector(
             "results are taken months apart",
             "Lab results come from different draws and sometimes different "
             "laboratories, which vary between themselves",
-            f"Statistical p-value: {p_value:.3f}",
         ]
         if n < 5:
             limitations.append("Any single result moves this trend noticeably")
@@ -204,6 +203,7 @@ def lab_trend_detector(
             sample_count=n,
             limitations=limitations,
             would_improve_with=[log_suggestion],
+            p_value=float(p_value),
         )
 
     return detect
@@ -264,9 +264,9 @@ def fasting_glucose_trend(inputs: DetectorInputs) -> StructuredFinding | None:
         limitations=[
             "Daily averages across the 05:00-09:00 window, not true fasting values",
             "A reading taken after eating early would be counted as a morning value",
-            f"Statistical p-value: {p_value:.3f}",
         ],
         would_improve_with=[suggestions.LOG_WAKING_GLUCOSE, suggestions.LOG_HBA1C],
+        p_value=float(p_value),
     )
 
 
@@ -396,12 +396,12 @@ def meal_timing_association(inputs: DetectorInputs) -> StructuredFinding | None:
             "An association across meals that differ in what they contained",
             "Correlation describes a tendency, not a cause",
             "The hour a meal is logged is not always the hour it was eaten",
-            f"Statistical p-value: {float(p_value):.3f}",
         ],
         would_improve_with=[
             suggestions.LOG_MEAL_CARBS,
             suggestions.ALTERNATE_MEAL_TIMING,
         ],
+        p_value=float(p_value),
     )
 
 
