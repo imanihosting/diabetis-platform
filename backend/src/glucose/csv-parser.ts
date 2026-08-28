@@ -14,15 +14,27 @@ export interface CsvParseResult {
  * a silently mis-parsed glucose value is worse than a rejected row.
  *
  * TIMEZONES: most CGM exports write local wall-clock time with no offset
- * (`2026-06-01 08:15`). Those are interpreted in the *server's* timezone,
- * which is correct only when the server and the device agree. Timestamps that
- * carry an explicit offset or `Z` are honoured as written. Until the platform
- * stores a per-user timezone, run the API in UTC and treat offset-less
- * exports from other timezones as approximate.
+ * (`2026-06-01 08:15`). Those are the device's clock, which is the person's
+ * clock, so they are read in the account's timezone rather than the server's.
+ * Timestamps carrying an explicit offset or `Z` are honoured exactly as
+ * written, because the export has already answered the question.
+ *
+ * The server's own zone is never consulted. It used to be, and that was
+ * correct only when the server and the device happened to agree — an import
+ * from a phone in Sydney into an API running in UTC shifted every reading by
+ * eleven hours, which then moved meals across the late-meal boundary and into
+ * or out of the morning window.
+ *
+ * An offset-less timestamp in a shape this cannot read is rejected with its
+ * line number rather than handed to `new Date`, which would apply the server
+ * zone again and silently reintroduce the same error. That is the same trade
+ * the rest of this parser makes: a rejected row is recoverable, a wrong
+ * glucose timestamp is not.
  */
 export function parseGlucoseCsv(
   content: string,
   source: DataSource = 'csv_import',
+  timezone = 'UTC',
 ): CsvParseResult {
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const rejected: CsvParseResult['rejected'] = [];
@@ -45,9 +57,14 @@ export function parseGlucoseCsv(
 
     if (!rawTime || !rawValue) continue; // blank/padding row
 
-    const measuredAt = new Date(rawTime);
-    if (Number.isNaN(measuredAt.getTime())) {
-      rejected.push({ line: i + 1, reason: `Unparseable timestamp: "${rawTime}"` });
+    const measuredAt = parseTimestamp(rawTime, timezone);
+    if (measuredAt === null) {
+      rejected.push({
+        line: i + 1,
+        reason:
+          `Unparseable timestamp: "${rawTime}". Expected an ISO-like local ` +
+          'time (2026-06-01 08:15) or one carrying an explicit offset.',
+      });
       continue;
     }
 
@@ -139,4 +156,80 @@ function splitCsvLine(line: string): string[] {
   }
   cells.push(current);
   return cells;
+}
+
+/** A timestamp that already says which instant it means. */
+const CARRIES_OFFSET = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** `2026-06-01 08:15`, `2026-06-01T08:15:30`, and the usual variations. */
+const WALL_CLOCK =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/;
+
+/**
+ * The instant a CSV timestamp refers to.
+ *
+ * Returns null rather than guessing. `new Date('2026-06-01 08:15')` silently
+ * applies whatever zone the process happens to run in, which is the bug this
+ * function exists to remove — so anything not recognised is refused instead of
+ * being parsed by a function that will always produce *an* answer.
+ */
+function parseTimestamp(raw: string, timezone: string): Date | null {
+  if (CARRIES_OFFSET.test(raw)) {
+    const explicit = new Date(raw);
+    return Number.isNaN(explicit.getTime()) ? null : explicit;
+  }
+
+  const match = WALL_CLOCK.exec(raw.trim());
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute, second] = match;
+  const wallAsUtc = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second ?? '0'),
+  );
+  if (Number.isNaN(wallAsUtc)) return null;
+
+  // Two passes. The offset depends on the instant, and the instant is what we
+  // are solving for, so the first pass uses the wall clock read as UTC to pick
+  // a plausible offset and the second re-reads it at the instant that implies.
+  // The two differ only within an hour of a daylight-saving change, which is
+  // exactly when getting it wrong would be least noticeable.
+  const firstPass = wallAsUtc - offsetAt(new Date(wallAsUtc), timezone);
+  const settled = wallAsUtc - offsetAt(new Date(firstPass), timezone);
+  const at = new Date(settled);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/** How far ahead of UTC `timezone` is at this instant, in milliseconds. */
+function offsetAt(instant: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+    .formatToParts(instant)
+    .reduce<Record<string, string>>((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  const localAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    // Intl renders midnight as 24 in some locales/engines.
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  return localAsUtc - instant.getTime();
 }

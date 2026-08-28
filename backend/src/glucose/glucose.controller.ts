@@ -20,6 +20,7 @@ import {
 } from '@wellovue/types';
 import { GlucoseService } from './glucose.service';
 import { parseGlucoseCsv } from './csv-parser';
+import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import {
   CurrentUser,
@@ -35,6 +36,7 @@ export class GlucoseController {
     private readonly glucose: GlucoseService,
     private readonly storage: StorageService,
     private readonly db: DatabaseService,
+    private readonly profiles: DiabetesProfileService,
   ) {}
 
   @Post()
@@ -71,7 +73,11 @@ export class GlucoseController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
-    const parsed = parseGlucoseCsv(file.buffer.toString('utf8'));
+    // The device's clock is the person's clock. Read from the account rather
+    // than from the process, which is what made an import from a phone in one
+    // zone into an API running in another shift every reading.
+    const { timezone } = await this.profiles.context(user.id);
+    const parsed = parseGlucoseCsv(file.buffer.toString('utf8'), 'csv_import', timezone);
     if (parsed.samples.length === 0) {
       throw new BadRequestException({
         message: 'No usable rows found in the CSV',

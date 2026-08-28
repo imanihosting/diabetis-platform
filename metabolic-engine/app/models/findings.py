@@ -10,8 +10,9 @@ that already exists.
 
 from datetime import datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CurvePoint(BaseModel):
@@ -123,8 +124,31 @@ class PatternRequest(BaseModel):
 
     Defaults to UTC, which is exactly what the engine did before the field
     existed: a caller that omits it gets the old behaviour rather than a silent
-    shift into some other zone.
+    shift into some other zone. An omission and an unrecognised name are
+    different things, and only the first has a safe default — see the validator.
     """
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        """Refuses a zone this system cannot resolve.
+
+        Falling back to UTC here was the earlier behaviour and it was wrong.
+        The engine fails closed everywhere else — `care_mode` defaults to
+        `unknown`, which no detector supports, precisely so an omission cannot
+        be quietly interpreted — and a zone it cannot resolve is not an
+        omission, it is an unrecognised input. Accepting it would produce a
+        confident finding computed on the wrong clock, which is the single
+        worst thing this service can return.
+        """
+        try:
+            ZoneInfo(value)
+        except Exception as error:  # noqa: BLE001 - any resolution failure
+            raise ValueError(
+                f"Unknown timezone {value!r}. Expected an IANA name such as "
+                "Europe/Dublin."
+            ) from error
+        return value
 
     model_config = {"populate_by_name": True}
 

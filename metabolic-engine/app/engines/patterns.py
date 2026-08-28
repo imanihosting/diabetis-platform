@@ -29,7 +29,20 @@ from app.engines.thresholds import (
 )
 from app.models.findings import CurvePoint, GroupMeasure, StructuredFinding
 
-MODEL_VERSION = "pattern-engine-v1.0.0"
+MODEL_VERSION = "pattern-engine-v1.1.0"
+"""Bumped when output changes, not when code does.
+
+v1.1.0 reads hour-of-day on the account's timezone rather than on UTC, which
+materially changes three findings: the morning window, the fasting window, and
+the late-meal split. On the demo record the same thirty days move from "3.1
+mmol/L larger rise, 10 late vs 64 earlier" to "0.2 mmol/L, 25 late vs 49
+earlier" simply by reading them in Sydney.
+
+That matters beyond the screen. Every prediction records the engine build that
+made it, and the clinician packet reports it. A prediction made under the UTC
+reading and one made after are not answers to the same question, and giving
+them the same version would quietly claim they were comparable.
+"""
 
 _EMPTY_LABS = pd.DataFrame(
     columns=["id", "test_name", "value_numeric", "unit", "collected_at", "source"]

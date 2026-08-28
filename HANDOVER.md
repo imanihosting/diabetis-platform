@@ -129,7 +129,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 78 unit, no infrastructure needed
+npm test                  # 83 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -140,7 +140,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 78 | no |
+| `backend/test/*.spec.ts` | 83 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -150,7 +150,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `metabolic-engine/tests` | 35 | no |
+| `metabolic-engine/tests` | 38 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
 `npm run test:integration`. **Wait for the migrate container to finish** before
@@ -235,6 +235,25 @@ where a new claim is introduced: anything that interprets somebody's data
 belongs in the engine, behind the review that gets it there. That line is the
 whole reason the map is a lookup and not a sentence generator.
 
+**An engine version means "the output changed", not "the code changed".**
+`MODEL_VERSION` went to `pattern-engine-v1.1.0` when hour-of-day moved onto the
+account's timezone, because that materially changes three findings. Every
+prediction records the build that made it and the clinician packet reports it,
+so a prediction made under the UTC reading and one made after are not answers
+to the same question — giving them the same version would quietly claim they
+were comparable. Bump it whenever a detector's output moves, not when a file
+does.
+
+**An offset-less CSV timestamp is the person's wall clock.** Most CGM exports
+write local time with no offset. Those used to be parsed by `new Date`, which
+applies whatever zone the API process runs in — so an export from a phone in
+Sydney into a UTC server shifted every reading by eleven hours, which then
+moved meals across the late-meal boundary and in and out of the morning window.
+The parser now takes the account's timezone, honours an explicit offset when
+the export carries one, and **rejects an offset-less shape it does not
+recognise** rather than handing it to `new Date`, which would always produce an
+answer and silently reintroduce the same error.
+
 **Hour-of-day findings read the person's clock, not the server's.** Every
 timestamp reaches the engine as UTC, and three findings turn on hour-of-day:
 the morning window, the fasting window, and the late-meal split at 20:00.
@@ -256,6 +275,13 @@ UTC and should stay that way.
 Defaults to UTC rather than to the browser's guess. A guessed zone produces the
 same wrong findings while looking like a decision somebody made; the care
 profile shows the browser's value in a control the person can see and change.
+
+An **omitted** zone defaults to UTC; an **unrecognised** one is refused with a
+422. Those are different things, and only the first has a safe default. The
+engine fails closed everywhere else — `careMode` defaults to `unknown`, which
+no detector supports — and a zone it cannot resolve is an unrecognised input,
+not an omission. Accepting it would return a confident finding computed on the
+wrong clock.
 
 **A finding carries the shape of the response, not only its endpoints.**
 `post_meal_responses` keeps each meal's readings binned by minutes since the

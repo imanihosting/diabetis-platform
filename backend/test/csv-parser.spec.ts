@@ -89,21 +89,80 @@ describe('parseGlucoseCsv', () => {
 
 describe('parseGlucoseCsv timestamp handling', () => {
   it('honours an explicit UTC offset', () => {
+    // The export has already answered which instant it means, so the account's
+    // timezone is not consulted.
     const csv = ['Timestamp,Glucose mmol/L', '2026-06-01T08:15:00Z,6.4'].join('\n');
+    const [sample] = parseGlucoseCsv(csv, 'csv_import', 'Australia/Sydney').samples;
+
+    expect(sample.measuredAt.toISOString()).toBe('2026-06-01T08:15:00.000Z');
+  });
+
+  it('honours a written offset that is not UTC', () => {
+    const csv = ['Timestamp,Glucose mmol/L', '2026-06-01T08:15:00+10:00,6.4'].join('\n');
+    const [sample] = parseGlucoseCsv(csv, 'csv_import', 'UTC').samples;
+
+    expect(sample.measuredAt.toISOString()).toBe('2026-05-31T22:15:00.000Z');
+  });
+
+  it('reads an offset-less timestamp in the account timezone', () => {
+    // The device wrote the person's wall clock. 08:15 in Sydney is 22:15 UTC
+    // the previous day, and reading it as the server's clock used to move it
+    // by however far the server happened to be from the phone.
+    const csv = ['Timestamp,Glucose mmol/L', '2026-06-01 08:15,6.4'].join('\n');
+    const [sample] = parseGlucoseCsv(csv, 'csv_import', 'Australia/Sydney').samples;
+
+    expect(sample.measuredAt.toISOString()).toBe('2026-05-31T22:15:00.000Z');
+  });
+
+  it('does not consult the server timezone at all', () => {
+    // The same row, read for two accounts, lands at two instants — and neither
+    // depends on where this process runs. That independence is the fix.
+    const csv = ['Timestamp,Glucose mmol/L', '2026-06-01 08:15,6.4'].join('\n');
+
+    const dublin = parseGlucoseCsv(csv, 'csv_import', 'Europe/Dublin').samples[0];
+    const losAngeles = parseGlucoseCsv(csv, 'csv_import', 'America/Los_Angeles').samples[0];
+
+    expect(dublin.measuredAt.toISOString()).toBe('2026-06-01T07:15:00.000Z');
+    expect(losAngeles.measuredAt.toISOString()).toBe('2026-06-01T15:15:00.000Z');
+  });
+
+  it('follows daylight saving rather than a fixed offset', () => {
+    // Dublin is UTC+1 in June and UTC+0 in December. An offset stored once
+    // would be wrong for half the year, which is why the account carries an
+    // IANA name.
+    const june = parseGlucoseCsv(
+      ['Timestamp,Glucose mmol/L', '2026-06-01 08:15,6.4'].join('\n'),
+      'csv_import',
+      'Europe/Dublin',
+    ).samples[0];
+    const december = parseGlucoseCsv(
+      ['Timestamp,Glucose mmol/L', '2026-12-01 08:15,6.4'].join('\n'),
+      'csv_import',
+      'Europe/Dublin',
+    ).samples[0];
+
+    expect(june.measuredAt.toISOString()).toBe('2026-06-01T07:15:00.000Z');
+    expect(december.measuredAt.toISOString()).toBe('2026-12-01T08:15:00.000Z');
+  });
+
+  it('defaults to UTC when no timezone is supplied', () => {
+    const csv = ['Timestamp,Glucose mmol/L', '2026-06-01 08:15,6.4'].join('\n');
     const [sample] = parseGlucoseCsv(csv).samples;
 
     expect(sample.measuredAt.toISOString()).toBe('2026-06-01T08:15:00.000Z');
   });
 
-  it('reads an offset-less timestamp as server-local time', () => {
-    // Pinning documented behaviour rather than endorsing it: most CGM exports
-    // write local wall-clock time with no offset, so the reading lands
-    // wherever the server's timezone puts it. See the note in csv-parser.ts.
-    const csv = ['Timestamp,Glucose mmol/L', '2026-06-01 08:15,6.4'].join('\n');
-    const [sample] = parseGlucoseCsv(csv).samples;
+  it('rejects an offset-less shape it cannot read, rather than guessing', () => {
+    // `new Date` would always produce an answer here, applying the server's
+    // zone and reintroducing exactly the bug this replaced. A rejected row
+    // carries a line number and can be fixed; a wrong glucose timestamp is
+    // indistinguishable from a real reading.
+    const csv = ['Timestamp,Glucose mmol/L', '06/01/2026 08:15,6.4'].join('\n');
+    const result = parseGlucoseCsv(csv, 'csv_import', 'Europe/Dublin');
 
-    expect(sample.measuredAt.getFullYear()).toBe(2026);
-    expect(sample.measuredAt.getHours()).toBe(8);
-    expect(sample.measuredAt.getMinutes()).toBe(15);
+    expect(result.samples).toHaveLength(0);
+    expect(result.rejected[0].line).toBe(2);
+    expect(result.rejected[0].reason).toMatch(/Unparseable timestamp/);
   });
 });
+
