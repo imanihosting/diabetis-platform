@@ -128,7 +128,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 75 unit, no infrastructure needed
+npm test                  # 78 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -139,7 +139,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 75 | no |
+| `backend/test/*.spec.ts` | 78 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -391,13 +391,16 @@ every accuracy figure optional. Erasing the account still works.
 
 | | Where | Notes |
 |---|---|---|
-| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 19 migrations. Six guard triggers: `audit_events_append_only`, `predictions_immutable`, `prediction_outcomes_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction`, `experiments_completed_requires_outcome` |
+| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 19 migrations. TLS verified against an internal CA. Six guard triggers: `audit_events_append_only`, `predictions_immutable`, `prediction_outcomes_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction`, `experiments_completed_requires_outcome` |
 | MinIO | `10.10.5.240:9000` | Bucket `medicaldata`, scoped service account |
 | Redis | local Docker | queues and cache, **not yet used in anger** |
 
-Both VMs are Ubuntu 26.04, SSH user `support`, passwordless sudo. **Credentials
-are not in this repo.** They live in the root `.env`, which is gitignored;
-`.env.example` is the template.
+Both VMs are Ubuntu 26.04, SSH user `support`. Sudo needs the password — the
+earlier claim of passwordless sudo was wrong. **Credentials are not in this
+repo.** They live in the root `.env` and in `docs/database-vm.md`, both
+gitignored; `.env.example` is the template. `docs/database-vm.md` was tracked
+until its ignore rule was made effective, so check `git ls-files` before
+trusting a `.gitignore` entry for a file that already existed.
 
 **Network trap.** The VMs are on `10.10.0.0/16` but a developer machine arrives
 over VPN from `192.168.3.0/24`. Firewall and `pg_hba.conf` rules need both
@@ -419,21 +422,31 @@ work if wanted.
 
 ## 10. Go-live blockers
 
-**PostgreSQL TLS is encrypted but unverified.** The VM presents a self-signed
-certificate. The backend warns about it on every boot;
-`REQUIRE_VERIFIED_DB_TLS=true` turns that into a refusal to start once a
-CA-signed certificate is in place. `npm run db:verify-tls` reports the real
-state and exits non-zero.
+**PostgreSQL TLS is verified.** Done. An internal CA on the database VM signs a
+certificate for `medical-db`, valid to 2031; the CA certificate is committed at
+`infra/db/ca.crt` because a trust anchor is public, not secret. Every client
+checks it, `REQUIRE_VERIFIED_DB_TLS=true`, and a regression refuses to boot
+rather than downgrading quietly. `scripts/issue-db-cert.sh` reproduces it.
 
-The long pole is not the certificate. `DATABASE_URL` connects to the bare
-address `10.10.5.185`, and **no certificate can satisfy `verify-full` against
-an IP literal** — there is no name to check it against and SNI cannot carry
-one. The host needs a DNS name before a certificate is worth buying, which is
-the only item on this list with a lead time. Setting
-`REQUIRE_VERIFIED_DB_TLS=true` while the URL is still an IP now refuses to
-start *with that reason*, rather than failing the TLS handshake and sending the
-next person after their certificate for a week. Full sequence in
-`infra/README.md`, reordered so the DNS name is step one.
+An internal CA rather than Let's Encrypt because every client is ours: public
+trust buys nothing on a private network, and its costs are real — a third party
+in the trust path of a health record, a token on the database host, and a
+ninety-day renewal whose failure looks exactly like success until it expires.
+
+The trap worth knowing, because it is a property of the driver and not of
+certificates: **node-postgres tells Node which host to verify only when the host
+is not an IP address** (`pg/lib/connection.js`). Connect to `10.10.5.185` and
+Node checks the certificate against `localhost` and refuses, whatever SANs it
+carries. So clients connect by name, which has to resolve — `extra_hosts` in
+compose, and on a developer machine:
+
+```bash
+echo "10.10.5.185 medical-db" | sudo tee -a /etc/hosts
+```
+
+Without that line `npm run db:migrate` and `npm run db:verify-tls` cannot
+resolve the host at all. The containers carry their own mapping and are
+unaffected.
 
 **Rate limiting is now shared, and half-keyed.** Counts live in Redis when
 `REDIS_URL` is set, so replicas share one budget;

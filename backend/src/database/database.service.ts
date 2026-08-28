@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   Inject,
   Injectable,
@@ -47,12 +48,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const sslmode = url.searchParams.get('sslmode') ?? 'prefer';
     url.searchParams.delete('sslmode');
 
+    // An internal CA, when one is configured. Read at construction so a
+    // missing or unreadable file fails the process immediately rather than on
+    // the first query, which would surface as an outage rather than a
+    // misconfiguration.
+    const ca = env.DATABASE_CA_CERT ? readFileSync(env.DATABASE_CA_CERT, 'utf8') : undefined;
+
     this.pool = new Pool({
       connectionString: url.toString(),
       ssl:
         sslmode === 'disable'
           ? false
-          : { rejectUnauthorized: env.DATABASE_SSL_REJECT_UNAUTHORIZED },
+          : { rejectUnauthorized: env.DATABASE_SSL_REJECT_UNAUTHORIZED, ca },
       max: 20,
       // Establishing a connection to the database costs ~700ms measured from a
       // developer machine: a TCP handshake and a TLS handshake across the VPN.

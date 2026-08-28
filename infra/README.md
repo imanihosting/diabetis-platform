@@ -69,141 +69,90 @@ parent row still resolves, since PostgreSQL removes a parent before cascading.
 
 ## TLS
 
-The PostgreSQL VM currently presents its own self-signed certificate — issued
-to `medical-db`, by `medical-db` — so connections are encrypted but unverified
-(`sslmode=require` plus `DATABASE_SSL_REJECT_UNAUTHORIZED=false`).
+**Done.** The database presents a certificate issued by an internal CA, and
+every client verifies it: `sslmode=verify-full`,
+`DATABASE_SSL_REJECT_UNAUTHORIZED=true`, `REQUIRE_VERIFIED_DB_TLS=true`.
 
-Encryption without verification stops someone reading the traffic and does
-nothing about someone answering as the database. For a health record that is
-the half that matters, so this is a go-live blocker rather than a hardening
-nice-to-have.
+| | |
+|---|---|
+| Certificate | `CN=medical-db`, SANs `DNS:medical-db` and `IP:10.10.5.185` |
+| Issuer | `Wellovue Internal CA`, valid to 2036 |
+| Server cert expiry | 2031 |
+| On the VM | cert and key in `/etc/postgresql/ssl`, CA in `/etc/postgresql/ca` |
+| Configured by | a drop-in at `conf.d/20-ssl.conf`; delete it to fall back to snakeoil |
+| Trusted via | `infra/db/ca.crt`, committed — a CA certificate is a public trust anchor, not a secret |
 
-The backend says so on every boot. While `DATABASE_SSL_REJECT_UNAUTHORIZED` is
-false it logs a warning naming the risk; `REQUIRE_VERIFIED_DB_TLS=true` turns
-that warning into a refusal to start.
+Reproduce with `scripts/issue-db-cert.sh`, which refuses to overwrite an
+existing certificate.
 
-### What actually blocks it
+### Why an internal CA rather than Let's Encrypt
 
-Not the certificate — the name. `verify-full` checks that the certificate was
-issued for the host being connected to, and RFC 6066 does not permit an IP
-literal in SNI. `DATABASE_URL` connects to `10.10.5.185`, which has no name to
-check a certificate against, and no certificate can fix that. Setting
-`REQUIRE_VERIFIED_DB_TLS=true` while the URL is still an address is refused at
-boot with that reason, rather than failing the handshake and sending somebody
-after their certificate for a week.
+Every client of this database is ours: two containers and a migration runner on
+the private network. Public trust buys nothing there, and paying for it would
+mean a third party in the trust path of a health record, an API token stored on
+the database host, an outbound dependency, and a ninety-day renewal that fails
+quietly — a renewed certificate PostgreSQL never reloaded looks identical to a
+working one until it expires. A ten-year internal CA has none of that. The cost
+is distributing the CA certificate to three clients, which `infra/db/ca.crt`
+and two compose mounts handle.
 
-So the name comes first, and it is the only step here with a lead time.
+### Clients must connect by name, not address
 
-### Getting a name and a certificate without exposing the database
+This is the part that decides the design, and it is a property of the driver
+rather than of certificates. From `pg/lib/connection.js`:
 
-The database is on the private network with every client that talks to it. It
-does not need to be publicly reachable, and putting it behind a tunnel to make
-it so would add a public path to Postgres in exchange for nothing.
-
-What is needed is narrower: a **name**, and a **certificate issued for that
-name** that the clients already trust. Both are obtainable without the host
-being reachable from the internet, because ACME's DNS-01 challenge proves
-control of the *name* by writing a TXT record — it never connects to the host.
-
-Two ways to hold the name, and the second is preferred.
-
-**A — a public DNS-only record.** In Cloudflare, an `A` record for
-`db.example.com` pointing at `10.10.5.185`, with the proxy **off** (grey
-cloud). Cloudflare accepts private addresses on unproxied records; it cannot
-proxy them, and 5432 is not a proxied port in any case. Simple and needs no
-per-client configuration. It publishes internal addressing to anyone who asks,
-permanently, and some resolvers strip RFC1918 answers from public DNS as
-rebinding protection — so test resolution from inside a container before
-relying on it.
-
-**B — no public record at all.** DNS-01 never reads the `A` record, so a
-certificate can be issued for a name that only resolves privately. Put the
-mapping where it is used: `extra_hosts` on the `backend` and `metabolic-engine`
-services in `docker-compose.yml`, and `/etc/hosts` on any machine that runs
-`db:migrate` or `db:verify-tls`.
-
-```yaml
-    extra_hosts:
-      - "db.example.com:10.10.5.185"
+```js
+if (net.isIP && net.isIP(host) === 0) {
+  options.servername = host
+}
 ```
 
-Nothing about the internal network becomes queryable, and no resolver can strip
-an answer that was never served. The cost is a mapping per client, and the
-failure mode when one is missed is loud: the name does not resolve, or the boot
-check refuses an IP-literal URL by name.
+node-postgres tells Node which host to verify **only when the host is not an IP
+address**. Connect to `10.10.5.185` and nothing is passed, so Node falls back to
+checking the name `localhost` against the certificate and the connection is
+refused — no matter what SANs the certificate carries. An `IP:` SAN does not
+help here; it is in the certificate anyway because `psql` and `psycopg` do match
+it.
 
-### The sequence
+So `DATABASE_URL` uses `medical-db`, and that name has to resolve wherever a
+client runs:
 
-Each step is independently reversible, and none of them changes what the
-running application does until step 5. Do not start at step 5.
+- **Containers**: `extra_hosts` on `backend` and `metabolic-engine` in
+  `docker-compose.yml`.
+- **Developer machines**, for `npm run db:migrate` and `npm run db:verify-tls`:
+  ```bash
+  echo "10.10.5.185 medical-db" | sudo tee -a /etc/hosts
+  ```
 
-1. **Choose the name and make it resolve.** Option A or B above. Verify from
-   where it matters rather than from a laptop:
-   ```bash
-   docker exec wellovue-backend-1 getent hosts db.example.com
-   ```
-2. **Check CAA does not block issuance.** `dig CAA example.com`. Empty means no
-   restriction, which is fine. If there are records and `letsencrypt.org` is
-   not among them, issuance fails with an unhelpful error.
-3. **Issue the certificate on the database VM**, so the private key is
-   generated where it will be used and never travels. The Cloudflare API token
-   wants Zone → DNS → Edit on that one zone and nothing else.
-   ```bash
-   sudo apt install certbot python3-certbot-dns-cloudflare
-   printf 'dns_cloudflare_api_token = %s\n' "$TOKEN" | sudo tee /root/.cf.ini
-   sudo chmod 600 /root/.cf.ini
-   sudo certbot certonly --dns-cloudflare \
-     --dns-cloudflare-credentials /root/.cf.ini -d db.example.com
-   ```
-4. **Install it and make renewal reinstall it.** PostgreSQL requires the key to
-   be `0600` and owned by the `postgres` user, which Let's Encrypt's own
-   directory permissions do not satisfy — copy the files rather than symlinking
-   into `/etc/letsencrypt/live`, point `ssl_cert_file` and `ssl_key_file` at
-   the copies, and reload.
+The backend refuses to start if `REQUIRE_VERIFIED_DB_TLS=true` while
+`DATABASE_URL` still points at a bare address, and says why — rather than
+failing a TLS handshake and sending the next person after their certificate.
 
-   The deploy hook is the step people skip, and it is the one that fails
-   silently: certbot renews on schedule, PostgreSQL goes on serving the old
-   certificate from memory, and nothing says so until it expires.
-   ```bash
-   sudo certbot renew --deploy-hook /usr/local/bin/reload-postgres-cert
-   sudo certbot renew --dry-run   # proves DNS-01 and the hook, before trusting them
-   ```
-5. **Switch the URL, then verification, then enforcement** — three separate
-   changes, each safe to stop at:
-   - `DATABASE_URL` to `postgresql://…@db.example.com:5432/diabetes?sslmode=verify-full`,
-     leaving `DATABASE_SSL_REJECT_UNAUTHORIZED=false`. Nothing is enforced yet;
-     the application should behave exactly as before.
-   - `DATABASE_SSL_REJECT_UNAUTHORIZED=true`. Now the certificate is actually
-     checked. If this breaks, the change to revert is one line.
-   - `REQUIRE_VERIFIED_DB_TLS=true`, which only makes the state
-     non-regressable: from here a misconfiguration refuses to boot instead of
-     quietly downgrading.
-6. **Verify, rather than assume.** `npm run db:verify-tls` connects with
-   verification demanded regardless of what the environment asks for, reports
-   the certificate's subject, issuer, names and expiry, and exits non-zero if
-   anything did not check out. Run it from a machine that is not the database
-   host, so the path under test is the one real traffic takes.
+### How the CA reaches each client
 
-### After it is on, watch the date
+Scoped to the database connection in every case, never `NODE_EXTRA_CA_CERTS`,
+which would widen trust for every TLS connection the process makes and let a CA
+meant for one database vouch for the engine and object storage too.
 
-Verification and expiry monitoring are one piece of work. Before step 5 an
-expiring certificate is a tolerated weakness; after it, an expired one is a
-backend that will not start. The gap between those two facts is a scheduled
-outage if nobody is watching.
+| Client | Mechanism |
+|---|---|
+| Backend | `DATABASE_CA_CERT` → passed as `ssl.ca` on the pool alone |
+| Metabolic engine | `PGSSLROOTCERT`, libpq's own variable, honoured by psycopg |
+| Scripts | `DATABASE_CA_CERT`, defaulting to `infra/db/ca.crt` in the repository |
+
+### If the VM is lost
+
+The CA private key lives only at `/etc/postgresql/ca/ca.key`, root-only, and
+signs one certificate. There is no revocation infrastructure and for one
+certificate there does not need to be. Losing the host means running
+`scripts/issue-db-cert.sh` again and replacing `infra/db/ca.crt`.
+
+### Watching the date
 
 `/api/health/posture` reports the certificate the database presented, and
-`npm run canary -- <url>` warns under 21 days and fails under 7 — Let's Encrypt
-issues for 90 days and renews at 30, so anything inside three weeks means
-renewal has already stopped working. A renewed certificate sitting on disk that
-PostgreSQL never reloaded looks identical from outside, which is the case the
-deploy hook in step 4 exists to prevent.
-
-Note that the Python engine reads `sslmode` straight from the URL, so step 5
-covers it too — psycopg honours `verify-full` natively and needs no separate
-flag. Neither service needs a CA bundle for this: Node carries its own root
-store and the engine image has the system one, which is the practical argument
-for a publicly-trusted certificate over an internal CA, since the latter would
-need `NODE_EXTRA_CA_CERTS` and `sslrootcert` wired into both.
+`npm run canary -- <url>` warns under 21 days and fails under 7. The server
+certificate runs to 2031, so this is quiet for years — which is exactly why it
+is wired up now rather than at the point it starts mattering.
 
 ## Object storage
 
@@ -319,12 +268,10 @@ stack, a staging box, and whatever production turns out to be.
 | Engine authentication | Service-token auth may only be disabled when `ENVIRONMENT=development`; anywhere else a missing token fails startup. |
 | Dependency advisories | `npm audit` clean. Pinned minimums for transitives live in the root `overrides`. |
 | Rate limit counts | Shared across replicas in Redis when `REDIS_URL` is set; per process otherwise, and the backend says which on every boot and at `/api/health/posture`. |
+| Database TLS | Verified against an internal CA. The backend refuses to start if verification is off, or if the URL is an IP address that cannot be verified. |
 
 ### Still outstanding
 
-- **PostgreSQL TLS is unverified.** The VM presents its default self-signed
-  certificate. Follow the sequence under [TLS](#tls) above; the backend warns
-  about it on every boot until it is done.
 - **Client addresses are the remaining half of rate limiting.** The counts are
   shared now (see [Rate limiting](#rate-limiting)), but they are keyed on an
   address the backend cannot yet see. Requests reach it through the frontend's
@@ -338,6 +285,13 @@ stack, a staging box, and whatever production turns out to be.
 
 ### Resolved
 
+- **PostgreSQL TLS is verified.** An internal CA signs a certificate for
+  `medical-db`; every client checks it, and `REQUIRE_VERIFIED_DB_TLS=true`
+  means a regression refuses to boot rather than downgrading quietly. See
+  [TLS](#tls).
+- **Rate limits are shared across replicas.** Counts live in Redis, and fall
+  back to per-process rather than failing open or closed when it stops
+  answering. See [Rate limiting](#rate-limiting).
 - **Shared infrastructure credentials.** The VM `support` login and the MinIO
   root account appeared in this repository's early history. They have since
   been rotated by the infrastructure owner. The old history is still reachable

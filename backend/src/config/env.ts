@@ -22,7 +22,19 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
-  REDIS_URL: z.string().url().optional(),
+  /**
+   * Where rate limit counts live. Absent means they live in this process.
+   *
+   * An empty value is read as absent rather than as a malformed URL, because
+   * blanking a variable is how somebody turns Redis off — and answering that
+   * with "invalid environment configuration" sends them looking for a typo
+   * instead of telling them the limits are now per process, which the boot
+   * warning says plainly.
+   */
+  REDIS_URL: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().url().optional(),
+  ),
 
   S3_ENDPOINT: z.string().url(),
   S3_REGION: z.string().min(1),
@@ -87,6 +99,19 @@ const envSchema = z.object({
    * then gets the limit twice over. Turn this on at the same moment a second
    * replica appears, and the boot warning repeats until somebody does.
    */
+  /**
+   * Path to a CA certificate the database connection should trust, in addition
+   * to the public roots.
+   *
+   * Deliberately not `NODE_EXTRA_CA_CERTS`, which is the obvious way to do
+   * this and the wrong one: that variable widens trust for every TLS
+   * connection the process makes — the metabolic engine, object storage,
+   * anything added later — so an internal CA meant for one database would end
+   * up able to vouch for all of them. This is read once and handed to the
+   * database pool alone.
+   */
+  DATABASE_CA_CERT: z.string().optional(),
+
   REQUIRE_SHARED_RATE_LIMIT: z
     .enum(['true', 'false'])
     .default('false')
@@ -121,6 +146,14 @@ const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+/**
+ * Exported for tests, which need to parse several environments in one process.
+ *
+ * `loadEnv` caches after the first call — deliberately, so configuration is
+ * validated once — which makes it the wrong seam for checking parsing rules.
+ */
+export { envSchema };
 
 let cached: Env | undefined;
 

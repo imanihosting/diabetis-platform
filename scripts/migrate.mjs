@@ -12,6 +12,7 @@
  *   node scripts/migrate.mjs           apply pending migrations
  *   node scripts/migrate.mjs status    show applied / pending
  */
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -19,6 +20,31 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * The CA the database connection should trust, when an internal one is in use.
+ *
+ * `DATABASE_CA_CERT` when set, otherwise the copy committed to this repository.
+ * A CA certificate is a public trust anchor rather than a secret, so keeping it
+ * beside the code is what lets these scripts verify without per-machine setup.
+ *
+ * Scoped to this connection deliberately, rather than exported through
+ * NODE_EXTRA_CA_CERTS — that would let an internal CA meant for one database
+ * vouch for every other TLS connection the process makes.
+ */
+function databaseCa(rootDir) {
+  const configured = process.env.DATABASE_CA_CERT;
+  try {
+    return readFileSync(configured ?? join(rootDir, 'infra', 'db', 'ca.crt'), 'utf8');
+  } catch {
+    if (configured) {
+      console.error(`DATABASE_CA_CERT is set to ${configured}, which cannot be read.`);
+      process.exit(2);
+    }
+    return undefined;
+  }
+}
+
 const MIGRATIONS_DIR = join(ROOT, "infra", "db", "migrations");
 
 /**
@@ -45,7 +71,10 @@ function clientConfig() {
 
   return {
     connectionString: url.toString(),
-    ssl: sslmode === "disable" ? false : { rejectUnauthorized },
+    ssl:
+      sslmode === "disable"
+        ? false
+        : { rejectUnauthorized, ca: databaseCa(ROOT) },
   };
 }
 

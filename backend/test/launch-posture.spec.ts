@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { connectsToBareAddress } from '../src/config/database-url';
+import { envSchema } from '../src/config/env';
 
 /**
  * The two boot-time refusals, and the trap one of them exists to answer.
@@ -46,5 +47,56 @@ describe('database URL host detection', () => {
     // here as "you used an IP address" would be a lie.
     expect(connectsToBareAddress(undefined)).toBe(false);
     expect(connectsToBareAddress('not a url at all')).toBe(false);
+  });
+});
+
+/**
+ * The two switches that turn a tolerated state into a refusal to start.
+ *
+ * Both default to off, and that default is load-bearing: the unsafe states are
+ * the ones the platform has always run in, so making them fatal by default
+ * would stop a working deployment for a condition it already had. They are
+ * flipped at a specific knowable moment — a certificate for TLS, a second
+ * replica for the rate limiter.
+ */
+describe('launch switches', () => {
+  const base: NodeJS.ProcessEnv = {
+    DATABASE_URL: 'postgresql://u:p@medical-db:5432/db',
+    JWT_SECRET: 'a-secret-long-enough-to-satisfy-validation',
+    S3_ENDPOINT: 'http://10.10.5.240:9000',
+    S3_REGION: 'limk-dub',
+    S3_BUCKET: 'medicaldata',
+    S3_ACCESS_KEY_ID: 'x',
+    S3_SECRET_ACCESS_KEY: 'y',
+  };
+
+  // The schema rather than `loadEnv`, which caches after its first call so
+  // that configuration is validated once. That makes it the wrong seam for
+  // checking parsing rules across several environments in one process.
+  const parse = (extra: NodeJS.ProcessEnv = {}) => envSchema.parse({ ...base, ...extra });
+
+  it('defaults both refusals to off', () => {
+    const env = parse();
+    expect(env.REQUIRE_VERIFIED_DB_TLS).toBe(false);
+    expect(env.REQUIRE_SHARED_RATE_LIMIT).toBe(false);
+  });
+
+  it('reads an empty REDIS_URL as absent, not as malformed', () => {
+    // Blanking the variable is how somebody turns Redis off. Answering that
+    // with "invalid environment configuration" sends them hunting for a typo
+    // instead of showing them the boot warning that explains what they just
+    // changed.
+    expect(parse({ REDIS_URL: '' }).REDIS_URL).toBeUndefined();
+    expect(parse().REDIS_URL).toBeUndefined();
+    expect(parse({ REDIS_URL: 'redis://redis:6379' }).REDIS_URL).toBe(
+      'redis://redis:6379',
+    );
+  });
+
+  it('still rejects a REDIS_URL that is set to nonsense', () => {
+    // Tolerating empty must not become tolerating wrong: a typo in a real
+    // value should fail loudly rather than silently fall back to per-process
+    // counts that nobody asked for.
+    expect(() => parse({ REDIS_URL: 'not-a-url' })).toThrow();
   });
 });

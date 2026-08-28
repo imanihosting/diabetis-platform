@@ -36,6 +36,14 @@ services:
       BACKEND_PORT: 4000
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-false}
+      # The internal CA that signed the database certificate, scoped to the
+      # database pool rather than exported through NODE_EXTRA_CA_CERTS, which
+      # would let it vouch for the engine and object storage too.
+      DATABASE_CA_CERT: /etc/wellovue/db-ca.crt
+      # Both refuse to start rather than run in the unsafe state. Safe to set
+      # here because this file always provides Redis and the certificate above.
+      REQUIRE_VERIFIED_DB_TLS: ${REQUIRE_VERIFIED_DB_TLS:-false}
+      REQUIRE_SHARED_RATE_LIMIT: ${REQUIRE_SHARED_RATE_LIMIT:-false}
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT in .env}
       S3_REGION: ${S3_REGION}
@@ -52,6 +60,16 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     ports:
       - "4000:4000"
+    volumes:
+      # A public trust anchor, read-only. Committed to the repository because
+      # a CA certificate is not a secret and every client needs it.
+      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+    extra_hosts:
+      # The certificate is issued for this name. node-postgres only tells Node
+      # which host to verify when the host is not an IP address (see
+      # pg/lib/connection.js), so connecting by address cannot reach
+      # verify-full however the certificate is written.
+      - "medical-db:10.10.5.185"
     depends_on:
       redis:
         condition: service_healthy
@@ -71,6 +89,15 @@ services:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN}
       ENVIRONMENT: production
+      # libpq's own variable, so `sslmode=verify-full` in the shared
+      # DATABASE_URL resolves against the internal CA here too. psycopg reads
+      # it without the engine needing to know the URL was written for two
+      # different drivers.
+      PGSSLROOTCERT: /etc/wellovue/db-ca.crt
+    volumes:
+      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+    extra_hosts:
+      - "medical-db:10.10.5.185"
     ports:
       - "8000:8000"
     healthcheck:
