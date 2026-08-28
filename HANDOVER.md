@@ -146,11 +146,11 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
 | `backend/test/integration/schema-guards.spec.ts` | 25 | yes |
 | `backend/test/integration/predictions.spec.ts` | 19 | yes |
-| `backend/test/integration/diabetes-profile.spec.ts` | 14 | yes |
+| `backend/test/integration/diabetes-profile.spec.ts` | 18 | yes |
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `metabolic-engine/tests` | 29 | no |
+| `metabolic-engine/tests` | 35 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
 `npm run test:integration`. **Wait for the migrate container to finish** before
@@ -234,6 +234,28 @@ for an enum, in the same category as `careModeLabel`, and it must never be
 where a new claim is introduced: anything that interprets somebody's data
 belongs in the engine, behind the review that gets it there. That line is the
 whole reason the map is a lookup and not a sentence generator.
+
+**Hour-of-day findings read the person's clock, not the server's.** Every
+timestamp reaches the engine as UTC, and three findings turn on hour-of-day:
+the morning window, the fasting window, and the late-meal split at 20:00.
+`identity.users.timezone` (migration 0020) travels with the profile context to
+the engine, which converts every frame once in `detect_all` before any detector
+reads an hour.
+
+Measured on the demo record, which is the argument for why this mattered: the
+same thirty days read as UTC give "late meals, 3.1 mmol/L larger rise, 10 late
+vs 64 earlier", and read as Australia/Sydney give "0.2 mmol/L, 25 late vs 49
+earlier". Not a less confident finding — a different one, about different
+meals.
+
+It was invisible in development because `scripts/seed-demo.mjs` authors meals
+with `setUTCHours`, so the seeded ground truth and the detector agreed in UTC
+and every demo finding looked right. The demo account is therefore genuinely
+UTC and should stay that way.
+
+Defaults to UTC rather than to the browser's guess. A guessed zone produces the
+same wrong findings while looking like a decision somebody made; the care
+profile shows the browser's value in a control the person can see and change.
 
 **A finding carries the shape of the response, not only its endpoints.**
 `post_meal_responses` keeps each meal's readings binned by minutes since the
@@ -452,7 +474,7 @@ every accuracy figure optional. Erasing the account still works.
 
 | | Where | Notes |
 |---|---|---|
-| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 19 migrations. TLS verified against an internal CA. Six guard triggers: `audit_events_append_only`, `predictions_immutable`, `prediction_outcomes_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction`, `experiments_completed_requires_outcome` |
+| PostgreSQL 17.11 | `10.10.5.185:5432` | TimescaleDB 2.29.2, pgvector 0.8.6, pgcrypto. 11 domain schemas, 30 tables, 20 migrations. TLS verified against an internal CA. Six guard triggers: `audit_events_append_only`, `predictions_immutable`, `prediction_outcomes_immutable`, `diabetes_safety_flags_append_only`, `experiments_active_requires_prediction`, `experiments_completed_requires_outcome` |
 | MinIO | `10.10.5.240:9000` | Bucket `medicaldata`, scoped service account |
 | Redis | local Docker | queues and cache, **not yet used in anger** |
 

@@ -113,6 +113,19 @@ class PatternRequest(BaseModel):
     """Safety flags currently in force. Some detectors are blocked by these
     regardless of care mode."""
 
+    timezone: str = Field(default="UTC")
+    """The zone whose clock decides morning, fasting and late-meal windows.
+
+    Readings arrive as UTC and three findings turn on hour-of-day, so without
+    this a 20:00 dinner in UTC+10 is counted as an earlier meal and the morning
+    window reads somebody's evening. Sent by the backend from the account
+    record rather than by a browser, for the same reason `care_mode` is.
+
+    Defaults to UTC, which is exactly what the engine did before the field
+    existed: a caller that omits it gets the old behaviour rather than a silent
+    shift into some other zone.
+    """
+
     model_config = {"populate_by_name": True}
 
 

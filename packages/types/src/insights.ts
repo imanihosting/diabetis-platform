@@ -119,6 +119,16 @@ export const patternRequestSchema = z.object({
   careMode: careModeSchema,
   /** Safety flags in force. Some detectors are blocked by these whatever the care mode. */
   activeFlags: z.array(safetyFlagSchema).default([]),
+  /**
+   * The timezone the engine reads hours in.
+   *
+   * Every timestamp reaches the engine as UTC, and three findings depend on
+   * hour-of-day: the morning window, the fasting window, and the late-meal
+   * split. Defaults to UTC, which is what the engine did before this existed —
+   * so a caller that forgets it gets today's behaviour rather than a silent
+   * shift, and the default is a known state rather than a guess.
+   */
+  timezone: z.string().min(1).max(64).default('UTC'),
 });
 export type PatternRequest = z.infer<typeof patternRequestSchema>;
 

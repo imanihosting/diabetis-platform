@@ -19,6 +19,15 @@ export interface DiabetesContext {
   profile: DiabetesProfile;
   activeFlags: SafetyFlag[];
   capabilities: CareModeCapabilities;
+  /**
+   * The timezone the engine must read hours in.
+   *
+   * Carried here because this is the one call every analysis path already
+   * makes, and because it decides the same thing care mode does: how somebody's
+   * data may be read. A morning window computed in the wrong hours is a wrong
+   * finding, not a less confident one.
+   */
+  timezone: string;
 }
 
 /**
@@ -84,7 +93,7 @@ export class DiabetesProfileService {
    * splitting them invites a caller to act on one without the other.
    */
   async context(userId: string): Promise<DiabetesContext> {
-    const [profileRow, activeFlags] = await Promise.all([
+    const [profileRow, activeFlags, userRow] = await Promise.all([
       this.db.queryOne<ProfileRow>(
         `select user_id, diabetes_type, care_mode, diagnosed_on, diagnosis_source,
                 clinician_supported, created_at, updated_at
@@ -93,6 +102,10 @@ export class DiabetesProfileService {
         [userId],
       ),
       this.activeFlags(userId),
+      this.db.queryOne<{ timezone: string }>(
+        'select timezone from identity.users where id = $1',
+        [userId],
+      ),
     ]);
 
     // No row means no profile, which is not the same as a profile that says
@@ -106,6 +119,9 @@ export class DiabetesProfileService {
       profile,
       activeFlags,
       capabilities: careModeCapabilities(profile.careMode, activeFlags),
+      // UTC when the row is missing, which matches the column default. Never
+      // guessed: a wrong timezone produces wrong findings that look right.
+      timezone: userRow?.timezone ?? 'UTC',
     };
   }
 
@@ -139,6 +155,17 @@ export class DiabetesProfileService {
         ],
       );
 
+      // Same transaction as the profile it arrived with. The timezone decides
+      // which hours the engine calls morning, so it changes what a finding
+      // says about somebody — it is not a display preference, and a profile
+      // saved without it would leave the two disagreeing.
+      if (input.timezone) {
+        await client.query('update identity.users set timezone = $2 where id = $1', [
+          userId,
+          input.timezone,
+        ]);
+      }
+
       // A profile change decides which analysis a person's health data is put
       // through. That is a health-data change, not an account preference, so it
       // is audited in the same transaction as the write it describes.
@@ -153,6 +180,7 @@ export class DiabetesProfileService {
             diabetesType: input.diabetesType,
             careMode: rows[0].care_mode,
             safetyTier: deriveSafetyTier(careMode, activeFlags),
+            timezone: input.timezone ?? null,
           },
         },
         client,

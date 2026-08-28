@@ -107,6 +107,10 @@ async def detect_patterns(request: PatternRequest) -> PatternResponse:
         request.to,
         care_mode=request.care_mode,
         active_flags=request.active_flags,
+        # Arrives with the request for the same reason care mode does: it
+        # decides how this record may be read, and a lookup here would be a
+        # second source of truth for it.
+        timezone=request.timezone,
     )
 
     return PatternResponse(

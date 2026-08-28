@@ -289,4 +289,50 @@ describe('diabetes profile', () => {
       expect(res.body.modelVersion).toMatch(/^pattern-engine-/);
     });
   });
+
+  describe('the timezone the engine reads hours in', () => {
+    it('defaults to UTC rather than to a guess', async () => {
+      // Every existing account starts here, and that is deliberate: a guessed
+      // zone produces the same wrong findings as UTC while looking like a
+      // decision somebody made.
+      const res = await http().get('/api/diabetes-profile').set(auth()).expect(200);
+      expect(res.body.timezone).toBe('UTC');
+    });
+
+    it('is saved with the profile, in the same request', async () => {
+      // Both decide how the same data is interpreted. Saving them apart would
+      // let a profile and the findings it produces disagree.
+      const res = await http()
+        .put('/api/diabetes-profile')
+        .set(auth())
+        .send({ diabetesType: 'type_2', timezone: 'Australia/Sydney' })
+        .expect(200);
+      expect(res.body.timezone).toBe('Australia/Sydney');
+
+      const reread = await http().get('/api/diabetes-profile').set(auth()).expect(200);
+      expect(reread.body.timezone).toBe('Australia/Sydney');
+    });
+
+    it('refuses a zone this system does not recognise', async () => {
+      // An unrecognised value falls back to UTC inside the engine, which would
+      // silently give somebody the wrong morning window. Better to refuse the
+      // write than to accept a value that quietly does nothing.
+      await http()
+        .put('/api/diabetes-profile')
+        .set(auth())
+        .send({ diabetesType: 'type_2', timezone: 'Mars/Olympus_Mons' })
+        .expect(400);
+    });
+
+    it('leaves the stored zone alone when the field is omitted', async () => {
+      await http()
+        .put('/api/diabetes-profile')
+        .set(auth())
+        .send({ diabetesType: 'type_2' })
+        .expect(200);
+
+      const res = await http().get('/api/diabetes-profile').set(auth()).expect(200);
+      expect(res.body.timezone).toBe('Australia/Sydney');
+    });
+  });
 });

@@ -134,6 +134,11 @@ function ProfileView() {
 
   const [diabetesType, setDiabetesType] = useState<DiabetesType | null>(null);
   const [flags, setFlags] = useState<SafetyFlag[]>([]);
+  // Seeded from the browser, not assumed silently: the person is shown what it
+  // is and can change it. A wrong timezone does not make a finding uncertain,
+  // it makes it about the wrong hours, so it has to be visible rather than
+  // inferred behind the scenes.
+  const [timezone, setTimezone] = useState<string>(browserTimezone);
 
   // Seeded from the server once, then left alone: re-seeding on every render
   // would fight the person typing.
@@ -144,6 +149,10 @@ function ProfileView() {
       profileNeedsSetup(loaded.profile) ? null : loaded.profile.diabetesType,
     );
     setFlags(loaded.activeFlags);
+    // Only when the account already carries something other than the default.
+    // A stored 'UTC' is what every account starts as, so preferring the
+    // browser there corrects the common case instead of preserving it.
+    if (loaded.timezone && loaded.timezone !== 'UTC') setTimezone(loaded.timezone);
   }, [loaded]);
 
   if (user.isLoading) {
@@ -179,7 +188,7 @@ function ProfileView() {
     event.preventDefault();
     if (!diabetesType) return;
     save.mutate(
-      { diabetesType, flags, offeredFlags: OFFERED_FLAGS },
+      { diabetesType, timezone, flags, offeredFlags: OFFERED_FLAGS },
       { onSuccess: () => welcome && router.push('/evidence') },
     );
   }
@@ -302,6 +311,32 @@ function ProfileView() {
           </p>
         )}
 
+        <section className="mt-10 border-t border-rule pt-6">
+          <h2 className="text-sm font-medium text-ink">Your time zone</h2>
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
+            Wellovue reads some findings by the hour: what counts as morning
+            glucose, and what counts as a late meal. Those have to be your
+            hours. If this is wrong, those findings are about the wrong part of
+            your day.
+          </p>
+
+          <label htmlFor="timezone" className="mt-4 block text-sm text-ink-muted">
+            Time zone
+          </label>
+          <select
+            id="timezone"
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+            className="mt-2 w-full max-w-sm border-b border-rule bg-transparent pb-2 text-base text-ink focus:border-ink"
+          >
+            {timezoneOptions(timezone).map((zone) => (
+              <option key={zone} value={zone}>
+                {zone.replace(/_/g, ' ')}
+              </option>
+            ))}
+          </select>
+        </section>
+
         <div className="mt-8 flex flex-wrap items-center gap-6">
           <button
             type="submit"
@@ -333,4 +368,37 @@ function ProfileView() {
       </p>
     </AppShell>
   );
+}
+
+/**
+ * What the browser believes this device's zone is.
+ *
+ * A starting point rather than a decision. It is right for most people most of
+ * the time, and it is wrong on a shared machine or a laptop carried across a
+ * border — so it seeds a control the person can see and change, and is never
+ * saved without them having looked at it.
+ */
+const browserTimezone: string = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+})();
+
+/**
+ * Every zone this browser knows, with the current one guaranteed present.
+ *
+ * `supportedValuesOf` is missing in older browsers, and a select that silently
+ * dropped somebody's saved zone would reset it to whatever sorted first — so
+ * the fallback is a short list that still contains what is in force.
+ */
+function timezoneOptions(current: string): string[] {
+  let zones: string[] = [];
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    zones = ['UTC', browserTimezone];
+  }
+  return zones.includes(current) ? zones : [current, ...zones];
 }

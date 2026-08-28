@@ -42,6 +42,7 @@ def detect_all(
     end: datetime,
     care_mode: str = registry.CARE_MODE_UNKNOWN,
     active_flags: Sequence[str] = (),
+    timezone: str = "UTC",
 ) -> list[StructuredFinding]:
     """Runs the detectors permitted for this care mode, and no others.
 
@@ -52,6 +53,12 @@ def detect_all(
 
     `care_mode` defaults to `unknown`, which nothing supports. A caller that
     omits it gets a refusal rather than the Type 2 analysis.
+
+    `timezone` defaults to UTC, which is exactly what this did before the
+    argument existed. Every frame is converted to it once here, so detectors
+    read a local clock without any of them knowing that a conversion happened —
+    the alternative was passing a zone into each detector and trusting all of
+    them, present and future, to remember to apply it.
     """
     permitted = [d for d in DETECTORS if d.allowed_for(care_mode, active_flags)]
     if not permitted:
@@ -92,6 +99,14 @@ def detect_all(
             )
         ]
 
+    # Local time, once, before anything reads an hour. Three findings turn on
+    # hour-of-day and every timestamp arrives as UTC, so this is the line that
+    # decides whether "morning glucose" means somebody's morning.
+    glucose = _localise(glucose, "measured_at", timezone)
+    meals = _localise(meals, "started_at", timezone)
+    activity = _localise(activity, "occurred_at", timezone)
+    labs = _localise(labs, "collected_at", timezone)
+
     inputs = registry.DetectorInputs(
         glucose=glucose, meals=meals, activity=activity, labs=labs
     )
@@ -102,6 +117,29 @@ def detect_all(
     candidates: list[StructuredFinding | None] = [d.run(inputs) for d in permitted]
 
     return [f for f in candidates if f is not None]
+
+
+def _localise(frame: pd.DataFrame, column: str, timezone: str) -> pd.DataFrame:
+    """Moves a frame's timestamps onto the reader's clock.
+
+    Instants are unchanged — `tz_convert` relabels, it does not shift — so
+    every ordering, difference and window width is exactly what it was. What
+    changes is what `.hour` answers, which is the only thing that was wrong.
+
+    An unknown zone falls back to UTC rather than raising. The request has
+    already been authorised and the data already read; refusing here would turn
+    a bad profile field into a failed analysis, and UTC is the behaviour this
+    had before the argument existed.
+    """
+    if frame.empty or column not in frame.columns:
+        return frame
+
+    localised = frame.copy()
+    try:
+        localised[column] = localised[column].dt.tz_convert(timezone)
+    except Exception:  # noqa: BLE001 - any unknown zone, from any pandas version
+        return frame
+    return localised
 
 
 def _post_meal_response(

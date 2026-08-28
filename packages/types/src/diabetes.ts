@@ -89,6 +89,34 @@ export const diabetesSafetyFlagSchema = z.object({
 });
 export type DiabetesSafetyFlag = z.infer<typeof diabetesSafetyFlagSchema>;
 
+/**
+ * The timezone the engine reads hours in.
+ *
+ * Three findings depend on hour-of-day — the morning window, the fasting
+ * window, and the late-meal split — and every timestamp reaches the engine as
+ * UTC. Without this, a 20:00 dinner in UTC+10 is counted as an earlier meal
+ * and "morning glucose" reads somebody's evening.
+ *
+ * An IANA name rather than an offset, because an offset is wrong twice a year
+ * wherever there is daylight saving, and the windows this feeds are exactly
+ * the hours that shift.
+ */
+export const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(
+    (tz) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Not a timezone this system recognises' },
+  );
+
 export const diabetesProfileSchema = z.object({
   userId: uuidSchema,
   diabetesType: diabetesTypeSchema,
@@ -119,6 +147,13 @@ export const updateDiabetesProfileSchema = z.object({
   diabetesType: diabetesTypeSchema,
   diagnosedOn: z.coerce.date().nullable().optional(),
   clinicianSupported: z.boolean().optional(),
+  /**
+   * Optional so an existing caller keeps working. Validated as a real zone
+   * rather than a free string: an unrecognised value would fall back to UTC in
+   * the engine and silently produce the wrong morning window, which is the
+   * failure this whole field exists to fix.
+   */
+  timezone: timezoneSchema.optional(),
 });
 export type UpdateDiabetesProfileInput = z.infer<typeof updateDiabetesProfileSchema>;
 

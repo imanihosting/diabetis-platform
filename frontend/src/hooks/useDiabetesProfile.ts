@@ -20,6 +20,14 @@ export function useDiabetesProfile() {
 
 export interface ProfileSubmission {
   diabetesType: DiabetesType;
+  /**
+   * The zone whose clock the engine reads.
+   *
+   * Sent with the diagnosis rather than saved separately, because both decide
+   * how the same data is interpreted and a half-applied pair would leave the
+   * findings disagreeing with the profile that produced them.
+   */
+  timezone: string;
   /** The flags the person ticked. Anything absent is recorded as inactive. */
   flags: SafetyFlag[];
   /** Every flag the form offered, so an unticked box can be recorded as a No. */
@@ -44,8 +52,8 @@ export function useSaveDiabetesProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ diabetesType, flags, offeredFlags }: ProfileSubmission) => {
-      let context = await api.diabetesProfile.update({ diabetesType });
+    mutationFn: async ({ diabetesType, timezone, flags, offeredFlags }: ProfileSubmission) => {
+      let context = await api.diabetesProfile.update({ diabetesType, timezone });
 
       for (const flag of offeredFlags) {
         const status = flags.includes(flag) ? 'active' : 'inactive';

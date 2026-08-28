@@ -33,7 +33,7 @@ export class EvidenceService {
     // findings from the wrong model of the body, and the person reading them
     // would have no way to tell. Falling back to Type 2 logic is the specific
     // failure this gate exists to prevent.
-    const { capabilities, activeFlags } = await this.profiles.context(userId);
+    const { capabilities, activeFlags, timezone } = await this.profiles.context(userId);
 
     if (!capabilities.evidenceEnabled) {
       return this.unsupported(userId, capabilities.careMode, capabilities.unsupportedReason);
@@ -55,6 +55,10 @@ export class EvidenceService {
         // protection.
         careMode: capabilities.careMode,
         activeFlags,
+        // The hours the engine reads. Sent for the same reason careMode is:
+        // it decides how this record may be read, so it comes from the
+        // server's own record rather than from a browser.
+        timezone,
       });
     } catch (err) {
       // The engine's own message names its status code and echoes its body,

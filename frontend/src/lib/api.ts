@@ -144,6 +144,8 @@ export interface DiabetesContextResponse {
   profile: DiabetesProfile;
   activeFlags: SafetyFlag[];
   capabilities: CareModeCapabilities;
+  /** Decides which hours the engine calls morning. See the care profile page. */
+  timezone: string;
 }
 
 export { refreshSession };
