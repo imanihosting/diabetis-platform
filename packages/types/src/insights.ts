@@ -21,11 +21,27 @@ import { experimentSchema } from './experiments';
  * `baselineMmol` is null for a level rather than a movement — morning glucose
  * has nowhere to rise from — and a chart draws one mark instead of a curve.
  */
+export const curvePointSchema = z.object({
+  /** Minutes since the meal. Zero is the baseline reading. */
+  minutes: z.number().int(),
+  mmol: z.number(),
+});
+export type CurvePoint = z.infer<typeof curvePointSchema>;
+
 export const groupMeasureSchema = z.object({
   label: z.string(),
   n: z.number().int().min(0),
   baselineMmol: z.number().nullable().default(null),
   peakMmol: z.number().nullable().default(null),
+  /**
+   * The group's mean response, sampled every fifteen minutes.
+   *
+   * Averaged across the group's meals at each offset, and a point is kept only
+   * where a third of them had a reading — a tail thinning to one meal would
+   * draw that meal's noise as the pattern. Empty for a level rather than a
+   * movement, where a line would invent motion nobody measured.
+   */
+  curve: z.array(curvePointSchema).default([]),
 });
 export type GroupMeasure = z.infer<typeof groupMeasureSchema>;
 

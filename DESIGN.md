@@ -174,6 +174,21 @@ Axis labels are `.measure`, `text-xs`, `--ink-faint`. Series are ink unless the
 value carries zone meaning, in which case the zone colour applies and a label
 accompanies it.
 
+**One chart language, and the finding chart speaks it.** The evidence charts
+use the timeline's scale (a fixed 3–14 mmol/L, so a shape means the same thing
+on every card), its band treatment, its single ink polyline, and its axis
+underneath. Somebody who has read their own timeline already knows how to read
+a finding, which is the reason not to invent a second chart style for the same
+measurement.
+
+Two series on one chart are told apart by **line style, never by colour** —
+solid and dashed. Colour here means where a value sits against target, and
+spending it to distinguish series would break that meaning everywhere else.
+
+The band's upper bound is drawn and named. Whether a curve crosses it is the
+whole question on most of these cards, so it cannot be implied by where the
+wash stops.
+
 **Every finding that compares glucose is drawn against the band.** A difference
 of 1.1 mmol/L between two groups says nothing about whether either group ended
 up in range; two curves against the target band say it immediately, and that is

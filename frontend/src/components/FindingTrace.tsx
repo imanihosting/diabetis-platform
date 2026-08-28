@@ -1,131 +1,137 @@
 import { TARGET_HIGH_MMOL, TARGET_LOW_MMOL, type GroupMeasure } from '@wellovue/types';
 
 /**
- * A finding drawn in glucose, against the band it is actually about.
+ * A finding drawn the way the timeline draws a day.
  *
- * Every number here was measured. `baselineMmol` and `peakMmol` come from the
- * detector that produced the finding; nothing is interpolated, smoothed or
- * invented, and the curve between the two points is drawn as a curve because
- * that is what glucose does between a meal and its peak, not because a
- * straight line looked plain.
+ * Same language deliberately: a fixed vertical scale so the same shape means
+ * the same thing on every card, the target band as ground behind the trace,
+ * one ink polyline through the readings, and the axis underneath. Somebody who
+ * has read their own timeline already knows how to read this, which is the
+ * whole reason not to invent a second chart style.
  *
- * The band is the point. A difference of 1.1 mmol/L between two groups tells
- * a reader nothing about whether either group was in range; two curves against
- * the target band tell them immediately, which is the difference between a
- * statistic and something about their body.
+ * Every point is measured. The curve is the group's mean glucose at each
+ * fifteen-minute offset from the meal, averaged across the meals in that
+ * group by the engine; nothing here interpolates, smooths, or extends a line
+ * past the last reading.
  *
- * A group with no peak draws nothing rather than a placeholder. Lab trends
- * have no band to sit against, so findings without a comparison render no
- * chart at all — an empty axis would imply the data exists and is zero.
+ * The band is what makes this diabetes rather than statistics. A difference of
+ * 1.1 mmol/L between two groups says nothing about whether either ended up in
+ * range; two traces against the band say it at a glance.
  */
+
+/** The timeline's scale, so a shape means the same thing on both surfaces. */
+const SCALE_MIN = 3;
+const SCALE_MAX = 14;
+
 export function FindingTrace({ groups }: { groups: GroupMeasure[] }) {
-  const drawable = groups.filter((g) => g.peakMmol !== null);
+  const drawable = groups.filter((g) => g.curve.length >= 2);
   if (drawable.length === 0) return null;
 
-  const values = drawable.flatMap((g) =>
-    [g.baselineMmol, g.peakMmol].filter((v): v is number => v !== null),
+  const lastMinute = Math.max(
+    ...drawable.flatMap((g) => g.curve.map((p) => p.minutes)),
   );
+  if (lastMinute <= 0) return null;
 
-  // The band is always in frame even when every reading sits above it, so the
-  // scale never flatters a record by cropping the target out of view.
-  const low = Math.min(...values, TARGET_LOW_MMOL) - 0.6;
-  const high = Math.max(...values, TARGET_HIGH_MMOL) + 0.6;
-  const y = (mmol: number) => 100 - ((mmol - low) / (high - low)) * 100;
+  const x = (minutes: number) => (minutes / lastMinute) * 100;
+  const y = (mmol: number) =>
+    ((SCALE_MAX - Math.min(Math.max(mmol, SCALE_MIN), SCALE_MAX)) /
+      (SCALE_MAX - SCALE_MIN)) *
+    100;
 
   return (
     <figure className="mt-5">
       <svg
-        viewBox="0 0 200 100"
+        viewBox="0 0 100 100"
         preserveAspectRatio="none"
-        className="h-[8.5rem] w-full"
+        className="h-40 w-full"
         role="img"
         aria-label={drawable
-          .map((g) =>
-            g.baselineMmol === null
-              ? `${g.label}: ${g.peakMmol} mmol/L`
-              : `${g.label}: ${g.baselineMmol} rising to ${g.peakMmol} mmol/L`,
+          .map(
+            (g) =>
+              `${g.label}: ${g.baselineMmol} rising to ${g.peakMmol} millimoles per litre over ${lastMinute} minutes`,
           )
           .join('. ')}
       >
-        {/* Target band, drawn as ground. Same wash and dashed upper bound as
-            every other chart here, so a reader learns the shape once. */}
+        {/* Target band, behind the traces, at the timeline's weight. */}
         <rect
           x="0"
           y={y(TARGET_HIGH_MMOL)}
-          width="200"
-          height={Math.max(0, y(TARGET_LOW_MMOL) - y(TARGET_HIGH_MMOL))}
-          // Held below full wash, as the hero trace is. The token is tuned to
-          // sit behind a dense chart; the target range is 3.9 to 10, so on a
-          // small frame it fills most of the height and reads as a green
-          // panel rather than as a band a reading sits inside.
-          fill="color-mix(in oklch, var(--in-range-wash) 70%, var(--paper))"
+          width="100"
+          height={y(TARGET_LOW_MMOL) - y(TARGET_HIGH_MMOL)}
+          className="fill-[color-mix(in_oklch,var(--in-range)_14%,transparent)]"
         />
+        {/* The upper bound, drawn. Whether a curve crosses this line is the
+            whole question on most of these cards, so the line has to be
+            visible rather than implied by where the wash stops. */}
         <line
           x1="0"
-          x2="200"
+          x2="100"
           y1={y(TARGET_HIGH_MMOL)}
           y2={y(TARGET_HIGH_MMOL)}
           stroke="var(--in-range)"
           strokeWidth="1"
-          strokeDasharray="3 5"
+          strokeDasharray="3 4"
           vectorEffect="non-scaling-stroke"
-          opacity="0.75"
+          opacity="0.8"
         />
 
-        {drawable.map((group, index) => {
-          // Groups share the width so they can be compared at a glance; a
-          // second group drawn on its own axis would be two charts.
-          const span = 200 / drawable.length;
-          const x0 = index * span + span * 0.16;
-          const x1 = index * span + span * 0.84;
-          const mid = (x0 + x1) / 2;
-
-          if (group.baselineMmol === null) {
-            // A level, not a movement: one mark, no curve to imply a rise.
-            return (
-              <line
-                key={group.label}
-                x1={x0}
-                x2={x1}
-                y1={y(group.peakMmol as number)}
-                y2={y(group.peakMmol as number)}
-                stroke="var(--ink)"
-                strokeWidth="2"
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-              />
-            );
-          }
-
-          return (
-            <path
-              key={group.label}
-              // The control point sits at the peak, not above it, so the
-              // curve eases into its maximum and never exceeds it. Lifting it
-              // by a few units looked more like glucose and drew a line above
-              // the highest value actually measured, which on a chart about
-              // what happened is a small lie.
-              d={`M ${x0} ${y(group.baselineMmol)} Q ${mid} ${y(group.peakMmol as number)} ${x1} ${y(group.peakMmol as number)}`}
-              fill="none"
-              stroke="var(--ink)"
-              strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-              strokeLinecap="round"
-            />
-          );
-        })}
+        {drawable.map((group, index) => (
+          <path
+            key={group.label}
+            d={group.curve
+              .map(
+                (point, i) =>
+                  `${i === 0 ? 'M' : 'L'} ${x(point.minutes).toFixed(2)} ${y(point.mmol).toFixed(2)}`,
+              )
+              .join(' ')}
+            fill="none"
+            className="stroke-ink"
+            strokeWidth={index === 0 ? 1.75 : 1}
+            // The second group is dashed rather than tinted. Colour here means
+            // where a value sits against target, and using it to tell two
+            // series apart would break that for the reader everywhere else.
+            strokeDasharray={index === 0 ? undefined : '3 2.5'}
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+          />
+        ))}
       </svg>
 
-      <figcaption className="mt-2 flex gap-4">
-        {drawable.map((group) => (
-          <div key={group.label} className="flex-1">
-            <p className="text-xs leading-snug text-ink-muted">{group.label}</p>
-            <p className="mt-0.5 text-xs text-ink-faint">
-              <span className="measure">
-                {group.baselineMmol !== null && `${group.baselineMmol} → `}
-                {group.peakMmol}
-              </span>{' '}
-              mmol/L · <span className="measure">n={group.n}</span>
+      {/* The band's value, named. Without it the dashed line is a divider;
+          with it the chart says which side of target each curve is on. */}
+      <div className="mt-1 flex items-baseline justify-between text-[10px] text-ink-faint">
+        <span className="measure">0 min</span>
+        <span className="measure">{Math.round(lastMinute / 2)}</span>
+        <span className="measure">{lastMinute} min</span>
+      </div>
+      <p className="mt-1 text-[10px] text-ink-faint">
+        Dashed line is the top of target range,{' '}
+        <span className="measure">{TARGET_HIGH_MMOL}</span> mmol/L.
+      </p>
+
+      <figcaption className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+        {drawable.map((group, index) => (
+          <div key={group.label} className="flex items-baseline gap-2">
+            {/* The legend carries the line, so the key is the mark itself. */}
+            <svg width="18" height="6" aria-hidden className="shrink-0">
+              <line
+                x1="0"
+                x2="18"
+                y1="3"
+                y2="3"
+                className="stroke-ink"
+                strokeWidth={index === 0 ? 1.75 : 1}
+                strokeDasharray={index === 0 ? undefined : '3 2.5'}
+              />
+            </svg>
+            <p className="text-xs leading-snug text-ink-muted">
+              {group.label}{' '}
+              <span className="text-ink-faint">
+                <span className="measure">
+                  {group.baselineMmol} → {group.peakMmol}
+                </span>{' '}
+                mmol/L · <span className="measure">n={group.n}</span>
+              </span>
             </p>
           </div>
         ))}

@@ -14,6 +14,13 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class CurvePoint(BaseModel):
+    """One point on a mean response curve: minutes since the meal, and glucose."""
+
+    minutes: int
+    mmol: float
+
+
 class GroupMeasure(BaseModel):
     """One group a finding compared, in glucose the reader would recognise.
 
@@ -33,6 +40,15 @@ class GroupMeasure(BaseModel):
     n: int = Field(ge=0)
     baseline_mmol: float | None = Field(default=None, serialization_alias="baselineMmol")
     peak_mmol: float | None = Field(default=None, serialization_alias="peakMmol")
+
+    curve: list[CurvePoint] = Field(default_factory=list)
+    """The group's mean glucose response, sampled every fifteen minutes.
+
+    Averaged across the meals in the group at each offset, so it is the shape
+    of a typical response rather than any single meal's. Empty for a group with
+    nothing to trace over time — a morning average is a level, not a curve, and
+    drawing a line through it would invent movement that was never measured.
+    """
 
     model_config = {"populate_by_name": True}
 

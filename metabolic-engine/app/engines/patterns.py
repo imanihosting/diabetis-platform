@@ -20,14 +20,14 @@ import pandas as pd
 from scipy import stats
 
 from app.engines import glucose_data, prediabetes, registry, suggestions
-from app.engines.meal_response import post_meal_responses
+from app.engines.meal_response import MealResponse, post_meal_responses
 from app.engines.thresholds import (
     LAB_TREND_LOOKBACK_DAYS,
     MIN_SAMPLES_FOR_ANY_FINDING,
     TARGET_HIGH_MMOL,
     WALK_PROXIMITY_MINUTES,
 )
-from app.models.findings import GroupMeasure, StructuredFinding
+from app.models.findings import CurvePoint, GroupMeasure, StructuredFinding
 
 MODEL_VERSION = "pattern-engine-v1.0.0"
 
@@ -166,28 +166,48 @@ def _post_meal_response(
             suggestions.LOG_MEAL_CARBS,
         ],
         comparison=[
-            _group(
-                "A typical meal",
-                [(float(r["baseline"]), float(r["peak"])) for r in responses],
-            )
+            _group("A typical meal", responses)
         ],
     )
 
 
-def _group(label: str, curve: list[tuple[float, float]]) -> GroupMeasure:
-    """A comparison group from its (baseline, peak) pairs.
+def _group(label: str, responses: Sequence[MealResponse]) -> GroupMeasure:
+    """A comparison group: its endpoints, and the shape between them.
 
-    Means rather than medians, to match the difference the finding reports —
-    a chart drawn from medians beside a claim computed from means would be two
+    Means rather than medians, to match the difference the finding reports — a
+    chart drawn from medians beside a claim computed from means would be two
     different comparisons on one card.
+
+    The curve is averaged per fifteen-minute bin across the group's meals, and
+    a bin is kept only when at least a third of them have a reading in it. A
+    mean over one straggling meal is not the group's response, and a curve that
+    thinned out to a single meal at the tail would draw its noise as though it
+    were the pattern.
     """
-    if not curve:
+    if not responses:
         return GroupMeasure(label=label, n=0)
+
+    baselines = [r["baseline"] for r in responses]
+    peaks = [r["peak"] for r in responses]
+
+    binned: dict[int, list[float]] = {}
+    for response in responses:
+        for minute, value in response["samples"].items():
+            binned.setdefault(minute, []).append(value)
+
+    threshold = max(1, len(responses) // 3)
+    curve = [
+        CurvePoint(minutes=minute, mmol=round(float(np.mean(values)), 2))
+        for minute, values in sorted(binned.items())
+        if len(values) >= threshold
+    ]
+
     return GroupMeasure(
         label=label,
-        n=len(curve),
-        baseline_mmol=round(float(np.mean([b for b, _ in curve])), 2),
-        peak_mmol=round(float(np.mean([pk for _, pk in curve])), 2),
+        n=len(responses),
+        baseline_mmol=round(float(np.mean(baselines)), 2),
+        peak_mmol=round(float(np.mean(peaks)), 2),
+        curve=curve,
     )
 
 
@@ -211,8 +231,8 @@ def _post_meal_walk_effect(
     # Baselines and peaks alongside the rises. The difference is the finding;
     # these are what let it be drawn against the target band, which is the only
     # form in which a reader can see whether either group ended up in range.
-    with_walk_curve: list[tuple[float, float]] = []
-    without_walk_curve: list[tuple[float, float]] = []
+    with_walk_group: list[MealResponse] = []
+    without_walk_group: list[MealResponse] = []
     for response in responses:
         meal_time = response["meal_started_at"]
         walked = any(
@@ -220,9 +240,7 @@ def _post_meal_walk_effect(
             for t in starts
         )
         (with_walk if walked else without_walk).append(float(response["rise"]))
-        (with_walk_curve if walked else without_walk_curve).append(
-            (float(response["baseline"]), float(response["peak"]))
-        )
+        (with_walk_group if walked else without_walk_group).append(response)
 
     n_with, n_without = len(with_walk), len(without_walk)
 
@@ -273,8 +291,8 @@ def _post_meal_walk_effect(
             suggestions.LOG_ACTIVITY_MINUTES,
         ],
         comparison=[
-            _group("Meals followed by a walk", with_walk_curve),
-            _group("Meals without one", without_walk_curve),
+            _group("Meals followed by a walk", with_walk_group),
+            _group("Meals without one", without_walk_group),
         ],
         p_value=float(p_value),
     )
@@ -290,12 +308,8 @@ def _late_meal_effect(
 
     late = [float(r["rise"]) for r in responses if int(r["hour"]) >= 20]
     earlier = [float(r["rise"]) for r in responses if int(r["hour"]) < 20]
-    late_curve = [
-        (float(r["baseline"]), float(r["peak"])) for r in responses if int(r["hour"]) >= 20
-    ]
-    earlier_curve = [
-        (float(r["baseline"]), float(r["peak"])) for r in responses if int(r["hour"]) < 20
-    ]
+    late_group = [r for r in responses if r["hour"] >= 20]
+    earlier_group = [r for r in responses if r["hour"] < 20]
 
     too_few_late = len(late) < MIN_SAMPLES_FOR_ANY_FINDING
     too_few_earlier = len(earlier) < MIN_SAMPLES_FOR_ANY_FINDING
@@ -334,8 +348,8 @@ def _late_meal_effect(
             "Sleep data was not included in this comparison",
         ],
         comparison=[
-            _group("Meals after 20:00", late_curve),
-            _group("Earlier meals", earlier_curve),
+            _group("Meals after 20:00", late_group),
+            _group("Earlier meals", earlier_group),
         ],
         p_value=float(p_value),
         would_improve_with=[

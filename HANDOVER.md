@@ -235,6 +235,13 @@ where a new claim is introduced: anything that interprets somebody's data
 belongs in the engine, behind the review that gets it there. That line is the
 whole reason the map is a lookup and not a sentence generator.
 
+**A finding carries the shape of the response, not only its endpoints.**
+`post_meal_responses` keeps each meal's readings binned by minutes since the
+meal, and `_group` averages them per bin across a group — dropping a bin fewer
+than a third of the meals reached, so a thinning tail is not drawn as the
+pattern. That is what lets the evidence charts be real glucose curves in the
+timeline's own language rather than two abstract shapes.
+
 **A finding carries the glucose it compared, not only the difference.**
 Detectors used to compute baselines, peaks and group sizes and then throw them
 away, keeping one number — which is why the interface could only ever render a

@@ -42,7 +42,11 @@ const TYPES = [
   {
     value: 'gestational',
     label: 'Gestational diabetes',
-    detail: 'Recorded. Being built as a clinician-supported workflow.',
+    // Not "being built": nobody is building it. It waits on clinical review
+    // that has not started, and "being built" reads as "coming soon" to
+    // somebody deciding whether to wait for it.
+    detail:
+      'Recorded, but not yet interpreted. Pregnancy changes what these numbers mean, and that needs clinical review before Wellovue reads them.',
   },
   {
     value: 'prediabetes',
