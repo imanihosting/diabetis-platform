@@ -18,6 +18,10 @@ import { useLogout } from '@/hooks/useAuth';
  * the footer, which is where people look for them anyway.
  *
  * Shares the public site's vocabulary and not its scale. The mark, the band
+ * `data-print="hide"` on the header and footer is what keeps a list of
+ * navigation links off somebody's printed medical summary. The rule lives in
+ * globals.css rather than here because it is the same rule on every page.
+ *
  * marking the current page and the band above the footer are the same objects
  * as on the landing page, at the density of something used every evening
  * rather than read once. A dashboard is scanned; a landing page is read.
@@ -28,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-rule">
+      <header data-print="hide" className="border-b border-rule">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:gap-6 sm:px-8 sm:py-6">
         <Wordmark href="/timeline" />
 
@@ -103,9 +107,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Product width, not document width. Prose inside stays narrow; the
           timeline, the evidence list and the clinician packet use it all. */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12 sm:px-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12 print:p-0 sm:px-8">
+        {children}
+      </main>
 
-      <footer className="mt-16">
+      <footer data-print="hide" className="mt-16">
         {/* Same band that opens the public footer, at the app's weight. */}
         <div aria-hidden className="range-band-rule h-1 w-full" />
 

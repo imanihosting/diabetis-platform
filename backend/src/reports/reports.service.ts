@@ -10,6 +10,7 @@ import {
   type PacketExperiment,
   type ReportPeriod,
   type StructuredFinding,
+  type PacketPatient,
 } from '@wellovue/types';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
@@ -44,13 +45,35 @@ export class ReportsService {
     private readonly profiles: DiabetesProfileService,
   ) {}
 
+  /**
+   * Whose record this is, for the top of the printed page.
+   *
+   * The display name and nothing else, because the display name is all this
+   * product holds. No date of birth, no health-service number: the packet
+   * cannot identify somebody the way a hospital record does and must not look
+   * as though it can, so the page says so rather than leaving a clinician to
+   * assume a match has been made.
+   */
+  private async patientFor(userId: string): Promise<PacketPatient> {
+    const row = await this.db.queryOne<{ display_name: string | null }>(
+      'select display_name from identity.users where id = $1',
+      [userId],
+    );
+    return { displayName: row?.display_name ?? null };
+  }
+
   async clinicianPacket(userId: string, days: ReportPeriod): Promise<ClinicianPacket> {
     const to = new Date();
     const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
 
-    const [{ capabilities }, patterns, glucose, labResults, experiments] =
+    const [{ capabilities }, patient, patterns, glucose, labResults, experiments] =
       await Promise.all([
         this.profiles.context(userId),
+        // Read here rather than taken from the browser, for the same reason
+        // everything else in this packet is: the identity on a document
+        // handed to a clinician has to come from the same request as the data
+        // it identifies, or the two can disagree about whose record this is.
+        this.patientFor(userId),
         // Through the evidence service, so the care-mode gate that decides
         // whether this record may be analysed at all applies here too. A
         // report endpoint that reached the engine directly would be a second
@@ -71,6 +94,7 @@ export class ReportsService {
     const findings = available ? patterns.findings : [];
 
     const packet: ClinicianPacket = {
+      patient,
       period: { from, to, days },
       generatedAt: new Date(),
       careMode: capabilities.careMode,

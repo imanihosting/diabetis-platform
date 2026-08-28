@@ -131,7 +131,28 @@ export const discussionPointSchema = z.object({
 });
 export type DiscussionPoint = z.infer<typeof discussionPointSchema>;
 
+/**
+ * Whose record this is.
+ *
+ * A printed packet is handed across a desk and put in a pile. Without a name
+ * on it, page three is a page of somebody's glucose that nobody can attribute
+ * — which is worse than useless in a clinic, because it looks like data.
+ *
+ * The name is all this holds, because the name is all the product holds. There
+ * is no date of birth and no health-service number here, so the packet cannot
+ * pretend to identify somebody the way a hospital record does, and it says so
+ * on the page rather than leaving a clinician to assume it has been matched.
+ *
+ * Assembled on the server with the rest of the packet, so the identity and the
+ * data come from one request and cannot disagree about whose they are.
+ */
+export const packetPatientSchema = z.object({
+  displayName: z.string().nullable(),
+});
+export type PacketPatient = z.infer<typeof packetPatientSchema>;
+
 export const clinicianPacketSchema = z.object({
+  patient: packetPatientSchema,
   period: z.object({
     from: z.coerce.date(),
     to: z.coerce.date(),
@@ -185,3 +206,27 @@ export const clinicianPacketSchema = z.object({
   limitations: z.array(z.string()),
 });
 export type ClinicianPacket = z.infer<typeof clinicianPacketSchema>;
+
+/**
+ * What the browser prints in its own page header, on every page.
+ *
+ * The one piece of repeated per-page identification that actually works
+ * everywhere. CSS cannot reliably repeat a block on every printed page —
+ * `position: fixed` behaves differently across browsers and versions — but
+ * every browser prints the document title and a page number in its own margin,
+ * and every one of them repeats it. So the title is made to carry what a
+ * clinician needs on page three: whose record this is, and over what period.
+ *
+ * Shared rather than written on the page for the same reason the packet's
+ * labels are: this string is the identification on a document somebody is
+ * handed, and it must not drift from what the page itself says.
+ */
+export function packetDocumentTitle(
+  packet: Pick<ClinicianPacket, 'patient' | 'period'>,
+  formatDate: (date: Date) => string,
+): string {
+  const who = packet.patient.displayName ?? 'Wellovue user';
+  return `${who} — Wellovue summary, ${formatDate(packet.period.from)} to ${formatDate(
+    packet.period.to,
+  )}`;
+}

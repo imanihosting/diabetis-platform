@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   REPORT_PERIODS,
   careModeLabel,
@@ -10,6 +10,7 @@ import {
   dataQualityHeadline,
   dataQualityMeasurements,
   evidenceBreakdown,
+  packetDocumentTitle,
   postMealCaveat,
   postMealMeasurements,
   type ClinicianPacket,
@@ -90,10 +91,11 @@ export default function ReportPage() {
           <h1 className="text-xl font-medium tracking-tight text-ink">
             Summary for an appointment
           </h1>
-          <p className="mt-1 max-w-prose text-sm leading-relaxed text-ink-muted">
+          <p className="mt-1 max-w-prose text-sm leading-relaxed text-ink-muted print:hidden">
             Everything on this page comes from your own records. It is for you
             to bring, and for a clinician to read in a minute.
           </p>
+          {packet.data && <PrintSource packet={packet.data} />}
         </div>
 
         {/* Two windows, both named. An arbitrary range would let the period be
@@ -135,8 +137,30 @@ export default function ReportPage() {
 }
 
 function Packet({ packet }: { packet: ClinicianPacket }) {
+  /**
+   * The browser prints this in its own page header, on every page.
+   *
+   * The only per-page identification that works everywhere. CSS cannot
+   * reliably repeat a block across printed pages, and every browser already
+   * prints the document title and a page number in the margin — so the title
+   * is made to carry what somebody holding page three needs: whose record this
+   * is, and over what period.
+   *
+   * Restored on the way out. The title belongs to the packet, not to the tab,
+   * and leaving a patient's name in it after navigating away would put it in
+   * the browser history of a shared computer.
+   */
+  useEffect(() => {
+    const previous = document.title;
+    document.title = packetDocumentTitle(packet, formatDate);
+    return () => {
+      document.title = previous;
+    };
+  }, [packet]);
+
   return (
     <article className="mt-8">
+      <RunningIdentification packet={packet} />
       <Provenance packet={packet} />
 
       <Section title="Glucose">
@@ -256,7 +280,13 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
  */
 function Provenance({ packet }: { packet: ClinicianPacket }) {
   return (
-    <dl className="grid gap-x-8 gap-y-3 surface-raised p-5 sm:grid-cols-2">
+    <dl
+      data-print="keep"
+      className="grid gap-x-8 gap-y-3 surface-raised p-5 sm:grid-cols-2"
+    >
+      <Fact label="Patient">
+        {packet.patient.displayName ?? 'Name not recorded'}
+      </Fact>
       <Fact label="Period">
         {formatDate(packet.period.from)} to {formatDate(packet.period.to)} (
         {packet.period.days} days)
@@ -266,7 +296,57 @@ function Provenance({ packet }: { packet: ClinicianPacket }) {
       <Fact label="Findings produced by">
         {packet.evidence.modelVersion ?? 'No detector ran for this care profile'}
       </Fact>
+
+      {/* Said on the page rather than left to be assumed. A clinician filing
+          this beside a hospital record needs to know it was not matched
+          against one: the product holds a name and no other identifier, so
+          this identifies an account and not a patient. */}
+      <p className="text-xs leading-relaxed text-ink-faint sm:col-span-2">
+        Prepared by the person named above from their own records. Wellovue
+        holds no date of birth or health-service number, so this identifies an
+        account rather than a verified patient record.
+      </p>
     </dl>
+  );
+}
+
+/**
+ * Whose record this is, on every printed sheet.
+ *
+ * A packet is read out of order and put down in pieces. Page four on its own
+ * is a page of somebody's glucose that nobody can attribute, which in a clinic
+ * is worse than no page at all.
+ *
+ * The browser prints the document title in its own header and that carries the
+ * same thing — but a reader can turn headers off, and some print paths omit
+ * them. This is the copy that does not depend on that choice.
+ */
+function RunningIdentification({ packet }: { packet: ClinicianPacket }) {
+  return (
+    <div data-print="running" className="hidden">
+      {packet.patient.displayName ?? 'Name not recorded'} · Wellovue summary ·{' '}
+      {formatDate(packet.period.from)} to {formatDate(packet.period.to)}
+    </div>
+  );
+}
+
+/**
+ * Where the sheet came from and whose it is, for paper only.
+ *
+ * On screen the app's chrome carries the wordmark and the page has its own
+ * heading. On paper the chrome is gone, so a printed sheet would open on
+ * "Summary for an appointment" with nothing saying which product produced it.
+ *
+ * A line rather than a second heading: the page already has one, and printing
+ * two would have a clinician reading the same title twice before reaching any
+ * data.
+ */
+function PrintSource({ packet }: { packet: ClinicianPacket }) {
+  return (
+    <p data-print="only" className="mt-1 hidden text-sm text-ink-muted">
+      Wellovue · {packet.patient.displayName ?? 'Name not recorded'} ·{' '}
+      {formatDate(packet.period.from)} to {formatDate(packet.period.to)}
+    </p>
   );
 }
 
@@ -281,7 +361,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 function Lab({ series }: { series: LabSeries }) {
   return (
-    <div className="surface-raised p-6">
+    <div data-print="keep" className="surface-raised p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-sm text-ink">{series.testName}</h3>
         <p className="text-sm text-ink">
@@ -401,8 +481,8 @@ function Experiment({ experiment }: { experiment: PacketExperiment }) {
 /** A finding as the engine returned it, limitations included. */
 function Finding({ finding }: { finding: StructuredFinding }) {
   return (
-    <div className="surface-raised p-6">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+    <div className="surface-raised p-6 print:p-4">
+      <div data-print="keep" className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div>
           <p className="text-xs uppercase tracking-wide text-ink-faint">
             {findingPresentation(finding.findingType).lens}
@@ -417,18 +497,20 @@ function Finding({ finding }: { finding: StructuredFinding }) {
         <EvidenceBadge finding={finding} />
       </div>
 
-      <p className="mt-3 max-w-prose text-sm leading-relaxed text-ink">
-        {finding.summary}
-      </p>
-
-      {finding.effectEstimate !== null && (
-        <p className="mt-3 text-sm text-ink">
-          <span className="measure font-medium">{signed(finding.effectEstimate)}</span>
-          {finding.effectUnit && (
-            <span className="ml-2 text-xs text-ink-faint">{finding.effectUnit}</span>
-          )}
+      <div data-print="keep">
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-ink">
+          {finding.summary}
         </p>
-      )}
+
+        {finding.effectEstimate !== null && (
+          <p className="mt-3 text-sm text-ink">
+            <span className="measure font-medium">{signed(finding.effectEstimate)}</span>
+            {finding.effectUnit && (
+              <span className="ml-2 text-xs text-ink-faint">{finding.effectUnit}</span>
+            )}
+          </p>
+        )}
+      </div>
 
       <PostMeal groups={finding.comparison} />
 
@@ -437,7 +519,7 @@ function Finding({ finding }: { finding: StructuredFinding }) {
       <OtherReasons explanations={finding.competingExplanations} />
 
       {finding.limitations.length > 0 && (
-        <div className="mt-4 border-t border-rule pt-3">
+        <div data-print="keep" className="mt-4 border-t border-rule pt-3">
           <h4 className="text-xs uppercase tracking-wide text-ink-faint">
             Does not account for
           </h4>
@@ -467,7 +549,7 @@ function OtherReasons({ explanations }: { explanations: CompetingExplanation[] }
   if (explanations.length === 0) return null;
 
   return (
-    <div className="mt-4 break-inside-avoid border-t border-rule pt-3">
+    <div data-print="keep" className="mt-4 border-t border-rule pt-3">
       <h4 className="text-xs uppercase tracking-wide text-ink-faint">
         Other possible reasons
       </h4>
@@ -513,7 +595,7 @@ function Quality({ finding }: { finding: StructuredFinding }) {
   const breakdown = evidenceBreakdown(finding);
 
   return (
-    <div className="mt-4 break-inside-avoid border-t border-rule pt-3">
+    <div data-print="keep" className="mt-4 border-t border-rule pt-3">
       <h4 className="text-xs uppercase tracking-wide text-ink-faint">
         Record behind this finding
       </h4>
@@ -636,9 +718,19 @@ function Discussion({ point }: { point: DiscussionPoint }) {
   );
 }
 
+/**
+ * One band of the packet.
+ *
+ * Deliberately *not* kept whole on paper. A findings section runs to several
+ * pages, and forcing it onto one would push it to the next page and leave the
+ * previous one half empty — which over a ninety-day packet costs whole sheets.
+ * What must not split is the individual object: a finding, an experiment, a
+ * lab series. Those carry `data-print="keep"`; a section carries the rule that
+ * its heading stays with whatever follows it.
+ */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-10 break-inside-avoid">
+    <section className="mt-10">
       <h2 className="border-b border-rule pb-2 text-xs uppercase tracking-wide text-ink-faint">
         {title}
       </h2>

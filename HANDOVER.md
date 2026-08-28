@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 248 unit, no infrastructure needed
+npm test                  # 263 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 105 | no |
+| `backend/test/*.spec.ts` | 107 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -161,7 +161,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `frontend/test/*.spec.ts(x)` | 143 | no |
+| `frontend/test/*.spec.ts(x)` | 156 | no |
 | `metabolic-engine/tests` | 104 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -596,6 +596,66 @@ moment it most needs one. Put it back before describing something unbuilt.
 
 ---
 
+## 6d. The packet on paper
+
+Shipped. `/report` prints as a clinical handover document rather than as a web
+page that happens to survive a printer.
+
+**Print-first, not PDF-first.** Every browser and operating system already
+knows how to print, to save as PDF, and to send to a printer down the
+corridor. A bespoke PDF export would be a second rendering path to keep in step
+with the first, and the first is what somebody reaches for anyway. There is no
+export button, deliberately.
+
+**Three marks, one stylesheet.** `data-print="hide"` on the app header and
+footer, `data-print="keep"` on anything that reads as nonsense when halved, and
+`data-print="only"` / `"running"` for what exists on paper alone. The rules
+live in `globals.css` under one `@media print`, not on the report page, because
+"navigation does not print" is true of every page.
+
+**The packet now says whose it is.** `patient.displayName` is read on the
+server with the rest of the packet, so the identity and the data come from one
+request and cannot disagree. It also says what it cannot do: the product holds
+a name and no date of birth or health-service number, so the page states that
+it identifies an account rather than a verified patient record, instead of
+leaving a clinician to assume a match was made.
+
+**Identification repeats on every sheet, twice over.** The document title is
+set to name and period, which every browser prints in its own page header
+alongside a page number. And a `position: fixed` line does the same
+independently, because a reader can switch the browser's headers off. Page one
+carries the full block, so no page is anonymous.
+
+**What the measurements changed.** Every number below was read out of a printed
+PDF, page by page, not estimated:
+
+| | Pages | Worst page |
+|---|---|---|
+| Before | 9 | 134 characters |
+| After | 6 | 918 characters |
+
+The three wasted sheets came from `break-inside: avoid` on whole sections and
+whole findings. A finding grew past a page this month — measurements,
+alternatives, record quality — so keeping it whole pushed it to a fresh sheet
+and left the previous one nearly empty. The rule now applies to the smallest
+thing that reads as nonsense when halved, never to the largest thing that would
+look tidy whole.
+
+**A collapsed `<details>` cannot be opened from CSS.** Chrome hides the body
+through the element's own shadow slot. The obvious stylesheet attempt — hide
+the summary, reveal its siblings — removes the label as well and reveals
+nothing, which was verified by printing the evidence page and finding both gone
+from the PDF. `CompetingExplanations` opens them on `beforeprint` and closes
+them again on `afterprint`, which is the only thing that works.
+
+**How to check it.** Print to PDF and read the PDF back; do not trust a
+screenshot of the screen. `browse pdf --format a4 --print-background` renders
+through the print stylesheet, and text can be extracted page by page. Note that
+CDP printing does not fire `beforeprint`, so the disclosure handler has to be
+checked by dispatching the event.
+
+---
+
 ## 7. The public pages must not promise what is not built
 
 `PRODUCT.md` says the page renders the real thing, and that a health product
@@ -636,7 +696,7 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 105 unit tests,
+readers evaluating the platform and it quotes specific numbers: 107 unit tests,
 184 integration, 104 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
@@ -948,9 +1008,10 @@ and a gate that goes red for the shipped configuration gets switched off.
 ## 12. Where to pick up
 
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** tracks the
-loop, and the loop is closed. What is left is a choice between two
-things, and neither of them is engine work. Pick deliberately rather than by
-whatever is nearest — they have very different shapes.
+loop, and the loop is closed. What is left is the launch hardening track,
+and none of it is product work: a DNS name, a reverse proxy that sets
+`X-Forwarded-For`, TLS termination, the final database TLS mode, the five legal
+placeholders, a lawyer, and a production canary. §10 has each one.
 
 **The most recent review of the engine** (28 August) said it well: the engine
 is safe and directionally right, but it understands "patterns in diabetes data"
@@ -962,16 +1023,6 @@ follow-up that put those measurements in the clinician packet (§6a). Its fifth,
 data quality and CGM coverage, has shipped too (§6b). Every recommendation from
 that review is now done, and Competing Explanations v1 (§6c) closed the last
 unbuilt step of the product loop.
-
-1. **Exporting the clinician packet.** A printed sheet is what gets carried
-   into an appointment, and the page was built for a printer without anybody
-   testing it against one. Reuse the server packet; do not build a second
-   report path.
-
-2. **The rest of the go-live blockers in §10**, none of which is code: a DNS
-   name for the database host, a reverse proxy that sets `X-Forwarded-For`,
-   and the five legal facts plus a lawyer. The DNS name is the only item here
-   with a lead time.
 
 **Two things the coverage work leaves open**, neither big enough to be its own
 item above. The shape and coverage thresholds have not had clinical review and

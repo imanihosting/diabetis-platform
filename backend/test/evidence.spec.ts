@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clinicianPacketSchema,
   DEFAULT_EVIDENCE_WINDOW_DAYS,
   MAX_EVIDENCE_WINDOW_DAYS,
   evidenceQuerySchema,
@@ -113,5 +114,62 @@ describe('orderFindings', () => {
     ];
     orderFindings(original);
     expect(original.map((f) => f.findingType)).toEqual(['weak', 'strong']);
+  });
+});
+
+/**
+ * The packet carries whose record it is.
+ *
+ * A printed sheet handed across a desk without a name on it is a page of
+ * somebody's glucose that nobody can attribute, which in a clinic is worse
+ * than no page at all. Read on the server with the rest of the packet, so the
+ * identity and the data come from one request.
+ */
+describe('clinician packet identity', () => {
+  it('carries a patient, and tolerates an account with no name', () => {
+    const base = {
+      period: { from: new Date('2026-06-01'), to: new Date('2026-08-30'), days: 90 },
+      generatedAt: new Date('2026-08-30'),
+      careMode: 'type_2_standard' as const,
+      evidence: { available: true, reason: null, modelVersion: 'x', findings: [] },
+      glucose: {
+        from: new Date('2026-06-01'),
+        to: new Date('2026-08-30'),
+        unit: 'mmol/L',
+        sampleCount: 5760,
+        mean: 6.8,
+        min: 5,
+        max: 13.6,
+        timeInRange: 0.97,
+        timeAboveRange: 0.03,
+        timeBelowRange: 0,
+        dataSufficient: true,
+      },
+      labs: { windowDays: 730, series: [] },
+      experiments: [],
+      discussion: [],
+      limitations: [],
+    };
+
+    const named = clinicianPacketSchema.safeParse({
+      ...base,
+      patient: { displayName: 'Ada Lovelace' },
+    });
+    expect(named.success).toBe(true);
+
+    const anonymous = clinicianPacketSchema.safeParse({
+      ...base,
+      patient: { displayName: null },
+    });
+    expect(anonymous.success).toBe(true);
+  });
+
+  it('will not assemble a packet with no patient block at all', () => {
+    // Not a nullable field: the packet must always say something about whose
+    // record it is, even if that something is "name not recorded".
+    expect(
+      clinicianPacketSchema.safeParse({ period: { from: new Date(), to: new Date(), days: 90 } })
+        .success,
+    ).toBe(false);
   });
 });

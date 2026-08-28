@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
 import type { CompetingExplanation } from '@wellovue/types';
 
 /**
@@ -31,6 +34,42 @@ export function CompetingExplanations({
 }: {
   explanations: CompetingExplanation[];
 }) {
+  const list = useRef<HTMLUListElement>(null);
+
+  /**
+   * Open everything before a print, and put it back afterwards.
+   *
+   * A collapsed `details` prints as its label alone, and on a page somebody
+   * might carry to an appointment that is silent data loss — the alternatives
+   * are named and the reason each one matters is gone. CSS cannot reach it:
+   * Chrome hides the body through the element's own shadow slot, not through
+   * anything a stylesheet can override.
+   *
+   * Restored on `afterprint` so printing does not leave every card expanded
+   * behind the reader, and only the ones that were closed are re-closed.
+   */
+  useEffect(() => {
+    let opened: HTMLDetailsElement[] = [];
+
+    const expand = () => {
+      opened = [...(list.current?.querySelectorAll('details') ?? [])].filter(
+        (d) => !d.open,
+      );
+      opened.forEach((d) => (d.open = true));
+    };
+    const restore = () => {
+      opened.forEach((d) => (d.open = false));
+      opened = [];
+    };
+
+    window.addEventListener('beforeprint', expand);
+    window.addEventListener('afterprint', restore);
+    return () => {
+      window.removeEventListener('beforeprint', expand);
+      window.removeEventListener('afterprint', restore);
+    };
+  }, []);
+
   if (explanations.length === 0) return null;
 
   return (
@@ -44,7 +83,7 @@ export function CompetingExplanations({
         could produce the same pattern.
       </p>
 
-      <ul className="mt-3 space-y-2">
+      <ul ref={list} className="mt-3 space-y-2">
         {explanations.map((explanation) => (
           <li key={explanation.label}>
             <details className="group">

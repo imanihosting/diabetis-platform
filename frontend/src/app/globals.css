@@ -348,3 +348,131 @@ body {
   background-position: top left;
   background-repeat: no-repeat;
 }
+
+/* ---------------------------------------------------------------------------
+ * Print.
+ *
+ * The clinician packet is the reason this section exists. PRODUCT.md says the
+ * summary is a thing somebody carries into an appointment, and until now it
+ * was a web page that happened not to fall over when printed — the app's
+ * navigation came out on the paper, sections broke across pages wherever they
+ * landed, and page three carried no indication of whose record it was.
+ *
+ * Print-first rather than PDF-first, deliberately. Every browser and every
+ * operating system already knows how to print, to save as PDF, and to send to
+ * a printer down the corridor. A bespoke PDF export would be a second
+ * rendering path to keep in step with the first, and the first is the one a
+ * person will reach for anyway.
+ *
+ * Nothing here is scoped to the report page. A rule that hides navigation on
+ * paper is right on every page, and a person printing their timeline deserves
+ * the same treatment.
+ * ------------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4;
+    /* Room for the browser's own header and footer, which is where the page
+       number and the document title come from. Those are worth more than
+       anything this stylesheet could draw in the same space: they repeat on
+       every page in every browser, and the title carries the patient's name.
+       See `documentTitle()` in the report page. */
+    margin: 12mm 12mm 15mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+  }
+
+  /* Ink on paper. The screen palette is warm off-white on warm dark, which is
+     right on a display and wastes toner on a page. */
+  body {
+    color: #000;
+  }
+
+  /* Application chrome. A printed page is not navigable, and a list of links
+     at the top of somebody's medical summary is the clearest possible signal
+     that nobody thought about the paper. */
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  [data-print="only"] {
+    display: block !important;
+  }
+
+  /* Keep a heading with what it introduces, and never leave one line of a
+     paragraph stranded on its own page. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* What must not split down the middle: an experiment, a lab series, a
+     finding's heading with its number, a table of post-meal measurements.
+     Sections are allowed to break, and so is a finding as a whole — both grew
+     past a page, and forcing either onto one costs a sheet every time it
+     happens. The rule is applied to the smallest thing that reads as nonsense
+     when halved, not to the largest thing that would look tidy whole. */
+  [data-print="keep"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-print="break-before"] {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Paper is denser than a screen. The surfaces keep their hairline so an
+     object still reads as one, but the generous padding a pointer needs is
+     margin nobody is going to click. */
+  .surface-raised,
+  .surface-sunk {
+    padding: 0.9rem !important;
+  }
+
+  /* An identification line on every sheet, drawn by us rather than by the
+     browser's own header — which a reader can switch off, and which some
+     print paths omit. Fixed elements repeat on every printed page in Chrome;
+     the extra page margin below is what stops it landing on the last lines of
+     text. */
+  [data-print="running"] {
+    display: block !important;
+    position: fixed;
+    bottom: -8mm;
+    left: 0;
+    right: 0;
+    font-size: 8pt;
+    color: #444;
+  }
+
+  /* Links print as text. A URL in brackets after every link is noise on a
+     document nobody will type from. */
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  /* Collapsed detail is invisible on paper, and on a clinical page that is
+     data loss rather than a tidy default. CSS cannot fix it: Chrome hides a
+     closed `details` body through the shadow slot, not through a rule a
+     stylesheet can override, and the obvious attempt — hiding the summary and
+     revealing its siblings — removes the label as well and reveals nothing.
+     Verified by printing the page and reading the PDF back. The working fix is
+     to open them before the print, which is done in JavaScript where the
+     summary is; see `CompetingExplanations`. */
+  summary {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}
