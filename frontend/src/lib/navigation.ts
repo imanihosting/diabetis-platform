@@ -23,6 +23,22 @@ const HOW_IT_WORKS: NavItem = {
   detail: 'From a reading to evidence you can check',
 };
 
+/**
+ * The platform in depth, for somebody evaluating it rather than using it.
+ *
+ * Footer rather than the main row, and that placement is a decision rather
+ * than a space saving. PRODUCT.md puts the person with the condition first;
+ * the top row is theirs, and a "White paper" sitting beside About and How this
+ * works would tell every patient landing here that the site is talking past
+ * them to somebody else. A reader evaluating the company looks in a footer
+ * without being sent there.
+ */
+const WHITE_PAPER: NavItem = {
+  href: '/white-paper',
+  label: 'White paper',
+  detail: 'What it does, who it is for, and what is not built yet',
+};
+
 const CONTACT: NavItem = {
   href: '/contact',
   label: 'Contact',
@@ -95,7 +111,7 @@ export const APP_NAV: NavItem[] = [
  * to save a line would trade a signpost for a link.
  */
 export const FOOTER_GROUPS: { title: string; items: NavItem[] }[] = [
-  { title: 'Product', items: [ABOUT, HOW_IT_WORKS] },
+  { title: 'Product', items: [ABOUT, HOW_IT_WORKS, WHITE_PAPER] },
   { title: 'Support', items: [CONTACT] },
   { title: 'Legal', items: LEGAL_NAV },
 ];

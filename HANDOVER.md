@@ -276,6 +276,17 @@ the only reason a label should ever come off. Both panels are typeset
 illustrations of real screens rather than screenshots of them, and their
 figures are the demo record's own.
 
+`/white-paper` is the page this rule matters most on, because it is written for
+readers evaluating the platform and it quotes specific numbers: 78 unit tests,
+180 integration, 29 engine, nineteen migrations, six guard triggers, eleven
+domain schemas, and the demo engine recovering about -1.05 against a seeded
+-1.3. Every one of those was checked against the repository and the live
+database when it was written; check them again before changing them. It embeds
+the same `LoopSteps` component as `/how-it-works`, so the build labels cannot
+drift between the two. It deliberately carries no market sizing, revenue model,
+user count or funding ask, and says so on the page — those would be the only
+unverifiable claims on the site.
+
 If you build one of those, remove its label. If you add a claim, check it is
 true first.
 

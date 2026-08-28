@@ -215,6 +215,8 @@ fails closed: an unrecognised template is gated, never allowed.
 - [x] Clinician packet: thirty or ninety days on one page — findings with their
       limitations, glucose, lab trends, every experiment beside the expectation
       recorded before it ran, and what is worth raising
+- [x] Public site: landing, About, How this works, White paper, Contact, and
+      the policy pages
 - [x] Rate limiting on public endpoints, shared across replicas in Redis and
       falling back to per-process counts rather than failing open when Redis
       stops answering
