@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  POST_MEAL_WINDOW_MINUTES,
   groupMeasureSchema,
   knownPostMealShapes,
   postMealMetricsSchema,
@@ -54,6 +55,21 @@ describe('post-meal metrics contract', () => {
     const engineFields = new Set([...aliased, ...plain]);
 
     expect(engineFields).toEqual(new Set(Object.keys(postMealMetricsSchema.shape)));
+  });
+
+  it('measures over the same window the engine does', () => {
+    // A third copy of a number that lives in thresholds.py, and the reason it
+    // exists in TypeScript at all: the packet and the evidence page both say
+    // "still above at 2 hours", which is this constant spelled out. A surface
+    // hard-coding the words while the engine moves the window is a surface
+    // that lies to a clinician.
+    const thresholds = readFileSync(
+      join(__dirname, '..', '..', 'metabolic-engine', 'app', 'engines', 'thresholds.py'),
+      'utf8',
+    );
+    const declared = thresholds.match(/^POST_MEAL_WINDOW_MINUTES\s*=\s*([0-9]+)/m);
+    expect(declared, 'POST_MEAL_WINDOW_MINUTES is not declared in thresholds.py').toBeTruthy();
+    expect(Number(declared![1])).toBe(POST_MEAL_WINDOW_MINUTES);
   });
 
   it('accepts a payload shaped the way the engine serialises one', () => {

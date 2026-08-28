@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import {
   REPORT_PERIODS,
   careModeLabel,
   findingPresentation,
+  postMealCaveat,
+  postMealMeasurements,
   type ClinicianPacket,
   type DiscussionPoint,
+  type GroupMeasure,
   type LabSeries,
   type PacketExperiment,
   type ReportPeriod,
@@ -421,6 +424,8 @@ function Finding({ finding }: { finding: StructuredFinding }) {
         </p>
       )}
 
+      <PostMeal groups={finding.comparison} />
+
       {finding.limitations.length > 0 && (
         <div className="mt-4 border-t border-rule pt-3">
           <h4 className="text-xs uppercase tracking-wide text-ink-faint">
@@ -429,6 +434,69 @@ function Finding({ finding }: { finding: StructuredFinding }) {
           <List items={finding.limitations} className="mt-2" />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The post-meal measurements, for the reader they matter most to.
+ *
+ * The person sees these on their evidence page; leaving them off the packet
+ * would hand their clinician the thinner, older version of the same finding
+ * and let the two of them read different documents in the same appointment.
+ *
+ * Rows and labels come from `postMealMeasurements()` — the same function the
+ * evidence page uses, so the two surfaces cannot name a measurement
+ * differently. Only the layout is decided here, and it is decided by the
+ * printer: a definition list per group rather than the comparison table the
+ * screen uses, because this page is laid out in a narrow print column beside
+ * the finding's limitations and a table would either scroll or be cut.
+ */
+function PostMeal({ groups }: { groups: GroupMeasure[] }) {
+  const measured = groups.flatMap((group) => {
+    const rows = postMealMeasurements(group);
+    return rows ? [{ group, rows }] : [];
+  });
+  if (measured.length === 0) return null;
+
+  return (
+    <div className="mt-4 border-t border-rule pt-3">
+      <h4 className="text-xs uppercase tracking-wide text-ink-faint">
+        Post-meal response
+      </h4>
+
+      <div className="mt-2 space-y-3">
+        {measured.map(({ group, rows }) => {
+          const caveat = postMealCaveat(group);
+          return (
+            <div key={group.label} className="break-inside-avoid">
+              {measured.length > 1 && (
+                <p className="text-xs text-ink-muted">{group.label}</p>
+              )}
+              <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                {rows.map((row) => (
+                  <Fragment key={row.key}>
+                    <dt className="text-xs text-ink-faint">{row.label}</dt>
+                    <dd className="text-xs text-ink">
+                      <span className={row.measure ? 'measure' : undefined}>
+                        {row.value}
+                      </span>
+                      {row.unit && (
+                        <span className="ml-1 text-ink-faint">{row.unit}</span>
+                      )}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+              {caveat && (
+                <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-ink-faint">
+                  {caveat}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

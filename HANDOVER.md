@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 203 unit, no infrastructure needed
+npm test                  # 215 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 93 | no |
+| `backend/test/*.spec.ts` | 94 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -161,7 +161,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `frontend/test/seo.spec.tsx` | 110 | no |
+| `frontend/test/*.spec.ts(x)` | 121 | no |
 | `metabolic-engine/tests` | 69 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -190,6 +190,11 @@ A few suites are worth knowing about by name:
   drift is silent otherwise: zod strips a key it does not recognise, so an
   engine field the contract has never seen throws nowhere and simply never
   reaches the screen.
+- **`frontend/test/test-counts.spec.ts`** is the guard on the white paper's
+  own claims; see §7.
+- **`frontend/test/post-meal-labels.spec.tsx`** proves the evidence page and the
+  clinician packet name the post-meal measurements identically, by rendering one
+  and reading the source of the other. Neither may hard-code a label.
 - **`frontend/test/seo.spec.tsx`** renders every public page to markup and
   asserts against the result rather than against page source. That is the whole
   reason it needs a renderer: no public page on this site contains an `<h1>`,
@@ -426,12 +431,27 @@ this engine has not computed and has no basis for: typical of whom? A residual
 bucket has to be named for the measurements that put a response in it. The same
 rule that keeps `findingPresentation` a lookup rather than a sentence generator.
 
-**Still to do here.** The clinician packet renders findings through its own
-`Finding` component in `frontend/src/app/report/page.tsx` and does not show any
-of this. A clinician is the reader most likely to want time above range and
-return-to-range, so that is the obvious follow-on — but it is a separate change
-to a separate surface, and the packet is a record somebody carries into an
-appointment.
+**The packet carries these too, and both surfaces name them identically.**
+v1.1 closed the split: the person reading their evidence page and the clinician
+reading the packet were going to see the same finding at two different depths,
+which is the worst possible version of a shared document.
+
+The rows and their labels come from `postMealMeasurements()` in the shared
+contract, not from either page. Only the layout is decided per surface — a
+comparison table on the evidence page, because those findings are read across;
+a definition list per group in the packet, because that page is laid out in a
+narrow print column and a table would scroll or be cut. A test renders one and
+greps the other, and fails if either hard-codes a label of its own.
+
+`POST_MEAL_WINDOW_MINUTES` now exists in TypeScript as well, because "still
+above at two hours" is that constant spelled out and a surface that hard-codes
+the words while the engine moves the window is a surface that lies to a
+clinician. `backend/test/post-meal-metrics.spec.ts` holds the two copies
+together, the same way it does for the target range.
+
+The window reads as words in a sentence and figures in a cell —
+`postMealWindowLabel('words')` against the default. Same fact, two registers:
+"the two hours ended" in prose, "Still above at 2 hours" in a table.
 
 ---
 
@@ -472,16 +492,28 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 83 unit tests,
-184 integration, 38 engine, twenty migrations, six guard triggers, eleven
+readers evaluating the platform and it quotes specific numbers: 94 unit tests,
+184 integration, 69 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
 
-**These go stale silently.** They were already wrong once — the counts moved
-when the timezone work added tests and the page kept quoting the old ones,
-which is a public page making a false specific claim. Nothing enforces this.
-Re-check them whenever the suites or the migration count change, or write the
-check that would. It embeds
+**The test counts are now enforced.** `frontend/test/test-counts.spec.ts`
+reads the three numbers out of the page and counts the suites from source. It
+went stale twice before that existed — once when the timezone work added tests
+and once when the post-meal work did — and it caught a third drift within
+minutes of being written, when v1.1 added a backend test.
+
+It counts from source rather than by running the suites, so it knows about two
+things that would otherwise make it lie, and refuses rather than guessing: it
+asserts `it.each` is absent from the backend suites, because one declaration
+becoming many tests would silently undercount, and it expands
+`@pytest.mark.parametrize` and throws on any form it does not recognise. The
+frontend's own count is deliberately not claimed on the page, because that
+suite does use `it.each` and the guard could not check it.
+
+The other numbers on the page — twenty migrations, six guard triggers, eleven
+domain schemas, the demo engine recovering about -1.05 against a seeded -1.3 —
+are still unenforced. Re-check those by hand, or extend the guard. It embeds
 the same `LoopSteps` component as `/how-it-works`, so the build labels cannot
 drift between the two. It deliberately carries no market sizing, revenue model,
 user count or funding ask, and says so on the page — those would be the only
@@ -781,8 +813,9 @@ is safe and directionally right, but it understands "patterns in diabetes data"
 more than it understands diabetes. Its first three recommendations shipped in
 `4c34810` and `71964d7` — timezone-aware hours, timezone-aware CSV import,
 refusing an unresolvable zone, and a version bump. Its fourth, richer post-meal
-features, is Post-Meal Intelligence v1 and has shipped; see §6a. The one that
-remains is 1 below.
+features, is Post-Meal Intelligence v1 and has shipped, along with the v1.1
+follow-up that put those measurements in the clinician packet; see §6a. The one
+that remains is 1 below, and it is the agreed next ticket.
 
 1. **Data quality and CGM coverage.** Sensor coverage, gaps, sampling density,
    days worn, fingerstick versus CGM — folded into evidence strength rather

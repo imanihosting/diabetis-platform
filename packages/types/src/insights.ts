@@ -137,6 +137,174 @@ const POST_MEAL_SHAPES: Record<string, PostMealShape> = {
  * reader looking almost right, so completeness has to be asserted somewhere
  * rather than noticed.
  */
+/**
+ * The post-meal window the engine measures over, in minutes.
+ *
+ * A third copy of a number that lives in `metabolic-engine/app/engines/
+ * thresholds.py`, for the same reason `TARGET_HIGH_MMOL` is: Python cannot
+ * import TypeScript. It is here because the phrase "still above at two hours"
+ * is a restatement of this constant, and a surface that hard-codes the words
+ * while the engine changes the window is a surface that lies.
+ *
+ * `backend/test/post-meal-metrics.spec.ts` reads thresholds.py and fails if the
+ * two disagree, which is the only kind of "keep in sync" worth writing down.
+ */
+export const POST_MEAL_WINDOW_MINUTES = 120;
+
+const SMALL_NUMBERS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six'];
+
+/**
+ * How long the window is, in words or in figures.
+ *
+ * Two forms because the same fact appears in two registers. A table cell is a
+ * measurement and takes a numeral — "Still above at 2 hours" — while a
+ * sentence takes the word, because the rest of this site's prose writes small
+ * numbers out and "the 2 hours ended" reads like a log line in the middle of
+ * one.
+ */
+export function postMealWindowLabel(style: 'figures' | 'words' = 'figures'): string {
+  const hours = POST_MEAL_WINDOW_MINUTES / 60;
+  if (!Number.isInteger(hours)) return `${POST_MEAL_WINDOW_MINUTES} minutes`;
+
+  const count =
+    style === 'words' && hours < SMALL_NUMBERS.length ? SMALL_NUMBERS[hours] : String(hours);
+  return hours === 1 ? `${count} hour` : `${count} hours`;
+}
+
+/**
+ * One measured row of a post-meal response, ready to put on a surface.
+ *
+ * `measure` says whether the value is a figure. The tabular face is for
+ * numbers everywhere in this product — it is what makes a column of them line
+ * up — and a word set in it reads as a code rather than as English.
+ */
+export interface PostMealMeasurement {
+  key: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  measure: boolean;
+}
+
+/**
+ * A group's post-meal response as labelled rows, or null when it has none.
+ *
+ * Shared because two surfaces show these numbers — the evidence page a person
+ * reads and the packet their clinician reads — and they must not describe the
+ * same measurement in different words. A clinician being handed "excursion
+ * above target" while the person quotes "area above range" from their own
+ * screen turns one number into an argument about two.
+ *
+ * Labels only. Every value here is a restatement of a field the engine already
+ * computed, in the same category as `findingPresentation` and
+ * `postMealShapeLabel`: nothing is derived, nothing is judged, and this must
+ * never be where a claim about somebody's glucose is introduced.
+ *
+ * Peak and rise are deliberately absent. They are already in the engine's own
+ * summary sentence and in the chart legend, and a card that states a peak three
+ * times has not said it more clearly.
+ */
+export function postMealMeasurements(
+  group: Pick<GroupMeasure, 'n' | 'postMeal'>,
+): PostMealMeasurement[] | null {
+  const m = group.postMeal;
+  if (!m) return null;
+
+  return [
+    {
+      key: 'timeToPeak',
+      label: 'Time to peak',
+      value: String(Math.round(m.timeToPeakMinutes)),
+      unit: 'min',
+      measure: true,
+    },
+    {
+      key: 'minutesAboveRange',
+      label: 'Above target range',
+      value: String(Math.round(m.minutesAboveRange)),
+      unit: 'min',
+      measure: true,
+    },
+    backInRange(m),
+    {
+      key: 'areaAboveRange',
+      label: 'Excursion above target',
+      value: String(Math.round(m.areaAboveRange)),
+      unit: 'mmol/L · min',
+      measure: true,
+    },
+    {
+      key: 'shape',
+      label: 'Shape',
+      value: postMealShapeLabel(m.shape).label,
+      unit: null,
+      measure: false,
+    },
+    {
+      key: 'mealsMeasured',
+      label: 'Meals measured',
+      // The honest denominator. These are averaged over the meals watched long
+      // enough to time, which is not always every meal in the group, and a
+      // reader who has just seen the group's own count is owed the difference.
+      value: `${m.n} of ${group.n}`,
+      unit: null,
+      measure: true,
+    },
+  ];
+}
+
+/**
+ * Three different answers, and which one it is matters more than the number.
+ *
+ * Never left range is the good one. Still above when the window closed is the
+ * one an em dash would quietly hide, and it is the reason this is not just a
+ * nullable number formatted in place.
+ */
+function backInRange(m: PostMealMetrics): PostMealMeasurement {
+  const base = { key: 'returnToRange', label: 'Back in range' };
+
+  if (m.returnToRangeMinutes !== null) {
+    return {
+      ...base,
+      value: String(Math.round(m.returnToRangeMinutes)),
+      unit: 'min after eating',
+      measure: true,
+    };
+  }
+  if (m.minutesAboveRange === 0) {
+    return { ...base, value: 'Never left range', unit: null, measure: false };
+  }
+  return {
+    ...base,
+    value: `Still above at ${postMealWindowLabel()}`,
+    unit: null,
+    measure: false,
+  };
+}
+
+/**
+ * The meals this group could not finish describing, as a sentence.
+ *
+ * Not a footnote. A meal still above target when the window closed is the one
+ * the numbers above leave unresolved, and saying how many there were is the
+ * difference between an average and an average with a hole in it. Null when
+ * there are none, which is most of the time.
+ */
+export function postMealCaveat(
+  group: Pick<GroupMeasure, 'postMeal'>,
+): string | null {
+  const count = group.postMeal?.stillAboveAtWindowEnd ?? 0;
+  if (count === 0) return null;
+
+  const meals = count === 1 ? 'meal was' : 'meals were';
+  const they = count === 1 ? 'it is' : 'they are';
+  return (
+    `${count} ${meals} still above target range when the ` +
+    `${postMealWindowLabel('words')} ended, and ${they} not counted in the ` +
+    'time back in range.'
+  );
+}
+
 export function knownPostMealShapes(): string[] {
   return Object.keys(POST_MEAL_SHAPES);
 }

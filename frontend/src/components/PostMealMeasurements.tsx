@@ -1,4 +1,10 @@
-import { postMealShapeLabel, type GroupMeasure, type PostMealMetrics } from '@wellovue/types';
+import {
+  postMealCaveat,
+  postMealMeasurements,
+  postMealShapeLabel,
+  type GroupMeasure,
+  type PostMealMeasurement,
+} from '@wellovue/types';
 
 /**
  * A meal response said the way diabetes is said.
@@ -8,105 +14,35 @@ import { postMealShapeLabel, type GroupMeasure, type PostMealMetrics } from '@we
  * one curve crosses the target line and the other does not, and still not know
  * whether that was for ten minutes or for ninety.
  *
- * Deliberately not a repeat of the card. The peak and the rise are already in
- * the engine's own sentence and in the chart's legend, so they are not rows
- * here; every row is something the card could not previously say at all. That
- * is the whole difference between this and a statistics readout — "a 3.1
- * mmol/L larger rise" was true, and told somebody almost nothing they could do
- * anything with.
+ * The rows and their labels come from `postMealMeasurements()` in the shared
+ * contract rather than from here, because the clinician packet shows the same
+ * numbers and the two must not name them differently. A clinician reading
+ * "excursion above target" while the person quotes "area above range" from
+ * their own screen has been handed one measurement as two.
  *
- * Laid out as a table because it is one, and because the comparison findings
- * are read across rather than down: "sixty minutes above range against five"
- * is the answer, and two stacked lists make a reader hold one column in their
- * head while they go and find the other.
+ * What is local to this component is the layout: a table, because the
+ * comparison findings are read across rather than down. "Sixty minutes above
+ * range against five" is the answer, and two stacked lists make a reader hold
+ * one column in their head while they go and find the other.
  */
 
-/** A group paired with the measurements it actually has, so nothing below re-checks. */
 interface Measured {
   group: GroupMeasure;
-  metrics: PostMealMetrics;
+  rows: PostMealMeasurement[];
 }
-
-interface Cell {
-  text: string;
-  unit?: string;
-  /**
-   * Whether this cell is a figure.
-   *
-   * The tabular face is for numbers, here and everywhere else in the product —
-   * it is what makes a column of them line up and scan. A word set in it reads
-   * as a code rather than as English, so "Rose and returned" is prose and
-   * "88 min" is not.
-   */
-  measure: boolean;
-}
-
-const ROWS: { label: string; cell: (m: Measured) => Cell }[] = [
-  {
-    label: 'Time to peak',
-    cell: ({ metrics }) => ({
-      text: String(Math.round(metrics.timeToPeakMinutes)),
-      unit: 'min',
-      measure: true,
-    }),
-  },
-  {
-    label: 'Above target range',
-    cell: ({ metrics }) => ({
-      text: String(Math.round(metrics.minutesAboveRange)),
-      unit: 'min',
-      measure: true,
-    }),
-  },
-  {
-    label: 'Back in range',
-    // Three different answers, and which one it is matters more than the
-    // number does. Never left range is the good one; still above at two hours
-    // is the one an em dash would quietly hide.
-    cell: ({ metrics }) => {
-      if (metrics.returnToRangeMinutes !== null) {
-        return {
-          text: String(Math.round(metrics.returnToRangeMinutes)),
-          unit: 'min after eating',
-          measure: true,
-        };
-      }
-      if (metrics.minutesAboveRange === 0) {
-        return { text: 'Never left range', measure: false };
-      }
-      return { text: 'Still above at 2 hours', measure: false };
-    },
-  },
-  {
-    label: 'Excursion above target',
-    cell: ({ metrics }) => ({
-      text: String(Math.round(metrics.areaAboveRange)),
-      unit: 'mmol/L · min',
-      measure: true,
-    }),
-  },
-  {
-    label: 'Shape',
-    cell: ({ metrics }) => ({ text: postMealShapeLabel(metrics.shape).label, measure: false }),
-  },
-  {
-    label: 'Meals measured',
-    // The honest denominator. These figures are averaged over the meals that
-    // were watched for most of the two hours, which is not always every meal
-    // in the group, and a reader who has just seen n=40 on the badge is owed
-    // the difference rather than left to assume there is none.
-    cell: ({ group, metrics }) => ({ text: `${metrics.n} of ${group.n}`, measure: true }),
-  },
-];
 
 export function PostMealMeasurements({ groups }: { groups: GroupMeasure[] }) {
-  const measured: Measured[] = groups.flatMap((group) =>
-    group.postMeal ? [{ group, metrics: group.postMeal }] : [],
-  );
+  const measured: Measured[] = groups.flatMap((group) => {
+    const rows = postMealMeasurements(group);
+    return rows ? [{ group, rows }] : [];
+  });
   if (measured.length === 0) return null;
 
   const comparing = measured.length > 1;
-  const unresolved = measured.filter((m) => m.metrics.stillAboveAtWindowEnd > 0);
+  const labels = measured[0].rows.map((row) => row.label);
+  const caveats = measured
+    .map(({ group }) => ({ group, caveat: postMealCaveat(group) }))
+    .filter((c): c is { group: GroupMeasure; caveat: string } => c.caveat !== null);
 
   return (
     <section className="mt-6 border-t border-rule pt-4">
@@ -136,20 +72,20 @@ export function PostMealMeasurements({ groups }: { groups: GroupMeasure[] }) {
             </thead>
           )}
           <tbody>
-            {ROWS.map((row) => (
-              <tr key={row.label} className="border-t border-rule/60">
+            {labels.map((label, row) => (
+              <tr key={label} className="border-t border-rule/60">
                 <th
                   scope="row"
                   className="py-1.5 pr-4 text-left text-sm font-normal text-ink-muted"
                 >
-                  {row.label}
+                  {label}
                 </th>
-                {measured.map((entry) => {
-                  const cell = row.cell(entry);
+                {measured.map(({ group, rows }) => {
+                  const cell = rows[row];
                   return (
-                    <td key={entry.group.label} className="py-1.5 pl-4 text-sm text-ink">
+                    <td key={group.label} className="py-1.5 pl-4 text-sm text-ink">
                       <span className={cell.measure ? 'measure' : undefined}>
-                        {cell.text}
+                        {cell.value}
                       </span>
                       {cell.unit && (
                         <span className="ml-1.5 text-xs text-ink-faint">{cell.unit}</span>
@@ -165,11 +101,10 @@ export function PostMealMeasurements({ groups }: { groups: GroupMeasure[] }) {
 
       {/* The shape word alone says little. What it means sits under the table
           rather than in the cell, so the column stays scannable and the
-          sentence stays a sentence.
-
-          Named per group only when the groups differ. Two responses that got
-          the same word produce the same sentence twice, and printing it once
-          per label reads as though something distinguished them. */}
+          sentence stays a sentence. Named per group only when the groups
+          differ: two responses that got the same word produce the same
+          sentence twice, and labelling each copy suggests something told them
+          apart. */}
       <ul className="mt-3 space-y-1">
         {shapeNotes(measured).map(({ key, prefix, shape }) => (
           <li key={key} className="text-xs leading-relaxed text-ink-muted">
@@ -180,49 +115,32 @@ export function PostMealMeasurements({ groups }: { groups: GroupMeasure[] }) {
         ))}
       </ul>
 
-      {/* Not a footnote. A meal still above target when the window closed is
-          the one this table cannot finish describing, and saying how many there
-          were is the difference between an average and an average with a hole
-          in it. */}
-      {unresolved.length > 0 && (
+      {caveats.length > 0 && (
         <div className="mt-3 max-w-[52ch] space-y-1">
-          {unresolved.map(({ group, metrics }) => {
-            const count = metrics.stillAboveAtWindowEnd;
-            return (
-              <p key={group.label} className="text-xs leading-relaxed text-ink-muted">
-                {comparing && <span className="text-ink-faint">{group.label}: </span>}
-                <span className="measure">{count}</span>{' '}
-                {count === 1 ? 'meal was' : 'meals were'} still above target range when the
-                two hours ended, and {count === 1 ? 'it is' : 'they are'} not counted in the
-                time back in range.
-              </p>
-            );
-          })}
+          {caveats.map(({ group, caveat }) => (
+            <p key={group.label} className="text-xs leading-relaxed text-ink-muted">
+              {comparing && <span className="text-ink-faint">{group.label}: </span>}
+              {caveat}
+            </p>
+          ))}
         </div>
       )}
     </section>
   );
 }
 
-/**
- * One sentence per distinct shape, not one per group.
- *
- * When two groups got the same word, the sentence explaining it is the same
- * sentence, and labelling each copy with a group name suggests the two were
- * told apart by something. They were not — what tells them apart is in the
- * rows above.
- */
 function shapeNotes(measured: Measured[]) {
-  const distinct = new Set(measured.map((m) => m.metrics.shape));
+  const shapes = measured.map((m) => m.group.postMeal?.shape ?? '');
+  const distinct = new Set(shapes);
 
   if (distinct.size === 1) {
-    const shape = postMealShapeLabel(measured[0].metrics.shape);
+    const shape = postMealShapeLabel(shapes[0]);
     return [{ key: shape.label, prefix: null, shape }];
   }
 
-  return measured.map(({ group, metrics }) => ({
+  return measured.map(({ group }, i) => ({
     key: group.label,
     prefix: group.label,
-    shape: postMealShapeLabel(metrics.shape),
+    shape: postMealShapeLabel(shapes[i]),
   }));
 }
