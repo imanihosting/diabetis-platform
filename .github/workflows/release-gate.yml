@@ -30,3 +30,44 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/check-launch-blockers.mjs
+
+  launch-image:
+    name: A launch image can actually be built
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The same build the production overlay runs, with the same switch. This
+      # is where the placeholder check bites for real: the job above proves the
+      # tree is clean, and this proves the thing that would actually ship is.
+      #
+      # It also catches the failure the tree-level check cannot see — a
+      # placeholder introduced into a file the image copies but the search
+      # roots do not cover.
+      - run: |
+          docker build -f frontend/Dockerfile \
+            --build-arg PUBLIC_LAUNCH=true \
+            --build-arg NEXT_PUBLIC_SITE_URL=https://wellovue.com \
+            --target build .
+
+  lawyer-review:
+    name: Legal review is still required
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # Deliberately always fails, and is deliberately not something a script
+      # can decide. Filling in the five placeholders is not legal review: a
+      # lawyer has to read the Privacy policy and the Terms against the
+      # jurisdiction they name, and no check in this repository can observe
+      # that having happened.
+      #
+      # Delete this job when it has. That deletion is the record, it appears in
+      # the history with a name against it, and it is a far more honest artefact
+      # than a boolean somebody set in a config file.
+      - run: |
+          echo "Legal review of the Privacy policy and Terms has not been recorded."
+          echo ""
+          echo "This job fails on purpose and cannot be satisfied by a script."
+          echo "A lawyer must read both pages against the jurisdiction they name."
+          echo "Delete this job in the same commit that records the review."
+          exit 1

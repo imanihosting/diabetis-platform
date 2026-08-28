@@ -142,10 +142,151 @@ async function main() {
     );
   }
 
-  // No check on the public site here. The frontend is a separate deployable
-  // that will have its own address, and asserting it from the API's host
-  // produced a warning about a 404 that was always going to be a 404 — a
-  // check nobody can act on teaches people to skim the output.
+  // 4. Schema. A backend serving against a database older than its code does
+  //    not fail readiness — the connection is fine — and presents as arbitrary
+  //    500s from whichever route touches the missing column. The count is
+  //    compared against the migrations in the tree this script was run from,
+  //    which is the only place that knows what the code expects.
+  const applied = ready.body?.migrations ?? null;
+  const expected = await expectedMigrations();
+
+  if (!applied) {
+    record('migrations', 'fail', 'the database has no schema_migrations table — never migrated');
+  } else if (expected === null) {
+    record('migrations', 'warn', `${applied.count} applied; no migrations directory to compare against`);
+  } else if (applied.count < expected) {
+    record(
+      'migrations',
+      'fail',
+      `${applied.count} applied, ${expected} in this tree — run db:migrate before serving`,
+    );
+  } else if (applied.count > expected) {
+    // Ahead, not behind: the database has migrations this checkout does not.
+    // Usually an older image against a newer database, which is a rollback
+    // that has not been thought through rather than a missing step.
+    record(
+      'migrations',
+      'warn',
+      `${applied.count} applied, ${expected} in this tree — the database is ahead of this code`,
+    );
+  } else {
+    record('migrations', 'pass', `${applied.count} applied, latest ${applied.latest}`);
+  }
+
+  // 5. Launch blockers, as the process itself computes them. The same function
+  //    the backend refuses to start on when PUBLIC_LAUNCH is set, so a canary
+  //    and a running deployment cannot disagree about whether it is ready.
+  const blockers = posture?.launchBlockers ?? [];
+  if (posture?.publicLaunch) {
+    // It says it is serving the public. If it started at all the list is
+    // empty, so a non-empty one here means something changed underneath a
+    // running process.
+    record(
+      'launch blockers',
+      blockers.length === 0 ? 'pass' : 'fail',
+      blockers.length === 0
+        ? 'serving the public with none outstanding'
+        : `${blockers.length} outstanding on a deployment claiming to be live: ` +
+          blockers.map((b) => b.id).join(', '),
+    );
+  } else {
+    record(
+      'launch blockers',
+      blockers.length === 0
+        ? 'pass'
+        : requireProduction
+          ? 'fail'
+          : 'warn',
+      blockers.length === 0
+        ? 'none outstanding, though PUBLIC_LAUNCH is off'
+        : `${blockers.length} outstanding: ${blockers.map((b) => b.id).join(', ')}`,
+    );
+  }
+
+  // 6. The public site, over the address a person actually types. Only when
+  //    the canary was pointed at a site rather than at an API, which is what
+  //    the /api suffix distinguishes.
+  await checkPublicSite();
+}
+
+/**
+ * How many migrations this checkout expects.
+ *
+ * Read from the tree rather than asked of the deployment, because the
+ * deployment cannot know: the SQL files are not in the runtime image. Null when
+ * the directory is absent, which is the case when this script has been copied
+ * somewhere on its own.
+ */
+async function expectedMigrations() {
+  try {
+    const { readdir } = await import('node:fs/promises');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+    const files = await readdir(join(root, 'infra', 'db', 'migrations'));
+    return files.filter((f) => f.endsWith('.sql')).length;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pages a person and a search engine actually reach.
+ *
+ * Checked over the site's own origin rather than the API's, and skipped when
+ * this canary was pointed straight at an API — a warning about a 404 that was
+ * always going to be a 404 teaches people to skim the output.
+ *
+ * The authenticated routes are checked for *refusing*, not for serving. A
+ * canary has no credentials and should not have any; what it can prove is the
+ * thing that matters most, which is that somebody's timeline is not reachable
+ * without them.
+ */
+async function checkPublicSite() {
+  if (base.endsWith('/api')) return;
+
+  const fetchStatus = async (path) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${base}${path}`, {
+        signal: controller.signal,
+        redirect: 'manual',
+      });
+      return res.status;
+    } catch (err) {
+      return `unreachable: ${err.message}`;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  for (const path of ['/', '/robots.txt', '/sitemap.xml']) {
+    const status = await fetchStatus(path);
+    record(`public ${path}`, status === 200 ? 'pass' : 'fail', `HTTP ${status}`);
+  }
+
+  // Signed-in routes must not serve to somebody with no session. A 200 here is
+  // the worst result this script can produce.
+  for (const path of ['/api/evidence', '/api/reports/clinician']) {
+    const status = await fetchStatus(path);
+    const refused = status === 401 || status === 403;
+    record(
+      `refuses ${path}`,
+      refused ? 'pass' : 'fail',
+      refused ? `HTTP ${status}` : `HTTP ${status} — this must not answer without a session`,
+    );
+  }
+
+  if (base.startsWith('https://')) {
+    record('site TLS', 'pass', 'reached over HTTPS');
+  } else {
+    record(
+      'site TLS',
+      requireProduction ? 'fail' : 'warn',
+      'reached over plain HTTP — a health record site must terminate TLS',
+    );
+  }
 }
 
 await main();

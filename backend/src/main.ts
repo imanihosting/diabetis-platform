@@ -13,10 +13,13 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ThrottlerStorage } from '@nestjs/throttler';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { ResilientThrottlerStorage } from './common/guards/throttle-storage';
 import { ENV, type Env } from './config/env';
 import { connectsToBareAddress } from './config/database-url';
+import { describeBlockers, launchBlockers } from './config/launch';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -37,6 +40,7 @@ async function bootstrap(): Promise<void> {
 
   warnAboutDatabaseTls(env, logger);
   warnAboutRateLimitStorage(env, logger);
+  enforceLaunchPosture(app, env, logger);
   // cookie-parser is applied in AppModule so tests share the behaviour.
   app.enableCors({
     origin: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
@@ -115,6 +119,60 @@ function warnAboutDatabaseTls(env: Env, logger: Logger): void {
     throw new Error(`Refusing to start: ${message}`);
   }
   logger.warn(message);
+}
+
+/**
+ * Refuses to serve the public with a known blocker outstanding.
+ *
+ * The rule the launch-hardening work exists for: the platform must not be able
+ * to look live while something unresolved would expose a record or tell
+ * somebody an untruth about who holds it. Every item in `launchBlockers()` is
+ * the kind of thing that gets deferred past a launch and then forgotten,
+ * because nothing complains about it afterwards. This complains.
+ *
+ * Loud and advisory when `PUBLIC_LAUNCH` is off, fatal when it is on. There is
+ * no third state and no override: the way to start in public-launch mode is to
+ * fix the list.
+ */
+function enforceLaunchPosture(
+  app: NestExpressApplication,
+  env: Env,
+  logger: Logger,
+): void {
+  const throttler = app.get(ThrottlerStorage, { strict: false });
+  const blockers = launchBlockers({
+    env,
+    databaseUrl: process.env.DATABASE_URL,
+    rateLimitsShared:
+      throttler instanceof ResilientThrottlerStorage
+        ? throttler.sharedAcrossReplicas
+        : false,
+  });
+
+  if (blockers.length === 0) {
+    logger.log(
+      env.PUBLIC_LAUNCH
+        ? 'Launch posture: serving the public with no outstanding blockers.'
+        : 'Launch posture: no outstanding blockers. PUBLIC_LAUNCH is still off.',
+    );
+    return;
+  }
+
+  const detail = `\n${describeBlockers(blockers)}\n`;
+
+  if (env.PUBLIC_LAUNCH) {
+    throw new Error(
+      'Refusing to start: PUBLIC_LAUNCH=true with ' +
+        `${blockers.length} unresolved launch blocker(s).${detail}` +
+        'Fix these, or unset PUBLIC_LAUNCH and serve as a staging deployment. ' +
+        'See infra/README.md.',
+    );
+  }
+
+  logger.warn(
+    `${blockers.length} launch blocker(s) outstanding. This deployment must ` +
+      `not serve the public until they are resolved.${detail}`,
+  );
 }
 
 /**

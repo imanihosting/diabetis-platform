@@ -1,0 +1,77 @@
+# The reverse proxy in front of Wellovue.
+#
+# Caddy rather than nginx for two reasons that both matter here. It obtains and
+# renews TLS certificates itself, so there is no certbot timer to fail silently
+# three months from now — the single most common way a small deployment goes
+# dark. And it sets X-Forwarded-For by overwriting rather than appending, which
+# is the behaviour the backend's rate limiter depends on: a proxy that appends
+# lets a caller prepend an address of their own and choose which bucket they
+# land in.
+#
+# This terminates TLS. The application behind it speaks plain HTTP on a private
+# network and never sees a certificate, which is why TRUST_PROXY exists — from
+# here on, the forwarding headers are the only record of who the caller was.
+
+{
+	# Where Let's Encrypt sends expiry warnings if renewal stops working. The
+	# certificates renew automatically; this is the alarm for when they do not.
+	email ops@wellovue.com
+
+	# No admin API. It is loopback-only by default, and a container with no
+	# reason to expose a control plane should not run one.
+	admin off
+}
+
+wellovue.com, www.wellovue.com {
+	encode zstd gzip
+
+	# HSTS. Six months, subdomains included, and deliberately without
+	# `preload`: preloading is very hard to undo and should not be committed
+	# to before the domain's final shape is settled.
+	header {
+		Strict-Transport-Security "max-age=15768000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The application sets its own CSP through helmet. Nothing here should
+		# add a second one: two policies do not merge, they intersect, and the
+		# intersection is the one nobody tested.
+		-Server
+	}
+
+	# Everything goes to the Next server, which serves the pages and proxies
+	# /api to the backend on the private network. One upstream rather than two
+	# because the browser must see one origin: the access token is a
+	# same-origin cookie and a split would need CORS and a cross-site cookie,
+	# which is a larger attack surface for no gain.
+	reverse_proxy frontend:3000 {
+		# Overwrite rather than append. This is the header the backend's rate
+		# limiter keys on, and a value a caller can influence is a rate limit a
+		# caller can escape.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+
+		# A slow upstream should fail rather than hold a connection open until
+		# something else times out and reports the wrong cause.
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+		}
+	}
+
+	log {
+		output stdout
+		format console
+		# Request logs carry paths, and a path can carry an identifier. Nothing
+		# in this application puts a record in a URL, and this stays at INFO on
+		# the assumption that it never will — see the PHI note in
+		# infra/README.md before adding a route that does.
+	}
+}
+
+# Anything arriving on another name reaches nothing. Without this, a hostname
+# pointed at this address by somebody else serves the whole site under a name
+# the certificate does not cover and the CSP was not written for.
+:80 {
+	respond "Not found" 404
+}

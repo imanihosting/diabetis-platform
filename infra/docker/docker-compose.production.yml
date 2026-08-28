@@ -1,0 +1,61 @@
+# The production overlay: a reverse proxy in front, and every launch switch on.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+#
+# Deliberately an overlay rather than a separate stack, so production runs the
+# same images and the same wiring as everything else, with the differences
+# visible in one short file instead of buried in a second copy of the whole
+# thing.
+#
+# `PUBLIC_LAUNCH=true` is the switch that makes every launch blocker fatal:
+# the backend refuses to start while any is unresolved, and the frontend image
+# refuses to build while a legal placeholder is still in a user-facing page.
+# It is on here because this file describes the deployment that serves people.
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ../proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and the ACME account key. On a named volume because
+      # losing them means re-issuing on every restart, and Let's Encrypt rate
+      # limits that hard enough to take a site down for a week.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+
+  frontend:
+    build:
+      args:
+        # Baked in at build time — canonical URLs, Open Graph, robots.txt and
+        # the sitemap all carry it. See frontend/src/lib/seo.ts.
+        NEXT_PUBLIC_SITE_URL: https://wellovue.com
+        PUBLIC_LAUNCH: 'true'
+    environment:
+      # Caddy overwrites the forwarding headers before this app is reached, so
+      # the Next proxy passes them through instead of dropping them. Without
+      # this the chain breaks here and the backend keys every request in the
+      # deployment on one container.
+      TRUST_PROXY: 'true'
+    # Not published. The proxy is the only way in.
+    ports: !reset []
+
+  backend:
+    environment:
+      PUBLIC_LAUNCH: 'true'
+      TRUST_PROXY: 'true'
+      REQUIRE_VERIFIED_DB_TLS: 'true'
+      REQUIRE_SHARED_RATE_LIMIT: 'true'
+      DATABASE_SSL_REJECT_UNAUTHORIZED: 'true'
+      NEXT_PUBLIC_APP_URL: https://wellovue.com
+    ports: !reset []
+
+volumes:
+  caddy-data:
+  caddy-config:

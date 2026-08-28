@@ -68,6 +68,28 @@ const envSchema = z.object({
    * the backend through a proxy that overwrites the header (nginx, Caddy,
    * Cloudflare, an ALB). See infra/README.md.
    */
+  /**
+   * Whether this deployment is serving the public.
+   *
+   * The one switch that turns every launch blocker fatal. Off — the default,
+   * and what a development stack and a staging box run with — the boot logs
+   * say what is outstanding and the process serves anyway. On, the backend
+   * refuses to start while anything in `launchBlockers()` is unresolved, and
+   * the frontend image refuses to build while a legal placeholder is still in
+   * a user-facing page.
+   *
+   * Deliberately not derived from NODE_ENV. The containers already run with
+   * NODE_ENV=production because that is how a Node app is built for speed, and
+   * tying this to it would make `npm run docker:up` fail on a developer's
+   * machine for conditions a developer's machine is supposed to have. A gate
+   * that goes red for the configuration something shipped with is a gate
+   * somebody switches off, and then it is not there on the day it matters.
+   */
+  PUBLIC_LAUNCH: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   TRUST_PROXY: z
     .enum(['true', 'false'])
     .default('false')

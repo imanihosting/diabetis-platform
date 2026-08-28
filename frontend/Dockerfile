@@ -29,6 +29,23 @@ COPY frontend ./frontend
 ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
+# Whether this image is meant to serve the public.
+#
+# Off by default so a developer's build is unaffected. On, the launch blocker
+# check runs and the build fails while `[LEGAL ENTITY]` or any of the other
+# four placeholders is still in a user-facing page — which makes shipping one
+# impossible rather than merely discouraged. That check cannot run inside a
+# container at boot, because by then the page is compiled; the build is the
+# last moment it can be caught.
+ARG PUBLIC_LAUNCH=false
+COPY scripts/check-launch-blockers.mjs ./scripts/
+RUN if [ "$PUBLIC_LAUNCH" = "true" ]; then \
+      echo "PUBLIC_LAUNCH=true — checking for launch blockers" \
+      && node scripts/check-launch-blockers.mjs; \
+    else \
+      echo "PUBLIC_LAUNCH=false — launch blocker check skipped"; \
+    fi
+
 RUN npm run build --workspace @wellovue/types \
  && npm run build --workspace frontend
 

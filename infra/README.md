@@ -269,19 +269,174 @@ stack, a staging box, and whatever production turns out to be.
 | Dependency advisories | `npm audit` clean. Pinned minimums for transitives live in the root `overrides`. |
 | Rate limit counts | Shared across replicas in Redis when `REDIS_URL` is set; per process otherwise, and the backend says which on every boot and at `/api/health/posture`. |
 | Database TLS | Verified against an internal CA. The backend refuses to start if verification is off, or if the URL is an IP address that cannot be verified. |
+| Client addresses | Caddy overwrites `X-Forwarded-For`; the frontend proxy forwards it only when `TRUST_PROXY` is set; the backend trusts exactly one hop. Break any link and every request keys on one bucket. |
+| Logs | No query is built by interpolating a value, so the slow-query log carries statements and never data. Asserted by `backend/test/launch-hardening.spec.ts`. |
+| Serving with a blocker open | `PUBLIC_LAUNCH=true` makes each one fatal: the frontend image will not build with a legal placeholder in a page, and the backend will not start with a runtime blocker open. |
 
 ### Still outstanding
 
-- **Client addresses are the remaining half of rate limiting.** The counts are
-  shared now (see [Rate limiting](#rate-limiting)), but they are keyed on an
-  address the backend cannot yet see. Requests reach it through the frontend's
-  `/api` proxy, which strips the forwarding headers the caller sent because it
-  cannot tell a real one from a forged one, so address-keyed limits apply per
-  proxy rather than per visitor. The per-account limit on sign-in is unaffected
-  and works today.
-  Put a real reverse proxy in front, have it overwrite `X-Forwarded-For`, then
-  set `TRUST_PROXY=true`. Express is configured to trust exactly one hop, so a
-  client cannot prepend its own entry and choose which bucket it lands in.
+- **Legal review.** The five placeholders and a lawyer. See
+  [Going live](#going-live); the frontend image will not build with
+  `PUBLIC_LAUNCH=true` while any placeholder remains, and filling them in is
+  not the same as review.
+- **The DNS records and the certificate.** `wellovue.com` is chosen and
+  configured; nothing has been pointed at anything yet. See
+  [Going live](#going-live).
+
+## Going live
+
+The domain is **wellovue.com**. Everything below is what stands between the
+running stack and serving somebody real.
+
+### The one switch
+
+`PUBLIC_LAUNCH=true` makes every launch blocker fatal, at the earliest moment
+each can be caught:
+
+- **The frontend image will not build** while `[LEGAL ENTITY]` or any of the
+  other four placeholders is in a user-facing page. The check runs during the
+  image build because by boot the page is already compiled.
+- **The backend will not start** while any of the four runtime blockers is
+  open. It prints them, with what fixes each, and exits.
+
+It is deliberately not derived from `NODE_ENV`: the containers already run with
+`NODE_ENV=production` because that is how a Node app is built, and tying the
+gate to it would fail every developer's `docker:up`. A gate that goes red for
+the configuration something shipped with is a gate somebody switches off.
+
+The four runtime blockers, from `backend/src/config/launch.ts`:
+
+| Blocker | Fixed by |
+|---|---|
+| `database-host-is-an-address` | Give the database host a DNS name and reissue its certificate for that name |
+| `database-tls-unverified` | `sslmode=verify-full`, `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, `REQUIRE_VERIFIED_DB_TLS=true` |
+| `rate-limits-not-shared` | `REDIS_URL` set and answering, `REQUIRE_SHARED_RATE_LIMIT=true` |
+| `client-addresses-not-known` | A reverse proxy that overwrites `X-Forwarded-For`, and `TRUST_PROXY=true` on **both** the backend and the frontend |
+
+### DNS
+
+Two records, both at the apex and the `www` name, pointing at the host running
+the proxy:
+
+```
+wellovue.com.        A     <public IPv4 of the proxy host>
+www.wellovue.com.    A     <public IPv4 of the proxy host>
+```
+
+Add `AAAA` records too if the host has IPv6. Caddy answers the ACME HTTP-01
+challenge on port 80, so **both 80 and 443 must be reachable from the internet**
+before the first certificate can be issued — port 80 cannot simply be firewalled
+off, even though every request on it redirects.
+
+`medical-db` is separate and is not a public name. It resolves on the private
+network only; see [Clients must connect by name, not
+address](#clients-must-connect-by-name-not-address).
+
+### TLS termination
+
+`infra/proxy/Caddyfile`, run by the `proxy` service in
+`infra/docker/docker-compose.production.yml`. Caddy obtains and renews the
+certificate itself, which removes the single most common way a small deployment
+goes dark three months after launch: a certbot timer that stopped and told
+nobody.
+
+The certificates live on the `caddy-data` volume. **Do not delete that volume
+to "start clean"** — Let's Encrypt rate-limits issuance hard enough that
+re-issuing repeatedly can lock the domain out for a week.
+
+TLS terminates at the proxy. The application behind it speaks plain HTTP on the
+private network and never sees a certificate, which is why `TRUST_PROXY` exists:
+from that point on, the forwarding headers are the only record of who the caller
+was.
+
+### The forwarding chain has three links
+
+Caddy sets `X-Forwarded-For` by **overwriting** — appending would let a caller
+prepend an address of their own and pick which rate-limit bucket they land in.
+The frontend's `/api` proxy then passes it through, but only when its own
+`TRUST_PROXY` is set; otherwise it drops it, which is correct when nothing
+trustworthy is in front. The backend reads it, trusting exactly one hop.
+
+**Break any link and the whole deployment is one rate-limit bucket.** The
+frontend is the one people forget, because nothing about it looks like a proxy.
+
+### Running it
+
+```bash
+docker compose -f infra/docker/docker-compose.yml \
+               -f infra/docker/docker-compose.production.yml \
+               --env-file .env up -d --build
+```
+
+Then, from somewhere outside:
+
+```bash
+npm run canary -- https://wellovue.com --require-production
+```
+
+That checks liveness, dependencies, database TLS and certificate expiry, shared
+rate limits, the applied migration count against the tree, the launch blockers
+the process reports, the public pages, and that the signed-in routes refuse a
+caller with no session. It exits non-zero if the deployment should not carry
+traffic.
+
+## Backups and restore
+
+**Not automated yet.** What follows is what to run and what has actually been
+verified, which is not the same thing — a backup nobody has restored is a
+belief, not a backup.
+
+### Taking one
+
+From a host that can reach `medical-db` by name:
+
+```bash
+docker run --rm --add-host medical-db:10.10.5.185 \
+  -v "$PWD/backups:/backups" \
+  -e PGPASSWORD="$DB_PASSWORD" postgres:17 \
+  pg_dump -h medical-db -U wellovue -d wellovue \
+          --format=custom --file=/backups/wellovue-$(date +%F).dump
+```
+
+`--format=custom` rather than plain SQL: it restores selectively, in parallel,
+and compresses. The dump contains **every glucose reading, meal and lab result
+in the system**, so it is a health record in a file and belongs wherever those
+are allowed to be — encrypted at rest, access logged, and never on a laptop.
+
+### Restoring one
+
+Into an empty database, never over a live one:
+
+```bash
+createdb -h medical-db -U wellovue wellovue_restore
+pg_restore -h medical-db -U wellovue -d wellovue_restore --clean --if-exists \
+  backups/wellovue-2026-08-28.dump
+```
+
+Then check the restore rather than assuming it:
+
+```bash
+psql -h medical-db -U wellovue -d wellovue_restore -c \
+  "select count(*) from public.schema_migrations;
+   select count(*) from metabolic.glucose_samples;
+   select count(*) from audit.events;"
+```
+
+The migration count must match `ls infra/db/migrations | wc -l`. A restore that
+brings back the data and not the schema version will run migrations again on
+next boot and fail on the checksum.
+
+### What is not covered
+
+- **No schedule.** Nothing takes these automatically. That is a launch blocker
+  in the ordinary sense even though it is not in `launchBlockers()` — a running
+  process cannot know whether anybody is backing it up.
+- **No off-host copy.** A dump beside the database survives a dropped table and
+  not a lost VM.
+- **No tested restore.** The commands above are correct and have not been run
+  end to end against a production-shaped dataset. Do that before launch, not
+  after the first incident.
+- **Object storage is separate.** Uploads live in MinIO, not in the dump.
 
 ### Resolved
 

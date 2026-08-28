@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 263 unit, no infrastructure needed
+npm test                  # 284 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 107 | no |
+| `backend/test/*.spec.ts` | 128 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -696,7 +696,7 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 107 unit tests,
+readers evaluating the platform and it quotes specific numbers: 128 unit tests,
 184 integration, 104 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
@@ -989,6 +989,78 @@ it anywhere; posture failures (verified TLS, shared limits) are warnings unless
 `--require-production`, because both are states the platform runs in on purpose
 and a gate that goes red for the shipped configuration gets switched off.
 `/api/health/posture` is what it reads.
+
+## 10a. Launch hardening
+
+The production domain is **wellovue.com**. `infra/README.md` § *Going live* is
+the runbook; this is what changed and why.
+
+**One switch makes every blocker fatal.** `PUBLIC_LAUNCH=true`:
+
+- the **frontend image will not build** while `[LEGAL ENTITY]` or any of the
+  other four placeholders is in a user-facing page — the check runs during the
+  image build, because by boot the page is already compiled; and
+- the **backend will not start** while any runtime blocker is open. It prints
+  each one with what fixes it, and exits.
+
+Both directions were verified against the real stack: with `TRUST_PROXY` off it
+refuses and names `client-addresses-not-known`; with it on it logs "serving the
+public with no outstanding blockers" and listens.
+
+**Deliberately not derived from `NODE_ENV`.** The containers already run with
+`NODE_ENV=production` because that is how a Node app is built, so tying the gate
+to it would fail every developer's `docker:up` — and a gate that goes red for
+the configuration something shipped with is a gate somebody switches off.
+
+**`launchBlockers()` is one computation with three consumers**: the boot
+sequence that refuses, `/api/health/posture` that reports, and
+`scripts/canary.mjs` that gates a deploy. A launch checklist living in three
+places is one that disagrees with itself on the day it matters.
+
+**The forwarding chain has three links and the middle one was broken.** Caddy
+overwrites `X-Forwarded-For`, the frontend's `/api` proxy passes it through,
+the backend trusts exactly one hop. That middle link did not exist: the proxy
+dropped the header unconditionally, which was right with nothing trustworthy in
+front and would have silently defeated the whole thing behind a real proxy —
+every request in the deployment keyed on one container. It now forwards only
+when its own `TRUST_PROXY` is set. **Set it on both, or the chain breaks at the
+frontend**, which is the link people forget because nothing about it looks like
+a proxy.
+
+**Caddy rather than nginx**, for two reasons that both matter: it obtains and
+renews certificates itself, removing the certbot timer that fails silently three
+months after launch; and it overwrites rather than appends the forwarding
+header, which is what the rate limiter depends on. Do not delete the
+`caddy-data` volume to start clean — Let's Encrypt rate-limits issuance hard
+enough to lock the domain out for a week.
+
+**The canary now checks what a deploy gate needs.** Applied migrations against
+the count in the tree, the blockers the process itself reports, the public pages
+over the real origin, and that `/api/evidence` and `/api/reports/clinician`
+*refuse* a caller with no session — a 200 there is the worst result it can
+produce. It has no credentials and should not have any; what it can prove is
+that somebody's record is not reachable without them.
+
+**Logs cannot carry a record.** The slow-query log prints the first 120
+characters of a statement and never its parameters, which is safe only because
+every query is parameterised — a test asserts no query is built by
+interpolating a value, which closes injection and log leakage together.
+
+**Legal review is a CI job that always fails.** Deleting it is the record: it
+appears in the history with a name against it, which is a more honest artefact
+than a boolean somebody set. Filling in the placeholders is not review.
+
+### Still not done, and not something code can do
+
+- **Nothing is pointed at anything.** The DNS records in the runbook have not
+  been created. Ports 80 and 443 must both be reachable before the first
+  certificate can issue — 80 cannot simply be firewalled off.
+- **Backups are documented and unautomated.** No schedule, no off-host copy,
+  and the restore has not been run end to end. A backup nobody has restored is
+  a belief. See `infra/README.md` § *Backups and restore*.
+- **A lawyer has not read the pages.**
+
+---
 
 ## 11. Open decisions
 

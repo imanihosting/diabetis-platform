@@ -19,6 +19,32 @@ function backendUrl(): string {
   return process.env.BACKEND_URL ?? 'http://localhost:4000';
 }
 
+/**
+ * Whether something in front of this app owns the forwarding headers.
+ *
+ * The same switch, with the same default and the same reasoning, as
+ * `TRUST_PROXY` on the backend: off means nothing trustworthy sets these, so
+ * anyone can, and a rate limiter keyed on a caller-supplied string is worse
+ * than none because the people it exists to stop are the ones who can rotate
+ * it. On means a reverse proxy overwrites them before this app is reached.
+ *
+ * Both ends have to agree. A proxy that sets the header, a frontend that
+ * forwards it, and a backend that reads it — break the chain anywhere and the
+ * backend keys every request in the deployment on one address, which is this
+ * proxy's. See infra/README.md.
+ */
+function trustProxy(): boolean {
+  return process.env.TRUST_PROXY === 'true';
+}
+
+const FORWARDING_HEADERS = [
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
+  'x-real-ip',
+  'forwarded',
+];
+
 async function proxy(request: NextRequest): Promise<Response> {
   const incoming = new URL(request.url);
   const target = new URL(
@@ -33,20 +59,28 @@ async function proxy(request: NextRequest): Promise<Response> {
   headers.delete('connection');
   headers.delete('content-length');
 
-  // Forwarding headers arrive here straight from the caller, and nothing in
-  // front of this route rewrites them. Passing them through would let anyone
-  // hand the backend an address of their choosing, which matters because the
-  // backend's rate limiter keys on exactly that: a caller could rotate the
-  // header and get a fresh budget on every request.
+  // Forwarding headers, and which of two situations this deployment is in.
   //
-  // They are dropped rather than set, because a Next route handler cannot see
-  // the client's socket address and inventing a value would be a lie. The
-  // backend then keys on this proxy's address and refuses to read the header
-  // at all unless TRUST_PROXY says a real proxy owns it. Once one is in front
-  // of the deployment, it becomes the thing that sets these, and it is what
-  // the backend is configured to trust.
-  for (const header of ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip', 'forwarded']) {
-    headers.delete(header);
+  // With nothing trustworthy in front, they arrive straight from the caller
+  // and are dropped. Passing them through would let anybody hand the backend
+  // an address of their choosing, and the backend's rate limiter keys on
+  // exactly that — a caller could rotate the header and take a fresh budget on
+  // every request. They are dropped rather than set, because a Next route
+  // handler cannot see the client's socket address and inventing a value would
+  // be a lie.
+  //
+  // With a reverse proxy in front, that proxy has already overwritten them
+  // with the address it saw, and dropping them here is what breaks the chain:
+  // the backend then keys every request in the whole deployment on this
+  // container, and the rate limiter protects nothing. So they are passed
+  // through, unchanged, exactly as received from something trusted to set
+  // them.
+  //
+  // The default is to drop. An unset variable behaves as it always has.
+  if (!trustProxy()) {
+    for (const header of FORWARDING_HEADERS) {
+      headers.delete(header);
+    }
   }
 
   const hasBody = !['GET', 'HEAD'].includes(request.method);

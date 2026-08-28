@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/database.service';
 import { StorageService } from '../storage/storage.service';
 import { EngineClient } from '../engine/engine.client';
 import { ResilientThrottlerStorage } from '../common/guards/throttle-storage';
+import { launchBlockers } from '../config/launch';
 import { ENV, type Env } from '../config/env';
 
 @ApiTags('health')
@@ -37,10 +38,11 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: 'Readiness — are dependencies reachable' })
   async ready() {
-    const [database, storage, engine] = await Promise.all([
+    const [database, storage, engine, migrations] = await Promise.all([
       this.db.ping().catch(() => false),
       this.storage.ping().catch(() => false),
       this.engine.ping().catch(() => false),
+      this.appliedMigrations(),
     ]);
 
     // The metabolic engine is not required to serve the timeline, so its
@@ -50,6 +52,14 @@ export class HealthController {
     return {
       status: ready ? 'ok' : 'degraded',
       checks: { database, storage, metabolicEngine: engine },
+      // How much of the schema this database has. Reported rather than judged:
+      // the process cannot know which migrations the image it was built from
+      // expects — the SQL files are not in the runtime image — so the count
+      // and the last name are given, and `scripts/canary.mjs` compares them
+      // against the tree it was run from. A backend serving against a schema
+      // older than its code is the failure this catches, and it presents as
+      // arbitrary 500s from whichever route touches the missing column.
+      migrations,
       // Posture, not health. None of these fail readiness: they are all states
       // the platform legitimately runs in today, and a probe that went red for
       // the configuration it shipped with would be turned off within a week.
@@ -57,6 +67,29 @@ export class HealthController {
       // see scripts/canary.mjs, which is the thing that should go red.
       posture: this.posture(),
     };
+  }
+
+  /**
+   * What the database says has been applied.
+   *
+   * Null when the table is not there at all, which is a database that has
+   * never been migrated rather than one that is merely behind — a distinction
+   * worth keeping, because the first is a fresh environment and the second is
+   * a bad deploy.
+   */
+  private async appliedMigrations(): Promise<{
+    count: number;
+    latest: string | null;
+  } | null> {
+    try {
+      const row = await this.db.queryOne<{ count: string; latest: string | null }>(
+        `select count(*)::text as count, max(name) as latest
+           from public.schema_migrations`,
+      );
+      return row ? { count: Number(row.count), latest: row.latest } : null;
+    } catch {
+      return null;
+    }
   }
 
   @Public()
@@ -94,6 +127,21 @@ export class HealthController {
             }
           : { configured: false, sharedAcrossReplicas: false },
       trustProxy: this.env.TRUST_PROXY,
+
+      // Whether this deployment claims to be serving the public, and what is
+      // still in the way. Computed by the same function the boot sequence
+      // refuses on, so a canary and a running process cannot disagree about
+      // whether something is ready — which is the disagreement that gets a
+      // deployment declared live while a blocker is open.
+      publicLaunch: this.env.PUBLIC_LAUNCH,
+      launchBlockers: launchBlockers({
+        env: this.env,
+        databaseUrl: process.env.DATABASE_URL,
+        rateLimitsShared:
+          throttler instanceof ResilientThrottlerStorage
+            ? throttler.sharedAcrossReplicas
+            : false,
+      }),
     };
   }
 }
