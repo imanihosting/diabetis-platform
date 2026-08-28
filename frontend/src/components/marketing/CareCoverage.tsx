@@ -30,7 +30,7 @@ export function CareCoverage() {
   }));
 
   return (
-    <div className="border border-[var(--rule)] bg-[var(--paper-raised)]">
+    <div className="surface-raised">
       <div className="border-b border-[var(--rule)] px-6 py-4 sm:px-8">
         <h3 className="text-sm font-semibold">Where findings are produced today</h3>
         <p className="mt-2 max-w-[58ch] text-sm leading-relaxed text-[var(--ink-muted)]">

@@ -40,7 +40,7 @@ export default function ExperimentsPage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <a
             href="/login"
@@ -68,7 +68,7 @@ export default function ExperimentsPage() {
       )}
 
       {experiments.data?.length === 0 && (
-        <div className="mt-8 border border-dashed border-rule px-6 py-10">
+        <div className="surface-sunk mt-8 px-6 py-12">
           <p className="text-sm text-ink">You have not proposed an experiment yet.</p>
           <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
             They start on the Evidence screen: a finding that a week of
@@ -106,7 +106,7 @@ function ExperimentRow({ experiment }: { experiment: Experiment }) {
           and nothing else. */}
       <Link
         href={`/experiments/${experiment.id}`}
-        className="block border border-rule bg-paper-raised p-5 transition-colors hover:bg-paper-sunk"
+        className="block surface-raised p-5 transition-colors hover:bg-paper-sunk"
       >
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <p className="max-w-md text-sm text-ink">{experiment.title}</p>

@@ -123,7 +123,7 @@ function CsvImport() {
   });
 
   return (
-    <div className="border border-dashed border-rule px-4 py-3">
+    <div className="surface-sunk px-4 py-3">
       <label htmlFor="csv" className="block text-sm text-ink-muted">
         Or import a CGM / meter export
       </label>
@@ -311,7 +311,7 @@ function LabForm() {
           id="labTest"
           value={testName}
           onChange={(e) => chooseTest(e.target.value as KnownLabTest)}
-          className="mt-1 w-full border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+          className="mt-1 w-full surface-raised px-3 py-2 text-sm text-ink"
         >
           {LAB_TESTS.map((test) => (
             <option key={test.value} value={test.value}>
@@ -372,7 +372,7 @@ function Form({
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="bg-ink px-6 py-3 text-base font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-60"
+        className="btn btn-primary text-base"
       >
         {mutation.isPending ? 'Saving…' : label}
       </button>

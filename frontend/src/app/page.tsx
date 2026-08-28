@@ -22,48 +22,57 @@ export default function LandingPage() {
   return (
     <MarketingShell>
       {/* ---- Hero -------------------------------------------------------- */}
-      <section className="mx-auto max-w-6xl px-7 pb-[clamp(1.75rem,3.5vw,3rem)] pt-[clamp(1.25rem,3vw,2.5rem)] sm:px-6">
+      {/*
+        The trace is the hero, not an illustration under one.
+
+        Everything else on this page is ink on paper; the day's trace against
+        its target band is the only place colour appears at size, which makes
+        it the product object by construction rather than by decoration. It
+        used to sit below a finished headline like a figure in a report. Now
+        the statement opens above it, the trace runs at full width, and the
+        line that resolves the sentence sits underneath — so a reader meets the
+        thing before they finish reading about it.
+      */}
+      <section className="mx-auto max-w-6xl px-7 pb-[clamp(3.5rem,8vw,7rem)] pt-[clamp(1.5rem,4vw,3.5rem)] sm:px-8">
         <Reveal>
-          <h1 className="max-w-[19ch] text-statement font-semibold text-balance">
+          <h1 className="max-w-[17ch] text-statement font-semibold text-balance">
             Most diabetes tools tell you what happened.
           </h1>
-          <p className="mt-4 max-w-[24ch] text-statement font-semibold text-[var(--ink-faint)] text-balance">
-            This one helps you find out why.
-          </p>
         </Reveal>
 
-        <Reveal delay={120}>
-          <p className="mt-7 max-w-[66ch] text-lede text-[var(--ink-muted)]">
-            Your meter records numbers. It cannot tell you whether the walk
-            helped, or how sure anyone should be. This works that out from your
-            own data.
-          </p>
+        <Reveal delay={140}>
+          <div className="mt-[clamp(2rem,4.5vw,3.5rem)]">
+            <DayTrace />
+          </div>
         </Reveal>
 
-        <Reveal delay={200}>
-          <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-8">
-            <Link
-              href={CREATE_ACCOUNT_HREF}
-              className="inline-block bg-[var(--ink)] px-7 py-3.5 text-lede font-medium text-[var(--paper)] transition-opacity hover:opacity-85"
-            >
-              Create an account
-            </Link>
-            <a
-              href="#stay-in-touch"
-              className="text-lede text-[var(--ink-muted)] underline-offset-4 hover:text-[var(--ink)] hover:underline"
-            >
-              or leave your email
-            </a>
+        <Reveal delay={220}>
+          <div className="mt-[clamp(2rem,4.5vw,3.25rem)] grid gap-x-16 gap-y-8 lg:grid-cols-12">
+            <p className="max-w-[16ch] text-statement font-semibold text-balance lg:col-span-6">
+              This one helps you find out why.
+            </p>
+
+            <div className="max-w-[54ch] lg:col-span-6">
+              <p className="text-lede text-[var(--ink-muted)]">
+                Your meter records numbers. It cannot tell you whether the walk
+                helped, or how sure anyone should be. This works that out from
+                your own data.
+              </p>
+
+              <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <Link href={CREATE_ACCOUNT_HREF} className="btn btn-primary text-lede">
+                  Create an account
+                </Link>
+                {/* A real control now, so it is labelled like one. "or leave
+                    your email" read as link text borrowed into a button. */}
+                <a href="#stay-in-touch" className="btn btn-secondary text-lede">
+                  Leave your email
+                </a>
+              </div>
+            </div>
           </div>
         </Reveal>
       </section>
-
-      {/* One real day, drawn against the band the rest of the page is built on. */}
-      <Reveal delay={260}>
-        <div className="mx-auto max-w-6xl px-7 pb-[clamp(3rem,7vw,6rem)] sm:px-6">
-          <DayTrace />
-        </div>
-      </Reveal>
 
       {/* ---- 01 ---------------------------------------------------------- */}
       <Fold
@@ -166,7 +175,7 @@ export default function LandingPage() {
         heading="Turn a hunch into something you can actually settle."
         aside={
           <Reveal>
-            <div className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
+            <div className="surface-raised p-[clamp(1.5rem,3vw,2.5rem)]">
               {/* This one carried a "Being built" label until the loop closed
                   around it. Proposing, starting and measuring all exist now,
                   and the figures below are the seeded scenario's own: -1.3 is

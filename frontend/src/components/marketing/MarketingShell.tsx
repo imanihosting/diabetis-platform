@@ -45,10 +45,10 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-6 px-7 py-5 sm:px-8">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-8 px-7 py-7 sm:px-8">
         <Wordmark />
 
-        <nav aria-label="Main" className="hidden items-center gap-8 md:flex">
+        <nav aria-label="Main" className="hidden items-center gap-9 md:flex">
           {MARKETING_NAV.map((item) => {
             const current = isCurrent(pathname, item.href);
             return (
@@ -71,7 +71,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           {signedIn ? (
             <Link
               href="/timeline"
-              className="bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+              className="btn btn-primary min-h-[2.6rem] px-5 text-sm"
             >
               Your timeline
             </Link>
@@ -88,7 +88,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               </Link>
               <Link
                 href={CREATE_ACCOUNT_HREF}
-                className="bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+                className="btn btn-primary min-h-[2.6rem] px-5 text-sm"
               >
                 Create account
               </Link>
@@ -101,7 +101,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             label="Menu"
             renderTrigger={(open) => <MenuTriggerContent open={open} />}
             triggerClassName={MENU_TRIGGER_CLASS}
-            panelClassName="w-[min(19rem,calc(100vw-3.5rem))] border border-rule bg-paper-raised p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
+            panelClassName="w-[min(19rem,calc(100vw-3.5rem))] surface-raised p-2 shadow-[0_18px_40px_-28px_rgb(0_0_0/0.5)]"
           >
             {(close) => (
               <nav aria-label="Main" className="flex flex-col">
@@ -130,7 +130,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                     <Link
                       href="/timeline"
                       onClick={close}
-                      className="flex min-h-[2.75rem] items-center justify-center bg-ink px-3 text-sm font-medium text-paper"
+                      className="btn btn-primary w-full text-sm"
                     >
                       Your timeline
                     </Link>
@@ -139,7 +139,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                       <Link
                         href={CREATE_ACCOUNT_HREF}
                         onClick={close}
-                        className="flex min-h-[2.75rem] items-center justify-center bg-ink px-3 text-sm font-medium text-paper"
+                        className="btn btn-primary w-full text-sm"
                       >
                         Create account
                       </Link>
@@ -188,7 +188,7 @@ function SiteFooter({ signedIn }: { signedIn: boolean }) {
             {!signedIn && (
               <Link
                 href={CREATE_ACCOUNT_HREF}
-                className="mt-5 inline-flex min-h-[2.75rem] items-center bg-ink px-5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+                className="btn btn-primary mt-6 min-h-[2.75rem] px-6 text-sm"
               >
                 Create account
               </Link>
@@ -198,15 +198,15 @@ function SiteFooter({ signedIn }: { signedIn: boolean }) {
           <div className="grid grid-cols-2 gap-x-10 gap-y-9 sm:grid-cols-3 lg:gap-x-16">
             {FOOTER_GROUPS.map((group) => (
               <nav key={group.title} aria-label={group.title}>
-                <h2 className="text-xs font-semibold uppercase tracking-[0.09em] text-ink">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.11em] text-ink-faint">
                   {group.title}
                 </h2>
-                <ul className="mt-3.5 space-y-2.5">
+                <ul className="mt-4 space-y-3">
                   {group.items.map((item) => (
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="text-sm text-ink-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
+                        className="text-sm text-ink-muted transition-colors hover:text-ink"
                       >
                         {item.label}
                       </Link>

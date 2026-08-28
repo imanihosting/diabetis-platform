@@ -26,7 +26,7 @@ export function UnsupportedCareMode({
   needsSetup: boolean;
 }) {
   return (
-    <section className="border border-rule bg-paper-raised p-6">
+    <section className="surface-raised p-6">
       <h2 className="text-sm font-medium text-ink">
         {needsSetup
           ? 'Wellovue has not been told what to read'
@@ -50,7 +50,7 @@ export function UnsupportedCareMode({
 
       <Link
         href="/profile"
-        className="mt-6 inline-flex min-h-[2.75rem] items-center bg-ink px-5 text-sm font-medium text-paper transition-opacity hover:opacity-85"
+        className="btn btn-primary mt-6 text-sm"
       >
         {needsSetup ? 'Answer the question' : 'Review your care profile'}
       </Link>

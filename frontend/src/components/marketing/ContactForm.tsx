@@ -54,7 +54,7 @@ export function ContactForm() {
 
   if (state === 'done') {
     return (
-      <div role="status" className="border border-[var(--rule)] bg-[var(--paper-raised)] p-8">
+      <div role="status" className="surface-raised p-8">
         <p className="flex items-baseline gap-2.5 text-lede text-[var(--ink)]">
           <span aria-hidden className="text-[var(--in-range-text)]">
             &#10003;
@@ -128,7 +128,7 @@ export function ContactForm() {
             setMessage(e.target.value);
             if (errors.message) setErrors((err) => ({ ...err, message: '' }));
           }}
-          className="mt-2 w-full resize-y border border-[var(--rule)] bg-[var(--paper-raised)] p-4 text-[1.0625rem] leading-relaxed text-[var(--ink)] focus:border-[var(--ink)]"
+          className="mt-2 w-full resize-y surface-raised p-4 text-[1.0625rem] leading-relaxed text-[var(--ink)] focus:border-[var(--ink)]"
         />
 
         <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">

@@ -50,6 +50,10 @@ const config: Config = {
           strong: 'var(--evidence-strong)',
         },
       },
+      boxShadow: {
+        raised: 'var(--shadow-raised)',
+        lifted: 'var(--shadow-lifted)',
+      },
       fontFamily: {
         sans: ['var(--font-hyperlegible)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-hyperlegible-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],

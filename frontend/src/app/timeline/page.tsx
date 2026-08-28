@@ -31,7 +31,7 @@ export default function TimelinePage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <a
             href="/login"

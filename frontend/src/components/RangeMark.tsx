@@ -24,7 +24,7 @@ export function RangeMark({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 28 16"
-      className={cn('h-4 w-7 shrink-0', className)}
+      className={cn('h-[1.15rem] w-[2.05rem] shrink-0', className)}
       aria-hidden
       focusable="false"
     >
@@ -75,11 +75,14 @@ export function Wordmark({
     <Link
       href={href}
       className={cn(
-        'group inline-flex items-center gap-2.5 text-[0.95rem] font-semibold tracking-tight text-ink',
+        // Larger and tighter than a caption. The mark is the product's chart
+        // in miniature, so giving it room is giving the identity room; at the
+        // old size it read as an icon beside a word rather than as a drawing.
+        'group inline-flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.022em] text-ink',
         className,
       )}
     >
-      <RangeMark className="transition-opacity group-hover:opacity-80" />
+      <RangeMark className="transition-opacity duration-200 group-hover:opacity-70" />
       Wellovue
     </Link>
   );

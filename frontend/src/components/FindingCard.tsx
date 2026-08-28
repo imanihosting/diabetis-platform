@@ -23,7 +23,7 @@ import { ProposeExperiment } from '@/components/ProposeExperiment';
  */
 export function FindingCard({ finding }: { finding: StructuredFinding }) {
   return (
-    <article className="border border-rule bg-paper-raised p-5">
+    <article className="surface-raised p-[clamp(1.25rem,2.5vw,2rem)]">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         {/* The engine's own name for the check. Kept visible because it is
             what a clinician would quote back, and what a future report keys
@@ -32,12 +32,14 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
         <EvidenceBadge finding={finding} />
       </div>
 
-      <p className="mt-3 max-w-prose text-sm leading-relaxed text-ink">
-        {finding.summary}
-      </p>
+      <div className="mt-4 grid gap-x-12 gap-y-6 lg:grid-cols-2">
+        <div>
+          <p className="max-w-[52ch] text-sm leading-relaxed text-ink">
+            {finding.summary}
+          </p>
 
       {finding.effectEstimate !== null && (
-        <p className="mt-4 text-reading-sm font-medium text-ink">
+        <p className="mt-5 text-reading-sm font-medium text-ink">
           <span className="measure">{formatEffect(finding.effectEstimate)}</span>
           {finding.effectUnit && (
             <span className="ml-2 font-sans text-xs font-normal text-ink-faint">
@@ -47,16 +49,18 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
         </p>
       )}
 
-      {finding.clinicianReviewRecommended && (
-        <p className="mt-4 border-l-2 border-rule pl-3 text-sm leading-relaxed text-ink-muted">
-          Worth raising with your clinician. This is a pattern a professional
-          should look at — it is not a diagnosis, and nothing here changes
-          treatment.
-        </p>
-      )}
+          {finding.clinicianReviewRecommended && (
+            <p className="mt-5 max-w-[52ch] border-t border-rule pt-4 text-sm leading-relaxed text-ink-muted">
+              Worth raising with your clinician. This is a pattern a
+              professional should look at — it is not a diagnosis, and nothing
+              here changes treatment.
+            </p>
+          )}
+        </div>
 
-      <Section
-        title="What this does not account for"
+        <div className="max-w-[52ch]">
+          <Section
+            title="What this does not account for"
         items={
           finding.limitations.length > 0
             ? finding.limitations
@@ -67,13 +71,16 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
         }
       />
 
-      {finding.wouldImproveWith.length > 0 && (
-        <Section title="What would sharpen this" items={finding.wouldImproveWith} />
-      )}
+          {finding.wouldImproveWith.length > 0 && (
+            <Section title="What would sharpen this" items={finding.wouldImproveWith} />
+          )}
 
-      {/* Last, after the limitations. Somebody deciding whether to spend a week
-          testing this should read what it does not account for first. */}
-      <ProposeExperiment finding={finding} />
+          {/* Last, after the limitations. Somebody deciding whether to spend a
+              week testing this should read what it does not account for
+              first. */}
+          <ProposeExperiment finding={finding} />
+        </div>
+      </div>
     </article>
   );
 }
@@ -88,7 +95,8 @@ function formatEffect(value: number): string {
 
 function Section({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="mt-5 border-t border-rule pt-4">
+    // Flush at the top of a column, spaced when stacked after a sibling.
+    <div className="border-t border-rule pt-4 [&+&]:mt-5">
       <h4 className="text-xs uppercase tracking-wide text-ink-faint">{title}</h4>
       <ul className="mt-2 space-y-1">
         {items.map((item) => (

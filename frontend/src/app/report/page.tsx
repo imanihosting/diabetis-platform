@@ -60,7 +60,7 @@ export default function ReportPage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <Link
             href="/login"
@@ -143,7 +143,7 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
             the {packet.period.days} days above — a lab is drawn every few
             months, and a single value is not a trend.
           </p>
-          <ul className="space-y-4">
+          <ul className="space-y-5">
             {packet.labs.series.map((series) => (
               <li key={series.testName}>
                 <Lab series={series} />
@@ -160,7 +160,7 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
             against a prediction, so everything below is observation.
           </Empty>
         ) : (
-          <ul className="space-y-4">
+          <ul className="space-y-5">
             {packet.experiments.map((experiment) => (
               <li key={experiment.id}>
                 <Experiment experiment={experiment} />
@@ -179,7 +179,7 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
               absence of one.
             </Empty>
           ) : (
-            <ul className="space-y-4">
+            <ul className="space-y-5">
               {packet.evidence.findings.map((finding) => (
                 <li key={finding.findingType}>
                   <Finding finding={finding} />
@@ -216,9 +216,12 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
             and no experiment went the other way from its prediction.
           </Empty>
         ) : (
-          <ul className="space-y-5">
+          <ul className="divide-y divide-rule">
             {packet.discussion.map((point, index) => (
-              <li key={`${point.kind}-${point.findingType ?? point.experimentId ?? index}`}>
+              <li
+                key={`${point.kind}-${point.findingType ?? point.experimentId ?? index}`}
+                className="py-4 first:pt-0 last:pb-0"
+              >
                 <Discussion point={point} />
               </li>
             ))}
@@ -243,7 +246,7 @@ function Packet({ packet }: { packet: ClinicianPacket }) {
  */
 function Provenance({ packet }: { packet: ClinicianPacket }) {
   return (
-    <dl className="grid gap-x-8 gap-y-3 border border-rule bg-paper-raised p-5 sm:grid-cols-2">
+    <dl className="grid gap-x-8 gap-y-3 surface-raised p-5 sm:grid-cols-2">
       <Fact label="Period">
         {formatDate(packet.period.from)} to {formatDate(packet.period.to)} (
         {packet.period.days} days)
@@ -268,7 +271,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 function Lab({ series }: { series: LabSeries }) {
   return (
-    <div className="border border-rule p-5">
+    <div className="surface-raised p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-sm text-ink">{series.testName}</h3>
         <p className="text-sm text-ink">
@@ -321,7 +324,7 @@ function Experiment({ experiment }: { experiment: PacketExperiment }) {
   const finished = experiment.observed !== null;
 
   return (
-    <div className="border border-rule p-5">
+    <div className="surface-raised p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <h3 className="max-w-md text-sm text-ink">{experiment.title}</h3>
         <span className="border border-rule px-2 py-0.5 text-xs text-ink-muted">
@@ -388,7 +391,7 @@ function Experiment({ experiment }: { experiment: PacketExperiment }) {
 /** A finding as the engine returned it, limitations included. */
 function Finding({ finding }: { finding: StructuredFinding }) {
   return (
-    <div className="border border-rule p-5">
+    <div className="surface-raised p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <span className="measure text-xs text-ink-faint">{finding.findingType}</span>
         <EvidenceBadge finding={finding} />
@@ -427,7 +430,7 @@ function Finding({ finding }: { finding: StructuredFinding }) {
  */
 function Discussion({ point }: { point: DiscussionPoint }) {
   return (
-    <div className="border-l-2 border-rule pl-4">
+    <div>
       <p className="max-w-prose text-sm leading-relaxed text-ink">{point.statement}</p>
       <p className="mt-1 max-w-prose text-sm leading-relaxed text-ink-faint">
         {point.because}
@@ -469,7 +472,7 @@ function List({ items, className }: { items: string[]; className?: string }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-prose border border-dashed border-rule px-5 py-4 text-sm leading-relaxed text-ink-muted">
+    <p className="surface-sunk max-w-prose px-5 py-4 text-sm leading-relaxed text-ink-muted">
       {children}
     </p>
   );

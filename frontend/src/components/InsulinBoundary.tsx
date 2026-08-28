@@ -17,7 +17,7 @@ export function InsulinBoundary() {
   return (
     <section
       aria-labelledby="insulin-boundary"
-      className="mb-8 border-l-2 border-rule pl-4"
+      className="surface-sunk mb-8 px-5 py-4"
     >
       <h2 id="insulin-boundary" className="text-sm font-medium text-ink">
         {INSULIN_BOUNDARY_NOTICE.title}

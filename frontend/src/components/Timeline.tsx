@@ -16,7 +16,7 @@ import { cn } from '@/lib/cn';
 export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   if (entries.length === 0) {
     return (
-      <div className="border border-dashed border-rule px-6 py-12 text-center">
+      <div className="surface-sunk px-6 py-14 text-center">
         <p className="text-ink-muted">Nothing recorded in this period yet.</p>
         <p className="mt-1 text-sm text-ink-faint">
           Add a glucose reading, log a meal, or import a device export to start

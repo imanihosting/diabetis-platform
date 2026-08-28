@@ -24,6 +24,7 @@ uncertainty.
 | | |
 |---|---|
 | Design context, voice, anti-references | `PRODUCT.md` |
+| Design system: surfaces, space, width, type, controls | `DESIGN.md` |
 | Original spec (thesis, architecture, data model, roadmap) | `docs/` |
 | Diabetes-wide expansion, and the decisions taken along the way | `docs/diabetes-wide-platform.md` |
 | Infrastructure, guarantees, security posture | `infra/README.md` |

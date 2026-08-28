@@ -24,7 +24,7 @@ export function Finding() {
   ];
 
   return (
-    <figure className="border border-[var(--rule)] bg-[var(--paper-raised)] p-[clamp(1.5rem,3vw,2.5rem)]">
+    <figure className="surface-raised p-[clamp(1.5rem,3vw,2.5rem)]">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <span className="text-sm text-[var(--ink-faint)]">
           post_meal_walk_effect

@@ -47,7 +47,7 @@ export function ProposeExperiment({ finding }: { finding: StructuredFinding }) {
         type="button"
         onClick={() => propose.mutate(proposal)}
         disabled={propose.isPending}
-        className="mt-3 min-h-[2.75rem] border border-ink-faint px-4 text-sm font-medium text-ink transition-colors hover:bg-paper-sunk disabled:opacity-60"
+        className="btn btn-secondary mt-4 min-h-[2.75rem] px-5 text-sm"
       >
         {propose.isPending ? 'Checking…' : 'Propose a test for this'}
       </button>

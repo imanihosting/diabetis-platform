@@ -52,6 +52,17 @@
 
   --font-sans: var(--font-hyperlegible), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-hyperlegible-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Warm, and barely there. Two layers: a contact shadow so the edge is
+     defined, and a wide soft one so an object sits on the paper rather than
+     floating above it. Tinted with the ink hue — a neutral grey shadow on warm
+     paper reads as dirt. */
+  --shadow-raised:
+    0 1px 2px -1px oklch(0.235 0.014 75 / 0.07),
+    0 10px 30px -18px oklch(0.235 0.014 75 / 0.22);
+  --shadow-lifted:
+    0 2px 4px -2px oklch(0.235 0.014 75 / 0.09),
+    0 16px 40px -20px oklch(0.235 0.014 75 / 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -76,6 +87,16 @@
     --above-range-text: oklch(0.815 0.115 72);
     --below-range-text: oklch(0.745 0.140 26);
 
+    /* A shadow on a dark ground is invisible. The lift becomes a hairline of
+       light along the top edge instead, which is how a raised surface actually
+       reads in low light. */
+    --shadow-raised:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.045),
+      0 12px 32px -20px oklch(0 0 0 / 0.7);
+    --shadow-lifted:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.07),
+      0 18px 44px -22px oklch(0 0 0 / 0.8);
+
     --evidence-insufficient: oklch(0.685 0.011 85);
     --evidence-weak: oklch(0.815 0.115 72);
     --evidence-moderate: oklch(0.760 0.080 152);
@@ -93,6 +114,102 @@ body {
 ::selection {
   background-color: var(--in-range-wash);
   color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * Surfaces and controls.
+ *
+ * Declared here rather than repeated as utility strings, because the rule they
+ * encode is a rule: a four-sided border is reserved for something that is
+ * genuinely an object, and most content is not. See DESIGN.md §2.
+ *
+ * The print variants exist because these pages get printed and handed to a
+ * clinician. A borderless raised surface is defined by its shadow, and shadows
+ * do not print — so the hairline comes back on paper, where it is the only
+ * thing that can carry the edge.
+ * ------------------------------------------------------------------------ */
+@layer components {
+  .surface-raised {
+    background-color: var(--paper-raised);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .surface-sunk {
+    background-color: var(--paper-sunk);
+  }
+
+  @media print {
+    .surface-raised,
+    .surface-sunk {
+      box-shadow: none;
+      border: 1px solid var(--rule);
+      background-color: transparent;
+    }
+  }
+
+  /* One control vocabulary across both surfaces. Height and padding are shared
+     so a primary and a secondary sitting beside each other agree, which is the
+     detail that makes a pair look drawn rather than assembled. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    padding-inline: 1.75rem;
+    font-weight: 500;
+    line-height: 1;
+    text-align: center;
+    transition:
+      transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
+    /* Never a colour change: colour means something else in this product. */
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-primary {
+    background-color: var(--ink);
+    color: var(--paper);
+    box-shadow: var(--shadow-raised);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lifted);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .btn-secondary {
+    background-color: var(--paper-raised);
+    color: var(--ink);
+    box-shadow: var(--shadow-raised);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lifted);
+  }
+  .btn-secondary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: var(--shadow-raised);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn {
+      transition: none;
+    }
+    .btn:hover:not(:disabled) {
+      transform: none;
+    }
+  }
 }
 
 /* Measured values. Digits align in columns and are never mistaken for prose. */

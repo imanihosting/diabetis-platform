@@ -140,7 +140,7 @@ function LoginView() {
               <button
                 type="submit"
                 disabled={active.isPending}
-                className="mt-8 w-full bg-ink px-7 py-3.5 text-lede font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-60 sm:w-auto"
+                className="btn btn-primary mt-8 w-full text-lede sm:w-auto"
               >
                 {active.isPending
                   ? 'Working…'

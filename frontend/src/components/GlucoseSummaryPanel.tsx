@@ -10,14 +10,14 @@ import { cn } from '@/lib/cn';
 export function GlucoseSummaryPanel({ summary }: { summary: GlucoseSummary }) {
   if (summary.sampleCount === 0) {
     return (
-      <div className="border border-rule px-5 py-6 text-sm text-ink-muted">
+      <div className="surface-sunk px-5 py-6 text-sm text-ink-muted">
         No glucose readings in this period.
       </div>
     );
   }
 
   return (
-    <div className="border border-rule bg-paper-raised">
+    <div className="surface-raised">
       <div className="flex flex-wrap items-baseline gap-x-8 gap-y-4 px-5 py-4">
         <Stat label="Average" value={summary.mean} unit={summary.unit} emphasis />
         <Stat label="Lowest" value={summary.min} unit={summary.unit} />

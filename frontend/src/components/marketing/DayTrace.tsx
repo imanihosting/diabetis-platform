@@ -85,7 +85,7 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
           ref={svgRef}
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          className="h-[clamp(9.5rem,21vw,16rem)] w-full"
+          className="h-[clamp(13rem,30vw,25rem)] w-full"
           aria-hidden
         >
           {/* The band the whole page is built on. */}
@@ -94,7 +94,11 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
             y={y(TARGET_HIGH)}
             width="100"
             height={y(TARGET_LOW) - y(TARGET_HIGH)}
-            fill="var(--in-range-wash)"
+            // Held below full wash. The token is tuned for a chart a few
+            // centimetres tall; at hero scale the same fill covers a third of
+            // the viewport and stops reading as a band behind a measurement,
+            // which is what it is, and starts reading as a green panel.
+            fill="color-mix(in oklch, var(--in-range-wash) 72%, var(--paper))"
           />
           <line
             x1="0"
@@ -126,7 +130,10 @@ export function DayTrace({ showMeals = true }: { showMeals?: boolean }) {
             d={d}
             fill="none"
             stroke="var(--ink)"
-            strokeWidth="1.75"
+            // Heavier than the in-app chart. The trace carries the first
+            // impression here and a hairline at 25rem reads as thin rather
+            // than as precise.
+            strokeWidth="2.25"
             strokeLinejoin="round"
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"

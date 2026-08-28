@@ -41,7 +41,7 @@ export function DayGlucoseStrip({ entries }: { entries: TimelineEntry[] }) {
   const inRange = values.filter(isInTargetRange).length;
 
   return (
-    <figure className="mb-2 border border-rule bg-paper-raised px-4 py-3">
+    <figure className="mb-2 surface-raised px-4 py-3">
       <figcaption className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 text-xs">
         <span className="text-ink-muted">
           Glucose · <span className="measure">{readings.length}</span> readings

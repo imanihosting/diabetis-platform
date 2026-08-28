@@ -153,7 +153,7 @@ function ProfileView() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <a
             href="/login"
@@ -302,7 +302,7 @@ function ProfileView() {
           <button
             type="submit"
             disabled={!diabetesType || save.isPending}
-            className="min-h-[2.75rem] bg-ink px-6 text-sm font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-50"
+            className="btn btn-primary text-sm"
           >
             {save.isPending ? 'Saving…' : welcome ? 'Save and continue' : 'Save'}
           </button>

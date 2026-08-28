@@ -53,7 +53,7 @@ export default function ExperimentPage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <Link
             href="/login"
@@ -222,12 +222,12 @@ function Comparison({
   const unit = expectation?.unit ?? null;
 
   return (
-    <section className="mt-8 border border-rule bg-paper-raised p-5">
+    <section className="mt-10 surface-raised p-[clamp(1.5rem,3vw,2.5rem)]">
       <h2 className="text-xs uppercase tracking-wide text-ink-faint">
         What happened, against what was predicted
       </h2>
 
-      <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+      <dl className="mt-6 grid gap-8 sm:grid-cols-2">
         <Figure label="Predicted" value={summary?.expectedEffect ?? null} unit={unit} />
         <Figure label="Observed" value={outcome.outcome.observedEffect} unit={unit} />
       </dl>
@@ -266,11 +266,14 @@ function Figure({
 }) {
   return (
     <div>
-      <dt className="text-sm text-ink-faint">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-ink-faint">{label}</dt>
       {/* Deliberately the same ink as its neighbour. Colouring the observed
           value by how close it landed would invent a third meaning for colour
-          in a product that has exactly two. */}
-      <dd className="mt-1 text-reading-sm font-medium text-ink">
+          in a product that has exactly two.
+
+          At `reading` rather than `reading-sm`: this pair is the payoff of the
+          entire loop, and it was set at the size of a secondary statistic. */}
+      <dd className="mt-2 text-reading font-medium text-ink">
         <span className="measure">{value === null ? '—' : signed(value)}</span>
         {value !== null && unit && (
           <span className="ml-2 font-sans text-xs font-normal text-ink-faint">{unit}</span>
@@ -345,7 +348,7 @@ function Start({ id }: { id: string }) {
         type="button"
         onClick={() => start.mutate()}
         disabled={start.isPending}
-        className="mt-4 min-h-[2.75rem] bg-ink px-6 text-base font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-60"
+        className="btn btn-primary mt-6 text-base"
       >
         {start.isPending ? 'Recording the prediction…' : 'Record the prediction and start'}
       </button>
@@ -452,7 +455,7 @@ function RecordResult({
         <button
           type="submit"
           disabled={complete.isPending}
-          className="min-h-[2.75rem] bg-ink px-6 text-base font-medium text-paper transition-opacity hover:opacity-85 disabled:opacity-60"
+          className="btn btn-primary text-base"
         >
           {complete.isPending ? 'Recording…' : 'Record it and finish'}
         </button>

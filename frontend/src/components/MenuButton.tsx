@@ -25,7 +25,7 @@ import type { ReactNode } from 'react';
  * carrying that. The faint ink is 4.66:1.
  */
 export const MENU_TRIGGER_CLASS =
-  'inline-flex min-h-[2.75rem] items-center gap-2.5 border border-ink-faint px-3.5 text-sm font-medium text-ink transition-colors hover:bg-paper-sunk';
+  'btn btn-secondary min-h-[2.75rem] gap-2.5 px-4 text-sm';
 
 export function MenuTriggerContent({ open }: { open: boolean }): ReactNode {
   return (

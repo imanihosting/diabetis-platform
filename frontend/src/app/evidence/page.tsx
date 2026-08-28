@@ -53,7 +53,7 @@ export default function EvidencePage() {
   if (user.isError || !user.data) {
     return (
       <AppShell>
-        <div className="border border-rule px-6 py-10 text-center">
+        <div className="surface-sunk px-6 py-12 text-center">
           <p className="text-ink">You are not signed in.</p>
           <a
             href="/login"
@@ -213,7 +213,7 @@ function NothingLogged({ response, days }: { response: PatternResponse; days: nu
   ];
 
   return (
-    <div className="border border-dashed border-rule px-6 py-10">
+    <div className="surface-sunk px-6 py-12">
       <p className="text-sm text-ink">
         There are no readings in the last {days} days, so there is nothing to
         assess yet.
@@ -294,7 +294,7 @@ function EngineError({
   const unreachable = error instanceof ApiError && error.status === 503;
 
   return (
-    <div className="border border-rule px-6 py-8">
+    <div className="surface-sunk px-6 py-10">
       <p className="text-sm text-ink">
         {unreachable
           ? 'Your findings could not be produced just now.'

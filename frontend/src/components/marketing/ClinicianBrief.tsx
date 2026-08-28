@@ -25,7 +25,7 @@ export function ClinicianBrief() {
   const first = HBA1C[0];
 
   return (
-    <article className="border border-[var(--rule)] bg-[var(--paper-raised)]">
+    <article className="surface-raised">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--rule)] px-6 py-4 sm:px-8">
         <h3 className="text-sm font-semibold">Ninety-day summary</h3>
       </header>
