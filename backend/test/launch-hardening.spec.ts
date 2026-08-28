@@ -156,29 +156,24 @@ describe('the production deployment turns them all on', () => {
     expect(overlay).toContain('https://wellovue.com');
   });
 
-  it('puts the application behind the proxy rather than beside it', () => {
-    // Published ports on the app would be a way around TLS and around the
-    // proxy that owns the forwarding headers.
+  it('puts the application behind the tunnel rather than beside it', () => {
     expect(overlay).toMatch(/ports: !reset \[\]/);
   });
 });
 
-describe('the proxy owns the forwarding headers', () => {
-  const caddyfile = read('infra/proxy/Caddyfile');
+describe('nothing binds a public port behind the tunnel', () => {
+  const overlay = read('infra/docker/docker-compose.production.yml');
 
-  it('overwrites the caller address rather than appending to it', () => {
-    // Appending lets a caller prepend a value and choose which rate-limit
-    // bucket they land in, which is a rate limit the people it exists to stop
-    // can walk around.
-    expect(caddyfile).toContain('header_up X-Forwarded-For {remote_host}');
+  it('exposes the services to the network and publishes neither', () => {
+    // cloudflared dials out and is the only ingress. A published port would be
+    // a second way in that skips Cloudflare, and therefore skips TLS, the
+    // WAF, and the header that rate limiting depends on.
+    expect(overlay).not.toMatch(/^\s+- '(80|443|3000|4000):/m);
+    expect((overlay.match(/ports: !reset \[\]/g) ?? []).length).toBe(2);
   });
 
-  it('terminates TLS and tells browsers to insist on it', () => {
-    expect(caddyfile).toContain('Strict-Transport-Security');
-  });
-
-  it('answers nothing on a hostname it was not configured for', () => {
-    expect(caddyfile).toMatch(/:80 \{[\s\S]*404/);
+  it('reads the client address from the edge rather than from a list', () => {
+    expect(overlay).toContain('CLIENT_IP_HEADER: cf-connecting-ip');
   });
 });
 
@@ -195,6 +190,44 @@ describe('the forwarding chain is not broken in the middle', () => {
 
   it('still drops it by default', () => {
     expect(proxyRoute).toContain("process.env.TRUST_PROXY === 'true'");
+  });
+});
+
+describe('the client address cannot be chosen by the caller', () => {
+  const guard = read('backend/src/common/guards/throttle.guard.ts');
+  const proxyRoute = read('frontend/src/app/api/[...path]/route.ts');
+
+  it('does not key on the leftmost X-Forwarded-For entry', () => {
+    // The subtle one. A proxy that overwrites the header leaves one entry and
+    // the leftmost is the client; a CDN that appends — Cloudflare does — adds
+    // the true address to whatever the caller already sent, so the leftmost
+    // is attacker-chosen and every request can have a fresh bucket.
+    expect(guard).not.toMatch(/request\.ips\?\.\[0\]/);
+  });
+
+  it('prefers the header the edge sets, when there is one', () => {
+    expect(guard).toContain('CLIENT_IP_HEADER');
+  });
+
+  it('reads that header only when something in front is trusted', () => {
+    // Otherwise a caller sends it themselves, which is the same attack
+    // wearing a different header name.
+    expect(guard).toMatch(/if \(this\.env\.TRUST_PROXY\)[\s\S]{0,900}CLIENT_IP_HEADER/);
+  });
+
+  it('falls back to an address it can vouch for', () => {
+    // Coarse and unforgeable beats precise and chosen. When the chain is
+    // longer than the trusted hop count every caller shares one bucket, which
+    // is the right direction for this to fail in.
+    expect(guard).toContain('request.socket.remoteAddress');
+  });
+
+  it('strips the edge headers at the frontend unless they are trusted', () => {
+    // cf-connecting-ip is an ordinary request header. Left unfiltered it is
+    // the one nobody thinks to check, and it is the one the backend keys on.
+    for (const header of ['cf-connecting-ip', 'true-client-ip']) {
+      expect(proxyRoute).toContain(header);
+    }
   });
 });
 

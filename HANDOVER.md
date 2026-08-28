@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 284 unit, no infrastructure needed
+npm test                  # 288 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 128 | no |
+| `backend/test/*.spec.ts` | 132 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -696,7 +696,7 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 128 unit tests,
+readers evaluating the platform and it quotes specific numbers: 132 unit tests,
 184 integration, 104 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
@@ -1027,12 +1027,29 @@ when its own `TRUST_PROXY` is set. **Set it on both, or the chain breaks at the
 frontend**, which is the link people forget because nothing about it looks like
 a proxy.
 
-**Caddy rather than nginx**, for two reasons that both matter: it obtains and
-renews certificates itself, removing the certbot timer that fails silently three
-months after launch; and it overwrites rather than appends the forwarding
-header, which is what the rate limiter depends on. Do not delete the
-`caddy-data` volume to start clean — Let's Encrypt rate-limits issuance hard
-enough to lock the domain out for a week.
+**The deployment is Coolify behind a Cloudflare Tunnel**, and that changed the
+answer to the forwarding question rather than just the plumbing. Nothing in
+this repository terminates TLS — Cloudflare does, at the edge — and no service
+publishes a port, because `cloudflared` dials out and is the only ingress. An
+earlier version of the production overlay ran Caddy for TLS; it is gone,
+because on this host it would fight Coolify's own proxy for 80 and 443 and its
+ACME challenge needs an inbound port 80 that a tunnel deliberately does not
+provide.
+
+**Cloudflare appends to `X-Forwarded-For`, and that is a security problem, not
+a formatting one.** It adds the true client address to whatever the caller
+already put in that header, so the leftmost entry is a value the caller chose.
+The throttle guard used to read exactly that — `request.ips[0]` — which was
+correct behind a proxy that overwrites and would have handed an attacker a
+fresh rate-limit bucket on every request behind one that appends. It reads
+`CLIENT_IP_HEADER` (`cf-connecting-ip`) now, and falls back to an address it
+can vouch for rather than to a guess: coarse, useless for per-visitor limits,
+and unforgeable, which is the right direction to fail in.
+
+The frontend's `/api` proxy strips `cf-connecting-ip` and `true-client-ip`
+along with the standard forwarding headers when its own `TRUST_PROXY` is off.
+They are ordinary request headers, and the one the backend keys on is the one
+nobody thinks to check.
 
 **The canary now checks what a deploy gate needs.** Applied migrations against
 the count in the tree, the blockers the process itself reports, the public pages
@@ -1052,9 +1069,10 @@ than a boolean somebody set. Filling in the placeholders is not review.
 
 ### Still not done, and not something code can do
 
-- **Nothing is pointed at anything.** The DNS records in the runbook have not
-  been created. Ports 80 and 443 must both be reachable before the first
-  certificate can issue — 80 cannot simply be firewalled off.
+- **Nothing is pointed at anything.** The tunnel, its public hostname and the
+  Coolify application have not been created. The Cloudflare records must stay
+  **proxied**: a grey-cloud record points at nothing, and the orange cloud is
+  what guarantees `CF-Connecting-IP` is set on every request.
 - **Backups are documented and unautomated.** No schedule, no off-host copy,
   and the restore has not been run end to end. A backup nobody has restored is
   a belief. See `infra/README.md` § *Backups and restore*.

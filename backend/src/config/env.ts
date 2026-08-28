@@ -90,6 +90,32 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
+  /**
+   * A single header that carries the true client address, set by the edge.
+   *
+   * `cf-connecting-ip` behind Cloudflare, `true-client-ip` behind some others.
+   * Unset means "work it out from X-Forwarded-For", which is right when the
+   * thing in front overwrites that header.
+   *
+   * This exists because X-Forwarded-For cannot be trusted through a CDN that
+   * *appends*. Cloudflare adds the real client address to whatever the caller
+   * already put there, so the leftmost entry is a string the caller chose —
+   * and a rate limiter keyed on it hands an attacker a fresh budget per
+   * request. The edge's own header has no such problem: it is overwritten at
+   * the edge every time, and the tunnel is the only way in.
+   *
+   * Only read when `TRUST_PROXY` is on, because otherwise nothing in front is
+   * trusted to set anything and a caller could simply send this header
+   * themselves.
+   */
+  CLIENT_IP_HEADER: z
+    .string()
+    .toLowerCase()
+    .optional()
+    .refine((v) => v === undefined || /^[a-z0-9-]+$/.test(v), {
+      message: 'CLIENT_IP_HEADER must be a header name',
+    }),
+
   TRUST_PROXY: z
     .enum(['true', 'false'])
     .default('false')

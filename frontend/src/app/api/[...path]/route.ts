@@ -37,12 +37,26 @@ function trustProxy(): boolean {
   return process.env.TRUST_PROXY === 'true';
 }
 
+/**
+ * Every header that claims to say who the caller is.
+ *
+ * The Cloudflare ones matter as much as the standard ones and are easier to
+ * miss: `cf-connecting-ip` is the header the backend keys its rate limits on
+ * behind a tunnel, and it is an ordinary request header like any other. Left
+ * in this list unfiltered, a caller could send it themselves and choose their
+ * own bucket — which is the whole attack this list exists to stop, arriving
+ * through the one header nobody thinks to check.
+ */
 const FORWARDING_HEADERS = [
   'x-forwarded-for',
   'x-forwarded-host',
   'x-forwarded-proto',
   'x-real-ip',
   'forwarded',
+  'cf-connecting-ip',
+  'true-client-ip',
+  'cf-ipcountry',
+  'cf-ray',
 ];
 
 async function proxy(request: NextRequest): Promise<Response> {

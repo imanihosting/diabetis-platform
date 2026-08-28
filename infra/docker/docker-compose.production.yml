@@ -1,35 +1,22 @@
-# The production overlay: a reverse proxy in front, and every launch switch on.
+# The production overlay: Coolify behind a Cloudflare Tunnel.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 #
-# Deliberately an overlay rather than a separate stack, so production runs the
-# same images and the same wiring as everything else, with the differences
-# visible in one short file instead of buried in a second copy of the whole
-# thing.
+# Coolify builds and runs these images and puts its own reverse proxy in front;
+# `cloudflared` dials out to Cloudflare and is the only ingress. Nothing here
+# terminates TLS and nothing here binds a public port, which is the point of
+# the arrangement: there is no inbound listener to find.
 #
-# `PUBLIC_LAUNCH=true` is the switch that makes every launch blocker fatal:
-# the backend refuses to start while any is unresolved, and the frontend image
+# An earlier version of this file ran Caddy for TLS. That was right for a host
+# with public ports and wrong here twice over — it would fight Coolify's proxy
+# for 80 and 443, and its ACME challenge needs inbound port 80, which a tunnel
+# deliberately does not provide.
+#
+# `PUBLIC_LAUNCH=true` is the switch that makes every launch blocker fatal: the
+# backend refuses to start while any is unresolved and the frontend image
 # refuses to build while a legal placeholder is still in a user-facing page.
-# It is on here because this file describes the deployment that serves people.
 
 services:
-  proxy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'
-    volumes:
-      - ../proxy/Caddyfile:/etc/caddy/Caddyfile:ro
-      # Certificates and the ACME account key. On a named volume because
-      # losing them means re-issuing on every restart, and Let's Encrypt rate
-      # limits that hard enough to take a site down for a week.
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - frontend
-
   frontend:
     build:
       args:
@@ -38,24 +25,31 @@ services:
         NEXT_PUBLIC_SITE_URL: https://wellovue.com
         PUBLIC_LAUNCH: 'true'
     environment:
-      # Caddy overwrites the forwarding headers before this app is reached, so
-      # the Next proxy passes them through instead of dropping them. Without
-      # this the chain breaks here and the backend keys every request in the
-      # deployment on one container.
+      # Cloudflare and Coolify's proxy own the forwarding headers before this
+      # app is reached, so the Next proxy passes them through instead of
+      # dropping them. Without this the chain breaks here and the backend keys
+      # every request in the deployment on one container.
       TRUST_PROXY: 'true'
-    # Not published. The proxy is the only way in.
+    # Reached by the tunnel over the compose network. Publishing a port would
+    # be a second way in that skips Cloudflare entirely.
+    expose:
+      - '3000'
     ports: !reset []
 
   backend:
     environment:
       PUBLIC_LAUNCH: 'true'
       TRUST_PROXY: 'true'
+      # The header Cloudflare sets at the edge, and the only address that can
+      # be trusted through a CDN that appends to X-Forwarded-For rather than
+      # overwriting it. Without this every caller shares one rate-limit bucket;
+      # with the wrong thing — the leftmost X-Forwarded-For entry — a caller
+      # picks their own. See backend/src/common/guards/throttle.guard.ts.
+      CLIENT_IP_HEADER: cf-connecting-ip
       REQUIRE_VERIFIED_DB_TLS: 'true'
       REQUIRE_SHARED_RATE_LIMIT: 'true'
       DATABASE_SSL_REJECT_UNAUTHORIZED: 'true'
       NEXT_PUBLIC_APP_URL: https://wellovue.com
+    expose:
+      - '4000'
     ports: !reset []
-
-volumes:
-  caddy-data:
-  caddy-config:

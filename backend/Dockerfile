@@ -71,12 +71,11 @@ COPY metabolic-engine/app/models/findings.py ./metabolic-engine/app/models/findi
 #
 # Same reason as the engine sources above, and the same rule: named file by
 # file rather than copying trees, so a spec that starts reading a new one fails
-# loudly here instead of quietly finding nothing to check. These are the files
-# that say how the thing is actually deployed — the proxy that owns the
-# forwarding headers, the overlay that turns the launch switches on, and the
-# frontend's half of the forwarding chain — and a test asserting the shape of a
-# deployment has to be able to see it.
-COPY infra/proxy/Caddyfile ./infra/proxy/Caddyfile
+# loudly here instead of quietly finding nothing to check. These say how the
+# thing is actually deployed — the overlay that turns the launch switches on
+# and names the client-address header, and the frontend's half of the
+# forwarding chain — and a test asserting the shape of a deployment has to be
+# able to see it.
 COPY infra/docker/docker-compose.production.yml ./infra/docker/docker-compose.production.yml
 COPY frontend/Dockerfile ./frontend/Dockerfile
 COPY frontend/src/app/api ./frontend/src/app/api

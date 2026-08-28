@@ -52,6 +52,14 @@ export function ThrottleScope(name: string): MethodDecorator & ClassDecorator {
  * only when TRUST_PROXY says a real proxy overwrites it, and otherwise the
  * socket address is used and the limit is coarse but honest.
  *
+ * Trusting the header is not enough on its own, and this took a second pass to
+ * get right. A proxy that *overwrites* X-Forwarded-For leaves exactly one
+ * entry and the leftmost is the client. A CDN that *appends* — Cloudflare does
+ * — adds the real address to whatever the caller already sent, so the leftmost
+ * entry is attacker-chosen. `CLIENT_IP_HEADER` names the edge's own header for
+ * those deployments, and without it the guard falls back to an address it can
+ * actually vouch for, which may be coarse and is never forgeable.
+ *
  * **An IP is the wrong unit for a login.** Credential stuffing arrives from
  * thousands of addresses, a few attempts each, all aimed at one account. A
  * per-IP limit never fires. Including the submitted email in the key means the
@@ -133,12 +141,36 @@ export class ScopedThrottlerGuard extends ThrottlerGuard {
 
   private clientAddress(request: Request): string {
     if (this.env.TRUST_PROXY) {
-      // Express populates `ips` from X-Forwarded-For once `trust proxy` is set,
-      // leftmost first. Falling back to `ip` covers a direct hit on the
-      // backend that skipped the proxy entirely.
-      const forwarded = request.ips?.[0];
-      if (forwarded) return forwarded;
+      // An edge-set header, when the deployment has one. This is the only
+      // correct answer behind a CDN that appends to X-Forwarded-For rather
+      // than overwriting it: Cloudflare adds the true client address to
+      // whatever the caller already put in that header, so the leftmost entry
+      // is a string the caller chose. Keying on it would hand an attacker a
+      // fresh budget on every request, which is the exact failure this guard
+      // exists to prevent.
+      const header = this.env.CLIENT_IP_HEADER;
+      if (header) {
+        const value = request.headers[header];
+        const address = Array.isArray(value) ? value[0] : value;
+        // One address, not a list. These headers carry a single value; if one
+        // arrives with a comma in it, something is forwarding it wrongly and
+        // the first entry is the least bad reading.
+        const first = address?.split(',')[0]?.trim();
+        if (first) return first;
+      }
+
+      // Otherwise Express's own computation, which honours the number of hops
+      // the app was told to trust. Deliberately not `ips[0]`: that is the
+      // leftmost X-Forwarded-For entry, which is only the client when the
+      // nearest proxy overwrites the header. When it appends — every CDN — the
+      // leftmost entry is whatever the caller sent.
+      //
+      // When the chain is longer than the trusted hop count this returns an
+      // internal address and every caller shares one bucket. That is coarse
+      // and it is not exploitable, which is the right direction for this to
+      // fail in; `CLIENT_IP_HEADER` is how it is made precise.
+      if (request.ip) return request.ip;
     }
-    return request.ip ?? request.socket.remoteAddress ?? 'unknown';
+    return request.socket.remoteAddress ?? 'unknown';
   }
 }

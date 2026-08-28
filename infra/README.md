@@ -269,7 +269,7 @@ stack, a staging box, and whatever production turns out to be.
 | Dependency advisories | `npm audit` clean. Pinned minimums for transitives live in the root `overrides`. |
 | Rate limit counts | Shared across replicas in Redis when `REDIS_URL` is set; per process otherwise, and the backend says which on every boot and at `/api/health/posture`. |
 | Database TLS | Verified against an internal CA. The backend refuses to start if verification is off, or if the URL is an IP address that cannot be verified. |
-| Client addresses | Caddy overwrites `X-Forwarded-For`; the frontend proxy forwards it only when `TRUST_PROXY` is set; the backend trusts exactly one hop. Break any link and every request keys on one bucket. |
+| Client addresses | Read from `CF-Connecting-IP`, set at the Cloudflare edge, and only when `TRUST_PROXY` is on. Never from the leftmost `X-Forwarded-For` entry, which a caller can choose behind a CDN that appends. Falls back to an unforgeable internal address rather than to a guess. |
 | Logs | No query is built by interpolating a value, so the slow-query log carries statements and never data. Asserted by `backend/test/launch-hardening.spec.ts`. |
 | Serving with a blocker open | `PUBLIC_LAUNCH=true` makes each one fatal: the frontend image will not build with a legal placeholder in a page, and the backend will not start with a runtime blocker open. |
 
@@ -279,9 +279,9 @@ stack, a staging box, and whatever production turns out to be.
   [Going live](#going-live); the frontend image will not build with
   `PUBLIC_LAUNCH=true` while any placeholder remains, and filling them in is
   not the same as review.
-- **The DNS records and the certificate.** `wellovue.com` is chosen and
-  configured; nothing has been pointed at anything yet. See
-  [Going live](#going-live).
+- **The tunnel and the Coolify application.** `wellovue.com` is chosen and the
+  stack is configured for it; nothing has been created or pointed anywhere yet.
+  See [Going live](#going-live).
 
 ## Going live
 
@@ -313,54 +313,109 @@ The four runtime blockers, from `backend/src/config/launch.ts`:
 | `rate-limits-not-shared` | `REDIS_URL` set and answering, `REQUIRE_SHARED_RATE_LIMIT=true` |
 | `client-addresses-not-known` | A reverse proxy that overwrites `X-Forwarded-For`, and `TRUST_PROXY=true` on **both** the backend and the frontend |
 
+### How it is deployed
+
+**Coolify** builds and runs the compose stack; **Cloudflare Tunnel** is the only
+way in. `cloudflared` dials *out* to Cloudflare, so the host has no inbound
+listener for the application at all — no port 80, no port 443, nothing to find
+with a port scan.
+
+That shapes three things, and each of them is a mistake somebody makes once:
+
+- **Nothing in this repository terminates TLS.** Cloudflare does it at the
+  edge. An earlier version of the production overlay ran Caddy for TLS, which
+  was right for a host with public ports and wrong here twice over: it would
+  fight Coolify's own proxy for 80 and 443, and its ACME challenge needs
+  inbound port 80, which a tunnel deliberately does not provide.
+- **No service publishes a port.** They `expose` to the compose network and the
+  tunnel reaches them there. A published port would be a second way in that
+  skips Cloudflare, and therefore skips TLS, the WAF, and the header the rate
+  limiter depends on.
+- **The client address comes from `CF-Connecting-IP`, not `X-Forwarded-For`.**
+  See below; this is the one with teeth.
+
 ### DNS
 
-Two records, both at the apex and the `www` name, pointing at the host running
-the proxy:
+In the Cloudflare dashboard, not at a registrar's zone file. Creating the
+tunnel route creates the record:
 
 ```
-wellovue.com.        A     <public IPv4 of the proxy host>
-www.wellovue.com.    A     <public IPv4 of the proxy host>
+wellovue.com          -> tunnel  (proxied, orange cloud)
+www.wellovue.com      -> tunnel  (proxied, orange cloud)
 ```
 
-Add `AAAA` records too if the host has IPv6. Caddy answers the ACME HTTP-01
-challenge on port 80, so **both 80 and 443 must be reachable from the internet**
-before the first certificate can be issued — port 80 cannot simply be firewalled
-off, even though every request on it redirects.
+The public hostname routes to the frontend on the compose network:
+
+```
+Public hostname   wellovue.com
+Service           http://frontend:3000
+```
+
+`http://` is correct there and is not a downgrade: that hop is inside the
+tunnel, which is itself encrypted end to end from the Cloudflare edge.
+
+The records must stay **proxied**. A grey-cloud record points at nothing —
+there is no origin address to reach — and, more importantly, the orange cloud
+is what guarantees `CF-Connecting-IP` is set on every request.
 
 `medical-db` is separate and is not a public name. It resolves on the private
 network only; see [Clients must connect by name, not
 address](#clients-must-connect-by-name-not-address).
 
-### TLS termination
+### The client address, and the mistake that is easy to make here
 
-`infra/proxy/Caddyfile`, run by the `proxy` service in
-`infra/docker/docker-compose.production.yml`. Caddy obtains and renews the
-certificate itself, which removes the single most common way a small deployment
-goes dark three months after launch: a certbot timer that stopped and told
-nobody.
+Cloudflare **appends** to `X-Forwarded-For`. It adds the true client address to
+whatever the caller already put in that header, so a caller who sends
+`X-Forwarded-For: 1.2.3.4` produces `1.2.3.4, <real client>` at the origin.
 
-The certificates live on the `caddy-data` volume. **Do not delete that volume
-to "start clean"** — Let's Encrypt rate-limits issuance hard enough that
-re-issuing repeatedly can lock the domain out for a week.
+**Anything that reads the leftmost entry is reading a value the caller chose.**
+A rate limiter keyed on it hands an attacker a fresh budget on every request,
+which is the precise failure rate limiting exists to prevent — and it looks
+completely correct in testing, because an honest browser sends no such header.
 
-TLS terminates at the proxy. The application behind it speaks plain HTTP on the
-private network and never sees a certificate, which is why `TRUST_PROXY` exists:
-from that point on, the forwarding headers are the only record of who the caller
-was.
+So:
 
-### The forwarding chain has three links
+| Setting | Value | Why |
+|---|---|---|
+| `CLIENT_IP_HEADER` | `cf-connecting-ip` | Set at the edge, overwritten every time, and the tunnel is the only ingress |
+| `TRUST_PROXY` | `true` on **both** the backend and the frontend | The header is read only when something in front is trusted; the frontend's `/api` proxy drops it otherwise |
 
-Caddy sets `X-Forwarded-For` by **overwriting** — appending would let a caller
-prepend an address of their own and pick which rate-limit bucket they land in.
-The frontend's `/api` proxy then passes it through, but only when its own
-`TRUST_PROXY` is set; otherwise it drops it, which is correct when nothing
-trustworthy is in front. The backend reads it, trusting exactly one hop.
+Without `CLIENT_IP_HEADER` the guard falls back to an address it can actually
+vouch for. Behind a tunnel that is an internal address, so every caller shares
+one bucket: coarse, useless for per-visitor limits, and **not forgeable**. That
+is the right direction for it to fail in, and it is why the guard does not try
+to be clever about `X-Forwarded-For`.
 
-**Break any link and the whole deployment is one rate-limit bucket.** The
-frontend is the one people forget, because nothing about it looks like a proxy.
+The frontend's `/api` proxy strips `cf-connecting-ip` and `true-client-ip`
+along with the standard forwarding headers when its own `TRUST_PROXY` is off.
+They are ordinary request headers; left unfiltered, the one the backend keys on
+is the one nobody thinks to check.
+
+### Coolify
+
+Point Coolify at this repository and give it the two compose files:
+
+```
+docker-compose.yml
+docker-compose.production.yml
+```
+
+Set the environment in Coolify rather than in a committed file: `DATABASE_URL`,
+`REDIS_URL`, the object storage credentials, `JWT_SECRET`,
+`METABOLIC_ENGINE_TOKEN`. The production overlay sets the launch switches
+itself, so they cannot be forgotten and cannot be quietly turned off in a
+dashboard.
+
+Coolify's own proxy sits between the tunnel and the containers. It adds a hop,
+which is exactly why the address comes from `CF-Connecting-IP` rather than from
+counting hops — a hop count is a number that has to be changed every time the
+topology does, and nothing fails loudly when it is wrong.
 
 ### Running it
+
+Coolify runs the two compose files itself. To reproduce that by hand on the
+host — which is what to do when a Coolify deploy fails and the logs are not
+saying enough:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml \
@@ -368,7 +423,8 @@ docker compose -f infra/docker/docker-compose.yml \
                --env-file .env up -d --build
 ```
 
-Then, from somewhere outside:
+Then, from somewhere outside — from your own machine, over the public name, so
+the tunnel is part of what is being tested:
 
 ```bash
 npm run canary -- https://wellovue.com --require-production
@@ -379,6 +435,11 @@ rate limits, the applied migration count against the tree, the launch blockers
 the process reports, the public pages, and that the signed-in routes refuse a
 caller with no session. It exits non-zero if the deployment should not carry
 traffic.
+
+Run it over `https://wellovue.com` rather than against the host. Reaching the
+containers directly proves the containers work and proves nothing about the
+tunnel, the DNS record, or the edge — which is where three of the four things
+that break a deployment like this actually live.
 
 ## Backups and restore
 
