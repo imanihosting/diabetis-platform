@@ -76,6 +76,7 @@ COPY metabolic-engine/app/models/findings.py ./metabolic-engine/app/models/findi
 # and names the client-address header, and the frontend's half of the
 # forwarding chain — and a test asserting the shape of a deployment has to be
 # able to see it.
+COPY infra/docker/docker-compose.yml ./infra/docker/docker-compose.yml
 COPY infra/docker/docker-compose.production.yml ./infra/docker/docker-compose.production.yml
 COPY infra/docker/docker-compose.coolify.yml ./infra/docker/docker-compose.coolify.yml
 COPY frontend/Dockerfile ./frontend/Dockerfile

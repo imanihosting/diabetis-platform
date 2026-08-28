@@ -187,6 +187,26 @@ describe('the production deployment turns them all on', () => {
   });
 });
 
+describe('the developer stack is not a deployable one', () => {
+  const base = read('infra/docker/docker-compose.yml');
+
+  it('publishes every port on loopback only', () => {
+    // The mistake this prevents: pointing a deployment at this file because
+    // it is the obvious one. On a host with a public address `"6379:6379"`
+    // listens on all of them, and an unauthenticated Redis holding session
+    // state is then reachable from the internet — as are the API and the
+    // engine, on a path that goes around Cloudflare and with it TLS, the WAF,
+    // and the header rate limiting depends on.
+    const published = base.match(/^\s+- "(?!127\.0\.0\.1:)[0-9]+:[0-9]+"/gm) ?? [];
+    expect(published).toEqual([]);
+    expect(base).toContain('127.0.0.1:6379:6379');
+  });
+
+  it('says out loud that it is not for a server', () => {
+    expect(base).toMatch(/not for a server/i);
+  });
+});
+
 describe('nothing binds a public port behind the tunnel', () => {
   const overlay = read('infra/docker/docker-compose.production.yml');
 

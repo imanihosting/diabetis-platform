@@ -7,6 +7,16 @@
 #
 # For an isolated stack with its own throwaway database and object storage,
 # use docker-compose.test.yml instead — see infra/README.md.
+#
+# **This file is for a developer's machine, not for a server.** Every published
+# port below is bound to 127.0.0.1 for that reason: on a host with a public
+# address, `"6379:6379"` listens on all of them, and an unauthenticated Redis
+# holding session state would be reachable from the internet. So would the API
+# and the engine, on a path that goes around Cloudflare and therefore around
+# TLS, the WAF, and the header rate limiting depends on.
+#
+# The loopback prefix makes that mistake impossible rather than unlikely. To
+# deploy, use docker-compose.coolify.yml, which publishes nothing at all.
 
 name: wellovue
 
@@ -15,7 +25,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -59,7 +69,7 @@ services:
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN}
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     volumes:
       # A public trust anchor, read-only. Committed to the repository because
       # a CA certificate is not a secret and every client needs it.
@@ -99,7 +109,7 @@ services:
     extra_hosts:
       - "medical-db:10.10.5.185"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live').status==200 else 1)"]
       interval: 10s
@@ -121,7 +131,7 @@ services:
       # The browser talks to a same-origin /api that Next rewrites here.
       BACKEND_URL: http://backend:4000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
