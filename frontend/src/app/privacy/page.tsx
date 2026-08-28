@@ -13,8 +13,8 @@ export default function PrivacyPage() {
     >
       <Clause n={1} title="Who is responsible">
         <p>
-          Wellovue is operated by <strong>[LEGAL ENTITY]</strong>, registered in{' '}
-          <strong>[JURISDICTION]</strong>, which is the data controller for the
+          Wellovue is operated by <strong>Wellovue Limited</strong>, registered in{' '}
+          <strong>Ireland</strong>, which is the data controller for the
           information described here. Reach us through the{' '}
           <Link href="/contact">contact page</Link>.
         </p>
@@ -139,8 +139,8 @@ export default function PrivacyPage() {
       <Clause n={8} title="Others who process data for us">
         <p>
           We keep this list short on purpose. At present it is our hosting and
-          infrastructure provider, <strong>[HOSTING PROVIDER]</strong>, and{' '}
-          <strong>[EMAIL PROVIDER]</strong> for the mail we send you. Each is
+          infrastructure provider, <strong>ImaniHosting</strong>, and{' '}
+          <strong>Microsoft</strong> for the mail we send you. Each is
           bound by a data processing agreement. This list is updated when it
           changes.
         </p>

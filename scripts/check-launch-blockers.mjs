@@ -46,6 +46,40 @@ const SKIP_DIRECTORIES = new Set(['node_modules', '.next', 'dist', '.git']);
 /** This file names every placeholder by definition, so it is never a finding. */
 const SELF = relative(ROOT, fileURLToPath(import.meta.url));
 
+/**
+ * Documentation that describes this check, and therefore quotes what it looks
+ * for.
+ *
+ * A deployment runbook that shows the failure output, and a README that says
+ * the release gate refuses a page still saying `[LEGAL ENTITY]`, both contain
+ * the string and neither tells anybody something false about who holds their
+ * health data. Without this they are permanent findings, and a check that
+ * always fails is one people learn to run with `|| true`.
+ *
+ * Named file by file rather than matched by pattern, for the same reason the
+ * placeholders themselves are: a rule broad enough to cover a directory is a
+ * rule that quietly covers the next thing somebody puts in it.
+ *
+ * Nothing under `frontend/src` may appear here, and the guard below enforces
+ * it rather than trusting the list. That is the whole safety property: this
+ * can excuse a document that talks about the problem and can never excuse a
+ * page that has it.
+ */
+const DOCUMENTS_THE_CHECK = new Set([
+  'README.md',
+  join('docs', 'coolify-deployment.md'),
+]);
+
+for (const excused of DOCUMENTS_THE_CHECK) {
+  if (excused.startsWith('frontend/') || excused.startsWith(join('frontend', ''))) {
+    console.error(
+      `${excused} cannot be excused: it is a user-facing page. This list is ` +
+        'for documents that describe the check, never for pages subject to it.',
+    );
+    process.exit(2);
+  }
+}
+
 async function* walk(path) {
   const entries = await readdir(join(ROOT, path), { withFileTypes: true }).catch(() => null);
   if (!entries) {
@@ -64,7 +98,7 @@ const findings = [];
 
 for (const root of SEARCH_ROOTS) {
   for await (const file of walk(root)) {
-    if (file === SELF) continue;
+    if (file === SELF || DOCUMENTS_THE_CHECK.has(file)) continue;
     const text = await readFile(join(ROOT, file), 'utf8').catch(() => '');
     for (const [placeholder, waitingOn] of Object.entries(PLACEHOLDERS)) {
       if (!text.includes(placeholder)) continue;

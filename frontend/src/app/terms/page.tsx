@@ -15,8 +15,8 @@ export default function TermsPage() {
         <p>
           By creating an account or using Wellovue you accept these terms. If you
           do not, please do not use the service. Wellovue is operated by{' '}
-          <strong>[LEGAL ENTITY]</strong>, registered in{' '}
-          <strong>[JURISDICTION]</strong>.
+          <strong>Wellovue Limited</strong>, registered in{' '}
+          <strong>Ireland</strong>.
         </p>
       </Clause>
 
@@ -142,7 +142,7 @@ export default function TermsPage() {
           limited. Beyond that, and to the extent the law allows, we are not
           liable for indirect or consequential loss, and our total liability is
           limited to the greater of the amount you paid us in the previous twelve
-          months or <strong>[LIABILITY CAP]</strong>.
+          months or <strong>&#8364;100</strong>.
         </p>
         <p>
           Because clause 2 matters more than this one: we are not liable for
@@ -161,7 +161,7 @@ export default function TermsPage() {
       <Clause n={9} title="Changes and governing law">
         <p>
           We will post material changes here before they take effect. These terms
-          are governed by the laws of <strong>[JURISDICTION]</strong>, and its
+          are governed by the laws of <strong>Ireland</strong>, and its
           courts have exclusive jurisdiction.
         </p>
       </Clause>
