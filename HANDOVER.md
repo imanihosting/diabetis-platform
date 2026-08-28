@@ -1,6 +1,7 @@
 # Handover
 
-State of Wellovue as of 27 August 2026, at commit `6cccc0a` plus launch hardening.
+State of Wellovue as of 28 August 2026, at commit `71964d7`, which is also
+`origin/main` — nothing is unpushed.
 
 Read this before changing anything. Several decisions below look arbitrary and
 are not, and a few traps in this repo will cost you an hour if you meet them
@@ -77,13 +78,23 @@ read. All seven steps exist. What is left is not the loop.
 - The clinician packet: thirty or ninety days on one page — findings with their
   limitations, glucose, lab trends, every experiment with the expectation
   recorded before it ran, and what is worth raising
-- Rate limiting on public endpoints; CI on every push
-- Public site: landing, About, How this works, Contact, and the policy pages
+- Findings carry the glucose they compared: mean response curves against the
+  target band, human titles and a diabetes lens, p-value behind a disclosure
+- Hour-of-day findings read the account's timezone, and CSV imports parse
+  offset-less device times in it
+- Rate limiting shared across replicas in Redis; database TLS verified against
+  an internal CA; a canary that checks a deployment over HTTP; CI on every push
+- Public site: landing, About, How this works, White paper, Contact, and the
+  policy pages
+- A locked design system in `DESIGN.md`, applied: surfaces rather than bordered
+  boxes, product-width app shell, one control vocabulary, and an icon
 
 **Not built.** Named plainly on the public pages too, which matters — see §7.
 
 - Weighing competing explanations for a pattern. Step four of the loop, and the
-  only one still labelled "Being built"
+  only thing still labelled "Being built" anywhere on the public pages. Nothing
+  implements it: `experiments.hypotheses` has existed since migration 0006 and
+  nothing has ever inserted a row
 - Exporting the packet. It is a web page and nothing else: no PDF, no print
   stylesheet beyond dropping the app chrome, no share link. Deliberate — the
   page had to be right before the format question was worth asking
@@ -375,11 +386,16 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 78 unit tests,
-180 integration, 29 engine, nineteen migrations, six guard triggers, eleven
+readers evaluating the platform and it quotes specific numbers: 83 unit tests,
+184 integration, 38 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
--1.3. Every one of those was checked against the repository and the live
-database when it was written; check them again before changing them. It embeds
+-1.3.
+
+**These go stale silently.** They were already wrong once — the counts moved
+when the timezone work added tests and the page kept quoting the old ones,
+which is a public page making a false specific claim. Nothing enforces this.
+Re-check them whenever the suites or the migration count change, or write the
+check that would. It embeds
 the same `LoopSteps` component as `/how-it-works`, so the build labels cannot
 drift between the two. It deliberately carries no market sizing, revenue model,
 user count or funding ask, and says so on the page — those would be the only
@@ -606,32 +622,71 @@ and a gate that goes red for the shipped configuration gets switched off.
 
 ## 12. Where to pick up
 
-`docs/diabetes-wide-platform.md` § **Next Implementation Ticket** is kept
-current and is the answer to "what now". The loop is closed, so what is left is
-no longer a ticket in that sequence — it is a choice between four things, and
-the order is a judgement somebody should make deliberately rather than by
-picking up whatever is nearest:
+`docs/diabetes-wide-platform.md` § **Next Implementation Ticket** tracks the
+loop, and the loop is closed. What is left is a choice between five things.
+Pick deliberately rather than by whatever is nearest — they have very different
+shapes, and two of them are not code.
 
-1. **The rest of the go-live blockers in §10.** The code side is done: rate
-   limits are shared, both unsafe states refuse to start behind a flag, a
-   canary checks a deployment from outside, and the legal placeholders cannot
-   ship. What is left is not code — a DNS name for the database host, a
-   certificate for it, a reverse proxy that sets `X-Forwarded-For`, and the
-   five legal facts plus a lawyer to read the result. The DNS name is the only
-   item with a lead time, and it blocks the certificate.
-2. **Exporting the packet.** It is a web page and nothing else. A printed sheet
-   is what actually gets carried into an appointment, and the page was built
-   for a printer without anybody testing it against one.
-3. **Weighing competing explanations.** The last loop step still labelled
-   "Being built" on the public pages, and the one that would change what the
-   engine says rather than how it is presented.
-4. **Recording a clinician's agreement.** Until this exists, every
-   clinician-gated experiment waits forever, and the product says so in as many
-   words. That is honest but it is not finished.
+**The most recent review of the engine** (28 August) said it well: the engine
+is safe and directionally right, but it understands "patterns in diabetes data"
+more than it understands diabetes. Its first three recommendations shipped in
+`4c34810` and `71964d7` — timezone-aware hours, timezone-aware CSV import,
+refusing an unresolvable zone, and a version bump. Two remain, and they are 1
+and 2 below.
 
-Gestational and Type 1 stay parked behind clinical review either way, and
-per-user target ranges still wait on something ready to honour them.
+1. **Richer post-meal features.** Peak, time-to-peak, minutes above range,
+   return-to-range, area above target. Nearly free: `GroupMeasure.curve`
+   already carries the mean response at fifteen-minute offsets, so this is
+   arithmetic over data the engine already returns, plus contract and UI. It is
+   the most diabetes-native output per unit of work left anywhere in the
+   product, and it is the natural next thing after the evidence redesign.
 
-One caution before touching the public pages: see §7. Two "Being built" labels
-have come off so far, each when the thing it covered started existing, and that
-is the only reason one should.
+2. **Data quality and CGM coverage.** Sensor coverage, gaps, sampling density,
+   days worn, fingerstick versus CGM — folded into evidence strength rather
+   than left as sample count and confidence. Deliberately its own ticket:
+   it changes what every existing confidence number means, so it should not
+   ride along with anything else.
+
+3. **Weighing competing explanations.** Step four, and the only "Being built"
+   label left. It needs the treatment `suggestions.py` got — a reviewed
+   per-detector catalogue enforced by engine tests, not free text — because a
+   competing explanation is a clinical claim and the frontend is the one place
+   it must never be written. See §6.
+
+4. **Exporting the clinician packet.** A printed sheet is what gets carried
+   into an appointment, and the page was built for a printer without anybody
+   testing it against one. Reuse the server packet; do not build a second
+   report path.
+
+5. **The rest of the go-live blockers in §10**, none of which is code: a DNS
+   name for the database host, a reverse proxy that sets `X-Forwarded-For`,
+   and the five legal facts plus a lawyer. The DNS name is the only item here
+   with a lead time.
+
+Gestational and Type 1 stay parked behind clinical review regardless of how
+ready the engine looks. That gate is doing its job; do not route around it.
+
+### Before you touch anything
+
+- **`npm ci`, never `npm install`.** See §8. To add a dependency, resolve the
+  lockfile from a space-free path.
+- **`npm run db:migrate` will not resolve `medical-db` from a developer Mac**
+  until `echo "10.10.5.185 medical-db" | sudo tee -a /etc/hosts` has been run.
+  This has not been done on the machine this was written from. The containers
+  carry their own mapping and are unaffected. Until then, migrate from a
+  container:
+  ```bash
+  docker run --rm --add-host medical-db:10.10.5.185 -v "$PWD":/w -w /w \
+    --env-file <(grep -E '^DATABASE_URL=|^DATABASE_SSL_REJECT' .env) \
+    -e DATABASE_CA_CERT=/w/infra/db/ca.crt node:22-slim node scripts/migrate.mjs
+  ```
+- **`npm run docker:up` does not reliably rebuild every service.** It has left
+  the metabolic engine running two-and-a-half-hour-old code while reporting
+  healthy. After changing the engine or the shared contract, force it:
+  `docker compose -f infra/docker/docker-compose.yml --env-file .env up -d
+  --build --force-recreate metabolic-engine backend frontend`. A stale
+  container is the single most likely reason a change "did not work".
+- **Read `DESIGN.md` before changing any interface**, and §7 before changing
+  any public page.
+- **The integration suite fails about one run in six** for reasons that are not
+  the product. See §8; do not go looking for an auth bug.
