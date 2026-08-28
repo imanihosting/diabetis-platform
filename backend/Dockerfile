@@ -38,6 +38,20 @@ RUN npm ci --omit=dev --include-workspace-root \
 COPY --from=build /app/packages/types/dist ./packages/types/dist
 COPY --from=build /app/backend/dist ./backend/dist
 
+# The database's trust anchor, baked in rather than bind-mounted.
+#
+# It used to arrive as a bind mount from the checkout. That works on a machine
+# where the checkout stays put and fails on a platform that builds in a
+# temporary directory and then deletes it: Docker replaces a missing bind
+# source with an empty *directory*, `readFileSync` throws EISDIR, and the
+# process exits about a second after starting. Coolify does exactly that.
+#
+# A CA certificate is not a secret — it is committed to this repository for
+# that reason, and every client needs it — so there is nothing to protect by
+# keeping it outside the image, and everything to gain from it being somewhere
+# that cannot vanish underneath a running container.
+COPY infra/db/ca.crt /etc/wellovue/db-ca.crt
+
 # Run unprivileged: this process handles health records.
 USER node
 EXPOSE 4000

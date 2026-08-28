@@ -70,10 +70,11 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     ports:
       - "127.0.0.1:4000:4000"
-    volumes:
-      # A public trust anchor, read-only. Committed to the repository because
-      # a CA certificate is not a secret and every client needs it.
-      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+    # The trust anchor is baked into the image rather than mounted. It used to
+    # be a bind mount, which is fine on a machine where the checkout stays put
+    # and fatal on a platform that builds in a temporary directory and deletes
+    # it — Docker replaces the missing source with an empty directory and the
+    # process exits on EISDIR. Baked, both cases behave the same.
     extra_hosts:
       # The certificate is issued for this name. node-postgres only tells Node
       # which host to verify when the host is not an IP address (see
@@ -104,8 +105,6 @@ services:
       # it without the engine needing to know the URL was written for two
       # different drivers.
       PGSSLROOTCERT: /etc/wellovue/db-ca.crt
-    volumes:
-      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
     extra_hosts:
       - "medical-db:10.10.5.185"
     ports:

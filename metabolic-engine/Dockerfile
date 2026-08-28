@@ -23,6 +23,18 @@ WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 COPY app ./app
 
+# The database's trust anchor. `ca.crt` here is a copy of infra/db/ca.crt,
+# kept beside this Dockerfile because the build context is this directory and
+# cannot reach the repository root.
+#
+# Baked in rather than bind-mounted: a mount from the checkout breaks on any
+# platform that builds in a temporary directory and deletes it afterwards,
+# and psycopg then fails to verify with a message about the certificate rather
+# than about the missing file. A CA certificate is public, so the copy costs
+# nothing but the duplication — which backend/test/launch-hardening.spec.ts
+# checks stays identical to the original.
+COPY ca.crt /etc/wellovue/db-ca.crt
+
 RUN useradd --create-home --uid 1001 engine
 USER engine
 EXPOSE 8000

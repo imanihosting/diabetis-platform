@@ -103,8 +103,11 @@ services:
       METABOLIC_ENGINE_URL: http://metabolic-engine:8000
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN:?set METABOLIC_ENGINE_TOKEN in Coolify}
       NEXT_PUBLIC_APP_URL: https://wellovue.com
-    volumes:
-      - ./infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+    # No volume for the CA certificate: it is baked into the image. A bind
+    # mount from the checkout breaks here, because Coolify builds in a
+    # temporary directory and deletes it — Docker then replaces the missing
+    # source with an empty directory and the process exits on EISDIR about a
+    # second after starting.
     extra_hosts:
       # node-postgres only tells Node which host to verify when the host is not
       # an IP address, so verify-full is unreachable by address however the
@@ -137,8 +140,6 @@ services:
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN:?set METABOLIC_ENGINE_TOKEN in Coolify}
       ENVIRONMENT: production
       PGSSLROOTCERT: /etc/wellovue/db-ca.crt
-    volumes:
-      - ./infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
     extra_hosts:
       - 'medical-db:10.10.5.185'
     healthcheck:

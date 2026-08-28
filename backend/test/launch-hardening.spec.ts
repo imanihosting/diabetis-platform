@@ -233,6 +233,29 @@ describe('a launch build cannot bake in the wrong site URL', () => {
   });
 });
 
+describe('the database trust anchor survives the deployment', () => {
+  const coolify = read('infra/docker/docker-compose.coolify.yml');
+
+  it('is baked into both images rather than mounted from the checkout', () => {
+    // The failure this fixes: Coolify builds in a temporary directory and
+    // deletes it. Docker replaces a missing bind source with an empty
+    // *directory*, readFileSync throws EISDIR, and the backend exits about a
+    // second after starting — which reads as an unhealthy container and says
+    // nothing about a certificate.
+    expect(read('backend/Dockerfile')).toContain('COPY infra/db/ca.crt /etc/wellovue/db-ca.crt');
+    expect(read('metabolic-engine/Dockerfile')).toContain('COPY ca.crt /etc/wellovue/db-ca.crt');
+    expect(coolify).not.toContain('ca.crt:/etc/wellovue/db-ca.crt');
+  });
+
+  it('keeps the engine copy identical to the original', () => {
+    // The engine's build context is its own directory and cannot reach
+    // infra/db, so the certificate exists twice. A trust anchor that has
+    // drifted from the one the backend uses would mean one service verifying
+    // the database and the other refusing to.
+    expect(read('metabolic-engine/ca.crt')).toBe(read('infra/db/ca.crt'));
+  });
+});
+
 describe('the Coolify file resolves its paths from the repository root', () => {
   const coolify = read('infra/docker/docker-compose.coolify.yml');
 
