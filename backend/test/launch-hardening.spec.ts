@@ -173,7 +173,7 @@ describe('the production deployment turns them all on', () => {
     // The backend is the API and the engine's only protection is a service
     // token. Neither may be routable from outside.
     expect(coolify).not.toMatch(/^\s+- '(4000|8000|6379):/m);
-    expect(coolify).toMatch(/frontend:[\s\S]*expose:\s*\n\s+- '3000'/);
+    expect(coolify).toMatch(/frontend:[\s\S]*127\.0\.0\.1:3000:3000/);
   });
 
   it('names the production site so canonical URLs are right', () => {
@@ -288,12 +288,22 @@ describe('the Coolify file resolves its paths from the repository root', () => {
 describe('nothing binds a public port behind the tunnel', () => {
   const overlay = read('infra/docker/docker-compose.production.yml');
 
-  it('exposes the services to the network and publishes neither', () => {
-    // cloudflared dials out and is the only ingress. A published port would be
-    // a second way in that skips Cloudflare, and therefore skips TLS, the
-    // WAF, and the header that rate limiting depends on.
-    expect(overlay).not.toMatch(/^\s+- '(80|443|3000|4000):/m);
-    expect((overlay.match(/ports: !reset \[\]/g) ?? []).length).toBe(2);
+  it('publishes nothing beyond loopback', () => {
+    // cloudflared dials out and is the only ingress. A port published on
+    // 0.0.0.0 would be a second way in that skips Cloudflare, and therefore
+    // skips TLS, the WAF, and the header rate limiting depends on.
+    //
+    // The frontend is published on 127.0.0.1 so the tunnel — which runs on the
+    // host network — has a fixed origin to point at. That is reachable from
+    // the host and from nowhere else.
+    expect(overlay).not.toMatch(/^\s+- '(?!127\.0\.0\.1:)[0-9]+:[0-9]+'/m);
+    expect(overlay).toContain("- '127.0.0.1:3000:3000'");
+  });
+
+  it('publishes nothing at all for the backend or the engine', () => {
+    // Only the frontend is reachable, and only from the host. The backend is
+    // the API and the engine's protection is a service token.
+    expect(overlay).not.toMatch(/127\.0\.0\.1:(4000|8000|6379)/);
   });
 
   it('reads the client address from the edge rather than from a list', () => {

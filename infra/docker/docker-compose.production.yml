@@ -30,11 +30,13 @@ services:
       # dropping them. Without this the chain breaks here and the backend keys
       # every request in the deployment on one container.
       TRUST_PROXY: 'true'
-    # Reached by the tunnel over the compose network. Publishing a port would
-    # be a second way in that skips Cloudflare entirely.
-    expose:
-      - '3000'
-    ports: !reset []
+    # Published on loopback so the tunnel has a fixed origin to point at.
+    # `cloudflared` runs on the host network, so 127.0.0.1 is what it can reach
+    # and nothing else can — not the LAN, not the internet. A port on 0.0.0.0
+    # would be a second way in that skips Cloudflare, and with it TLS, the WAF
+    # and the CF-Connecting-IP header the rate limiter keys on.
+    ports: !override
+      - '127.0.0.1:3000:3000'
 
   backend:
     environment:

@@ -121,11 +121,17 @@ wins.
 | Setting | Value |
 |---|---|
 | Tunnel public hostname | `wellovue.com` |
-| Service | `http://frontend:3000` |
+| Service | `http://localhost:3000` |
 | DNS records | `wellovue.com` and `www.wellovue.com`, **proxied** (orange cloud) |
 
-`http://` on the tunnel route is correct and is not a downgrade: that hop is
-inside the tunnel, which is encrypted end to end from the Cloudflare edge.
+`localhost` rather than a container name or Coolify's proxy: `cloudflared`
+runs on the **host** network, so 127.0.0.1 is the Coolify host itself, and the
+frontend publishes 3000 there. A container IP works too but changes on every
+redeploy, and Coolify's own proxy needs the port in its domain label before it
+will route at all.
+
+`http://` is correct and is not a downgrade: that hop is on loopback, inside a
+tunnel that is encrypted end to end from the Cloudflare edge.
 
 The records must stay proxied. A grey-cloud record points at nothing, and the
 orange cloud is what guarantees `CF-Connecting-IP` is set on every request —
