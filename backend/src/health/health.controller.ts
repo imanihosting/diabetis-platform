@@ -79,6 +79,11 @@ export class HealthController {
       // `sslmode=verify-full` in the URL alone proves nothing: node-postgres
       // is handed `rejectUnauthorized` separately and that is what decides.
       databaseTlsVerified: this.env.DATABASE_SSL_REJECT_UNAUTHORIZED,
+      // Null until the first connection is opened, and whenever the connection
+      // is not TLS at all. Exposed because verification and expiry are one
+      // piece of work: once REQUIRE_VERIFIED_DB_TLS is on, a certificate
+      // nobody renewed is not a warning, it is a service that will not start.
+      databaseCertificate: this.db.certificate,
       rateLimit:
         throttler instanceof ResilientThrottlerStorage
           ? {

@@ -34,6 +34,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
    */
   private readonly slowQueryMs: number;
   private readonly slowAcquireMs: number;
+  private peerCertificate: DatabaseCertificate | null = null;
 
   constructor(@Inject(ENV) env: Env) {
     this.slowQueryMs = env.SLOW_QUERY_WARN_MS;
@@ -68,6 +69,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       keepAliveInitialDelayMillis: 30_000,
       connectionTimeoutMillis: 10_000,
       application_name: 'wellovue-backend',
+    });
+
+    // Read off each new socket rather than probing on demand: the certificate
+    // cannot change without a new connection, and a health endpoint should not
+    // be able to open one.
+    this.pool.on('connect', (client) => {
+      this.peerCertificate = readPeerCertificate(client) ?? this.peerCertificate;
     });
 
     this.pool.on('error', (err) => {
@@ -156,5 +164,64 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async ping(): Promise<boolean> {
     const rows = await this.query<{ ok: number }>('select 1 as ok');
     return rows[0]?.ok === 1;
+  }
+
+  /**
+   * The certificate the database presented, as of the last connection opened.
+   *
+   * Null when the connection is not TLS, or when node-postgres has changed
+   * shape underneath the reach into its socket below.
+   *
+   * Reported so the expiry is visible from outside the container, because
+   * switching on `REQUIRE_VERIFIED_DB_TLS` turns certificate renewal into a
+   * hard dependency: an expired certificate stops being a tolerated weakness
+   * and becomes a service that refuses to start. Monitoring the date is not
+   * separate work from verifying the certificate — it is the half that keeps
+   * the first half from becoming an outage on a schedule.
+   */
+  get certificate(): DatabaseCertificate | null {
+    return this.peerCertificate;
+  }
+}
+
+export interface DatabaseCertificate {
+  subject: string;
+  issuer: string;
+  expiresAt: string;
+  daysRemaining: number;
+}
+
+/**
+ * Reaches through node-postgres to the TLS socket it is holding.
+ *
+ * There is no public API for the peer certificate, so this walks a private
+ * shape. Every step is guarded and the whole thing is wrapped: a change in pg
+ * should cost this a health-endpoint field, never a database connection.
+ */
+function readPeerCertificate(client: unknown): DatabaseCertificate | null {
+  try {
+    const socket = (client as { connection?: { stream?: unknown } }).connection?.stream;
+    const getPeerCertificate = (socket as { getPeerCertificate?: () => unknown })
+      ?.getPeerCertificate;
+    if (typeof getPeerCertificate !== 'function') return null;
+
+    const cert = getPeerCertificate.call(socket) as {
+      valid_to?: string;
+      subject?: { CN?: string };
+      issuer?: { CN?: string };
+    } | null;
+    if (!cert?.valid_to) return null;
+
+    const expiresAt = new Date(cert.valid_to);
+    if (Number.isNaN(expiresAt.getTime())) return null;
+
+    return {
+      subject: cert.subject?.CN ?? 'unknown',
+      issuer: cert.issuer?.CN ?? 'unknown',
+      expiresAt: expiresAt.toISOString(),
+      daysRemaining: Math.floor((expiresAt.getTime() - Date.now()) / 86_400_000),
+    };
+  } catch {
+    return null;
   }
 }

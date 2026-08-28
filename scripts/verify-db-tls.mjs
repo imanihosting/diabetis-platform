@@ -69,11 +69,44 @@ async function probe(verify) {
     const { rows } = await client.query(
       "select ssl, version, cipher from pg_stat_ssl where pid = pg_backend_pid()",
     );
+    // Read off the live socket before closing it. node-postgres exposes no
+    // API for the peer certificate, so this reaches through to the TLS socket
+    // it is holding; every step is optional-chained because a shape change in
+    // pg should cost this script its certificate detail, never its verdict.
+    const certificate = peerCertificate(client);
     await client.end();
-    return { ok: true, info: rows[0] };
+    return { ok: true, info: rows[0], certificate };
   } catch (err) {
     await client.end().catch(() => {});
     return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * The certificate the server actually presented, or null.
+ *
+ * Reported because the interesting question changes the moment verification is
+ * switched on. Before that, an expiring certificate is tolerated silently.
+ * After it, an expired one means the backend refuses to start — which is the
+ * correct behaviour and also a scheduled outage if nobody was watching the
+ * date. Verification and expiry monitoring are the same piece of work; doing
+ * the first without the second trades a quiet risk for a quiet deadline.
+ */
+function peerCertificate(client) {
+  try {
+    const socket = client.connection?.stream;
+    const cert = socket?.getPeerCertificate?.();
+    if (!cert || !cert.valid_to) return null;
+    const expiresAt = new Date(cert.valid_to);
+    return {
+      subject: cert.subject?.CN ?? 'unknown',
+      issuer: cert.issuer?.CN ?? 'unknown',
+      names: cert.subjectaltname ?? '',
+      expiresAt,
+      daysRemaining: Math.floor((expiresAt.getTime() - Date.now()) / 86_400_000),
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -89,7 +122,34 @@ if (verified.ok) {
     console.error('FAIL: the server accepted the connection without TLS.');
     process.exit(1);
   }
+  const cert = verified.certificate;
+  if (cert) {
+    console.log(`Issued to:   ${cert.subject}`);
+    console.log(`Issued by:   ${cert.issuer}`);
+    if (cert.names) console.log(`Valid for:   ${cert.names}`);
+    console.log(
+      `Expires:     ${cert.expiresAt.toISOString().slice(0, 10)} ` +
+        `(${cert.daysRemaining} days)`,
+    );
+    console.log('');
+  }
+
   console.log('PASS: the certificate chain and hostname both verified.');
+
+  // Renewal is the part that fails quietly. Let's Encrypt issues for 90 days
+  // and renews at 30; a certificate inside that window that has not renewed
+  // means the timer, the hook or the DNS credential has stopped working, and
+  // with REQUIRE_VERIFIED_DB_TLS=true the deadline is an outage rather than a
+  // warning.
+  if (cert && cert.daysRemaining <= 21) {
+    console.log('');
+    console.error(
+      `WARNING: the certificate expires in ${cert.daysRemaining} days and ` +
+        'renewal has not replaced it. Check `certbot renew --dry-run` and the ' +
+        'deploy hook that reloads PostgreSQL — a renewed certificate on disk ' +
+        'that PostgreSQL never reloaded looks exactly like this.',
+    );
+  }
   if (!rejectUnauthorized) {
     console.log('');
     console.log(
@@ -117,6 +177,20 @@ if (unverified.ok) {
       'and an attacker who can answer as the database will not be detected. ' +
       'See the TLS section of infra/README.md.',
   );
+
+  // What was actually presented. "Issued to localhost by localhost" answers
+  // the question in one line, and distinguishes a certificate for the wrong
+  // name — which is a five-minute fix — from no real certificate at all.
+  const cert = unverified.certificate;
+  if (cert) {
+    console.error('');
+    console.error(`  presented: ${cert.subject}, issued by ${cert.issuer}`);
+    if (cert.names) console.error(`  valid for: ${cert.names}`);
+    console.error(
+      `  expires:   ${cert.expiresAt.toISOString().slice(0, 10)} ` +
+        `(${cert.daysRemaining} days)`,
+    );
+  }
   if (isIpLiteral) {
     console.error('');
     console.error(

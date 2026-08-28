@@ -112,6 +112,24 @@ async function main() {
         : 'encrypted but UNVERIFIED — an attacker answering as the database is not detected',
     );
 
+    // Expiry, separately from validity. A certificate that verifies today and
+    // expires next week is the specific failure this platform arranges for
+    // itself the moment REQUIRE_VERIFIED_DB_TLS is on: the backend stops
+    // starting. Let's Encrypt issues for 90 days and renews at 30, so anything
+    // under three weeks means renewal has already stopped working.
+    const cert = posture.databaseCertificate;
+    if (cert) {
+      const days = cert.daysRemaining;
+      record(
+        'database certificate',
+        days <= 7 ? 'fail' : days <= 21 ? 'warn' : 'pass',
+        `${cert.subject}, issued by ${cert.issuer}, expires in ${days} days` +
+          (days <= 21
+            ? ' — renewal has not replaced it; check the certbot timer and the reload hook'
+            : ''),
+      );
+    }
+
     const shared = posture.rateLimit?.sharedAcrossReplicas;
     record(
       'rate limits shared',

@@ -69,46 +69,141 @@ parent row still resolves, since PostgreSQL removes a parent before cascading.
 
 ## TLS
 
-The PostgreSQL VM currently presents its default self-signed certificate, so
-connections are encrypted but unverified (`sslmode=require` plus
-`DATABASE_SSL_REJECT_UNAUTHORIZED=false`).
+The PostgreSQL VM currently presents its own self-signed certificate — issued
+to `medical-db`, by `medical-db` — so connections are encrypted but unverified
+(`sslmode=require` plus `DATABASE_SSL_REJECT_UNAUTHORIZED=false`).
 
 Encryption without verification stops someone reading the traffic and does
 nothing about someone answering as the database. For a health record that is
 the half that matters, so this is a go-live blocker rather than a hardening
 nice-to-have.
 
-The backend now says so on every boot. While `DATABASE_SSL_REJECT_UNAUTHORIZED`
-is false it logs a warning naming the risk; setting `REQUIRE_VERIFIED_DB_TLS=true`
-turns that warning into a refusal to start. It is opt-in rather than implied by
-`NODE_ENV`, because the running deployment has always had this condition and
-enforcing it on upgrade would take the service down rather than fix it.
+The backend says so on every boot. While `DATABASE_SSL_REJECT_UNAUTHORIZED` is
+false it logs a warning naming the risk; `REQUIRE_VERIFIED_DB_TLS=true` turns
+that warning into a refusal to start.
 
-**The sequence:**
+### What actually blocks it
 
-1. **Give the database host a DNS name.** This is first because it is the only
-   step with a lead time, and nothing after it can start without it.
-   `verify-full` checks the certificate against the host being connected to,
-   and RFC 6066 does not permit an IP literal in SNI — so `10.10.5.185` has no
-   name to check and no certificate can fix that. The backend refuses to start
-   with a message saying exactly this if `REQUIRE_VERIFIED_DB_TLS=true` is set
-   while `DATABASE_URL` still points at a bare address, rather than letting the
-   handshake fail and sending somebody after their certificate for a week.
-2. Issue a CA-signed certificate for that name. An internal CA is fine; what
-   matters is that the client can verify a chain it was configured to trust.
-3. Install the certificate and key on the VM, point `ssl_cert_file` and
-   `ssl_key_file` at them, and reload PostgreSQL.
-4. Distribute the CA certificate to every client that connects: the backend
-   container, the metabolic engine container, and the migration runner.
-5. Change `DATABASE_URL` to `sslmode=verify-full`, set
-   `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, and set `REQUIRE_VERIFIED_DB_TLS=true`.
-6. Verify before trusting it. `npm run db:verify-tls` connects and reports what
-   the connection actually negotiated; it exits non-zero if the certificate did
-   not verify. Run it from a machine that is not the database host.
+Not the certificate — the name. `verify-full` checks that the certificate was
+issued for the host being connected to, and RFC 6066 does not permit an IP
+literal in SNI. `DATABASE_URL` connects to `10.10.5.185`, which has no name to
+check a certificate against, and no certificate can fix that. Setting
+`REQUIRE_VERIFIED_DB_TLS=true` while the URL is still an address is refused at
+boot with that reason, rather than failing the handshake and sending somebody
+after their certificate for a week.
+
+So the name comes first, and it is the only step here with a lead time.
+
+### Getting a name and a certificate without exposing the database
+
+The database is on the private network with every client that talks to it. It
+does not need to be publicly reachable, and putting it behind a tunnel to make
+it so would add a public path to Postgres in exchange for nothing.
+
+What is needed is narrower: a **name**, and a **certificate issued for that
+name** that the clients already trust. Both are obtainable without the host
+being reachable from the internet, because ACME's DNS-01 challenge proves
+control of the *name* by writing a TXT record — it never connects to the host.
+
+Two ways to hold the name, and the second is preferred.
+
+**A — a public DNS-only record.** In Cloudflare, an `A` record for
+`db.example.com` pointing at `10.10.5.185`, with the proxy **off** (grey
+cloud). Cloudflare accepts private addresses on unproxied records; it cannot
+proxy them, and 5432 is not a proxied port in any case. Simple and needs no
+per-client configuration. It publishes internal addressing to anyone who asks,
+permanently, and some resolvers strip RFC1918 answers from public DNS as
+rebinding protection — so test resolution from inside a container before
+relying on it.
+
+**B — no public record at all.** DNS-01 never reads the `A` record, so a
+certificate can be issued for a name that only resolves privately. Put the
+mapping where it is used: `extra_hosts` on the `backend` and `metabolic-engine`
+services in `docker-compose.yml`, and `/etc/hosts` on any machine that runs
+`db:migrate` or `db:verify-tls`.
+
+```yaml
+    extra_hosts:
+      - "db.example.com:10.10.5.185"
+```
+
+Nothing about the internal network becomes queryable, and no resolver can strip
+an answer that was never served. The cost is a mapping per client, and the
+failure mode when one is missed is loud: the name does not resolve, or the boot
+check refuses an IP-literal URL by name.
+
+### The sequence
+
+Each step is independently reversible, and none of them changes what the
+running application does until step 5. Do not start at step 5.
+
+1. **Choose the name and make it resolve.** Option A or B above. Verify from
+   where it matters rather than from a laptop:
+   ```bash
+   docker exec wellovue-backend-1 getent hosts db.example.com
+   ```
+2. **Check CAA does not block issuance.** `dig CAA example.com`. Empty means no
+   restriction, which is fine. If there are records and `letsencrypt.org` is
+   not among them, issuance fails with an unhelpful error.
+3. **Issue the certificate on the database VM**, so the private key is
+   generated where it will be used and never travels. The Cloudflare API token
+   wants Zone → DNS → Edit on that one zone and nothing else.
+   ```bash
+   sudo apt install certbot python3-certbot-dns-cloudflare
+   printf 'dns_cloudflare_api_token = %s\n' "$TOKEN" | sudo tee /root/.cf.ini
+   sudo chmod 600 /root/.cf.ini
+   sudo certbot certonly --dns-cloudflare \
+     --dns-cloudflare-credentials /root/.cf.ini -d db.example.com
+   ```
+4. **Install it and make renewal reinstall it.** PostgreSQL requires the key to
+   be `0600` and owned by the `postgres` user, which Let's Encrypt's own
+   directory permissions do not satisfy — copy the files rather than symlinking
+   into `/etc/letsencrypt/live`, point `ssl_cert_file` and `ssl_key_file` at
+   the copies, and reload.
+
+   The deploy hook is the step people skip, and it is the one that fails
+   silently: certbot renews on schedule, PostgreSQL goes on serving the old
+   certificate from memory, and nothing says so until it expires.
+   ```bash
+   sudo certbot renew --deploy-hook /usr/local/bin/reload-postgres-cert
+   sudo certbot renew --dry-run   # proves DNS-01 and the hook, before trusting them
+   ```
+5. **Switch the URL, then verification, then enforcement** — three separate
+   changes, each safe to stop at:
+   - `DATABASE_URL` to `postgresql://…@db.example.com:5432/diabetes?sslmode=verify-full`,
+     leaving `DATABASE_SSL_REJECT_UNAUTHORIZED=false`. Nothing is enforced yet;
+     the application should behave exactly as before.
+   - `DATABASE_SSL_REJECT_UNAUTHORIZED=true`. Now the certificate is actually
+     checked. If this breaks, the change to revert is one line.
+   - `REQUIRE_VERIFIED_DB_TLS=true`, which only makes the state
+     non-regressable: from here a misconfiguration refuses to boot instead of
+     quietly downgrading.
+6. **Verify, rather than assume.** `npm run db:verify-tls` connects with
+   verification demanded regardless of what the environment asks for, reports
+   the certificate's subject, issuer, names and expiry, and exits non-zero if
+   anything did not check out. Run it from a machine that is not the database
+   host, so the path under test is the one real traffic takes.
+
+### After it is on, watch the date
+
+Verification and expiry monitoring are one piece of work. Before step 5 an
+expiring certificate is a tolerated weakness; after it, an expired one is a
+backend that will not start. The gap between those two facts is a scheduled
+outage if nobody is watching.
+
+`/api/health/posture` reports the certificate the database presented, and
+`npm run canary -- <url>` warns under 21 days and fails under 7 — Let's Encrypt
+issues for 90 days and renews at 30, so anything inside three weeks means
+renewal has already stopped working. A renewed certificate sitting on disk that
+PostgreSQL never reloaded looks identical from outside, which is the case the
+deploy hook in step 4 exists to prevent.
 
 Note that the Python engine reads `sslmode` straight from the URL, so step 5
 covers it too — psycopg honours `verify-full` natively and needs no separate
-flag.
+flag. Neither service needs a CA bundle for this: Node carries its own root
+store and the engine image has the system one, which is the practical argument
+for a publicly-trusted certificate over an internal CA, since the latter would
+need `NODE_EXTRA_CA_CERTS` and `sslrootcert` wired into both.
 
 ## Object storage
 
