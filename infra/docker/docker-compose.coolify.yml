@@ -176,20 +176,22 @@ services:
       # dropping them. Without this the chain breaks here and every request in
       # the deployment keys on one container.
       TRUST_PROXY: 'true'
-    # Published on loopback, and only on loopback.
+    # Published on the host, the way every other application on this server is.
     #
-    # `cloudflared` runs on the host network, so 127.0.0.1 is exactly what it
-    # can reach and nothing else can: not the LAN, not the internet. That makes
-    # the tunnel's origin a fixed address — `http://localhost:3000` — instead
-    # of a container IP that changes on every redeploy, or Coolify's proxy,
-    # which needs the port in the domain label to route at all.
+    # `cloudflared` reaches origins by the host's LAN address —
+    # `http://10.10.9.208:3000` — not over loopback, so a socket bound to
+    # 127.0.0.1 refuses those connections even though the tunnel runs on the
+    # same machine. Loopback was tried and is why the tunnel could not reach
+    # this service.
     #
-    # It is still not a second way in. A published port on 0.0.0.0 would be,
-    # because it would skip Cloudflare and with it TLS, the WAF and the
-    # CF-Connecting-IP header the rate limiter keys on. Bound to loopback it is
-    # reachable only from the host itself, which is where the tunnel lives.
+    # The exposure is the private LAN, which is where the rest of this
+    # infrastructure already lives. It is not the internet: 10.10.0.0/16 is not
+    # routable, and Cloudflare remains the only public path in. What that path
+    # gives — TLS, the WAF, and the CF-Connecting-IP header the rate limiter
+    # keys on — is bypassed by anything already inside the LAN, so the network
+    # boundary is doing that work rather than this port binding.
     ports:
-      - '127.0.0.1:3000:3000'
+      - '3000:3000'
     depends_on:
       backend:
         condition: service_healthy

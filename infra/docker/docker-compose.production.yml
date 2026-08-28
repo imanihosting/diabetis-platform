@@ -30,13 +30,22 @@ services:
       # dropping them. Without this the chain breaks here and the backend keys
       # every request in the deployment on one container.
       TRUST_PROXY: 'true'
-    # Published on loopback so the tunnel has a fixed origin to point at.
-    # `cloudflared` runs on the host network, so 127.0.0.1 is what it can reach
-    # and nothing else can — not the LAN, not the internet. A port on 0.0.0.0
-    # would be a second way in that skips Cloudflare, and with it TLS, the WAF
-    # and the CF-Connecting-IP header the rate limiter keys on.
+    # Published on the host, the way every other application on this server is.
+    #
+    # `cloudflared` reaches origins by the host's LAN address —
+    # `http://10.10.9.208:3000` — not over loopback, so a socket bound to
+    # 127.0.0.1 refuses those connections even though the tunnel runs on the
+    # same machine. Loopback was tried and is why the tunnel could not reach
+    # this service.
+    #
+    # The exposure is the private LAN, which is where the rest of this
+    # infrastructure already lives. It is not the internet: 10.10.0.0/16 is not
+    # routable, and Cloudflare remains the only public path in. What that path
+    # gives — TLS, the WAF, and the CF-Connecting-IP header the rate limiter
+    # keys on — is bypassed by anything already inside the LAN, so the network
+    # boundary is doing that work rather than this port binding.
     ports: !override
-      - '127.0.0.1:3000:3000'
+      - '3000:3000'
 
   backend:
     environment:

@@ -121,7 +121,7 @@ wins.
 | Setting | Value |
 |---|---|
 | Tunnel public hostname | `wellovue.com` |
-| Service | `http://localhost:3000` |
+| Service | `http://10.10.9.208:3000` — the Coolify host, as every other app on this tunnel uses |
 | DNS records | `wellovue.com` and `www.wellovue.com`, **proxied** (orange cloud) |
 
 `localhost` rather than a container name or Coolify's proxy: `cloudflared`
