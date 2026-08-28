@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Wellovue">
+  <!--
+    The same drawing as RangeMark in the header, squared: a glucose trace
+    spiking above target and settling into the band.
+
+    Three decisions this size forces.
+
+    It carries its own paper ground rather than being transparent. Warm paper
+    is the identity, and a near-black trace on transparency disappears against
+    a dark tab strip — the icon has to be legible on chrome we do not control.
+
+    Colours are literal hex, resolved from the OKLCH tokens by painting them to
+    a canvas and reading the pixel back. A favicon cannot see CSS variables,
+    and reading getComputedStyle for an OKLCH value returns the oklch() string
+    itself, which parses into nonsense.
+
+    Fewer points than the header mark, and a deeper band than the charts use.
+    The five-point curve holds at 28x16 in a wordmark; at 16px square it turns
+    to mush. And the in-range wash token is tuned to sit behind a measurement
+    without competing with it, which at 16px means it vanishes into the paper
+    entirely. Both are adjusted for the size rather than copied from the chart,
+    which is the difference between using a token and obeying it.
+  -->
+  <rect width="32" height="32" fill="#faf7f3"/>
+
+  <!-- The target band, drawn as ground. It takes the lower half so it still
+       reads as a band at 16px; thinner and it collapses to an underline. -->
+  <rect y="17.5" width="32" height="14.5" fill="#c6e8d1"/>
+  <line x1="0" y1="17.5" x2="32" y2="17.5" stroke="#1d8547" stroke-width="2"/>
+
+  <!-- Spiked, came back into range, stayed there: the shape of a day that got
+       worked out, which is the same story RangeMark tells in the header. The
+       peak sits left of centre so the settle is the longer half. -->
+  <path d="M 3 21.5 L 7 21 L 11.5 6.8 L 16.5 20.5 L 22 22.6 L 29 22.2"
+        fill="none" stroke="#221d17" stroke-width="3.1"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

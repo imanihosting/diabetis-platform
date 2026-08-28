@@ -194,7 +194,34 @@ Stacks to one column below `lg`. Prose inside either column stays at 52ch.
 
 ---
 
-## 11. What would make this wrong
+## 11. The icon
+
+`frontend/src/app/icon.svg`, with `apple-icon.png` rendered from it at 180px.
+It is `RangeMark` squared: a trace spiking above target and settling back into
+the band, which is the same story the header mark tells.
+
+Three things the size forces, none of them optional:
+
+- **It carries its own paper ground.** Not transparent. Warm paper is the
+  identity, and a near-black trace on transparency disappears against a dark
+  tab strip — the icon has to survive chrome we do not control. Checked against
+  both light and dark tab mockups at 16px.
+- **Literal hex, not tokens.** A favicon cannot see CSS variables. The values
+  were resolved by painting each token to a canvas and reading the pixel back,
+  because `getComputedStyle` returns the `oklch()` string and parsing that
+  naively produces nonsense — the same trap the contrast checker hit.
+- **Fewer points and a deeper band than the charts use.** The five-point curve
+  holds at 28×16 in a wordmark and turns to mush at 16px square, and the
+  in-range wash is tuned to sit *behind* a measurement, so at 16px it vanishes
+  into the paper. Both are adjusted for the size rather than copied, which is
+  the difference between using a token and obeying it.
+
+A double hyphen is illegal inside an XML comment, so token names cannot be
+written as `--name` in the comments in that file.
+
+---
+
+## 12. What would make this wrong
 
 A quick self-check before shipping a surface:
 
