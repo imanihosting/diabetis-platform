@@ -1,44 +1,75 @@
 import {
+  EVIDENCE_BREAKDOWN_LABELS,
   dataQualityHeadline,
   dataQualityMeasurements,
+  evidenceBreakdown,
   type DataQuality,
+  type EvidenceStrength,
+  type StructuredFinding,
 } from '@wellovue/types';
 import { Disclosure } from '@/components/Disclosure';
 
 /**
- * How complete the record behind a finding is.
+ * Why the badge says what it says.
  *
- * Placed with the qualifications rather than with the numbers, because that is
- * what it is: the evidence badge above already carries the consequence — a
- * finding on a partial record cannot be called strong, whatever its sample
- * count — and this is the reason for it.
+ * Two different truths sit behind one word, and this is where they are kept
+ * apart rather than blended. Confidence is how stable the relationship is in
+ * the readings there are; coverage is how much of the period those readings
+ * watched. A record can be entirely consistent about the fortnight it saw and
+ * silent about the fortnight it did not, and reporting that as one middling
+ * number would answer neither question.
  *
- * The headline is always visible and the figures are one disclosure away. A
- * reader deciding whether to trust a finding needs the coverage number; the
- * longest gap and the sampling interval are for the reader who has decided the
- * number is interesting, and putting all six on every card would bury the one
- * that matters under five that usually do not.
+ * So both are shown, with the overall word beneath them. Somebody looking at a
+ * finding marked weak deserves to know which half was weak: the pattern, or
+ * the watching. Those call for completely different responses — one is "this
+ * may not be real", the other is "wear the sensor for another fortnight".
  *
- * Rows come from `dataQualityMeasurements()` in the shared contract, because
- * the clinician packet shows the same figures and the two must not name them
- * differently.
+ * The record's own figures stay one disclosure away. A reader deciding whether
+ * to trust a finding needs the coverage word; the longest gap and the sampling
+ * interval are for the reader who has decided the answer is interesting.
  */
-export function DataQualityPanel({ quality }: { quality: DataQuality | null }) {
+
+const STRENGTH_WORD: Record<EvidenceStrength, string> = {
+  strong: 'Strong',
+  moderate: 'Moderate',
+  weak: 'Weak',
+  insufficient: 'Not enough',
+};
+
+export function DataQualityPanel({ finding }: { finding: StructuredFinding }) {
+  const quality: DataQuality | null = finding.dataQuality;
   if (!quality) return null;
 
-  const rows = dataQualityMeasurements(quality);
+  const breakdown = evidenceBreakdown(finding);
+  const rows: [string, EvidenceStrength][] = [
+    [EVIDENCE_BREAKDOWN_LABELS.signal, breakdown.signal],
+    [EVIDENCE_BREAKDOWN_LABELS.coverage, breakdown.coverage ?? breakdown.signal],
+    [EVIDENCE_BREAKDOWN_LABELS.overall, breakdown.overall],
+  ];
 
   return (
     <div className="border-t border-rule pt-4 [&+&]:mt-6">
       <h4 className="text-xs uppercase tracking-wide text-ink-faint">
-        How complete this record is
+        How this was judged
       </h4>
 
+      {/* Only when coverage is what held the finding back. A sentence
+          explaining a cap that did not happen is noise on every card where
+          nothing went wrong. */}
       <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-ink-muted">
-        {dataQualityHeadline(quality)}
+        {breakdown.note ?? dataQualityHeadline(quality)}
       </p>
 
-      <div className="mt-2">
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+        {rows.map(([label, strength]) => (
+          <div key={label} className="contents">
+            <dt className="text-xs text-ink-faint">{label}</dt>
+            <dd className="text-xs text-ink">{STRENGTH_WORD[strength]}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="mt-3">
         <Disclosure
           label="The record behind this"
           triggerClassName="text-xs text-ink-faint transition-colors hover:text-ink-muted"
@@ -46,7 +77,7 @@ export function DataQualityPanel({ quality }: { quality: DataQuality | null }) {
         >
           {() => (
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-              {rows.map((row) => (
+              {dataQualityMeasurements(quality).map((row) => (
                 <div key={row.key} className="contents">
                   <dt className="text-xs text-ink-faint">{row.label}</dt>
                   <dd className="text-xs text-ink">

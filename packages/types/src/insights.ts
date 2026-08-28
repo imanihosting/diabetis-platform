@@ -552,10 +552,18 @@ export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 /**
  * Coverage below these fractions caps how strong a finding may be called.
  *
- * Mirrors the constants in `metabolic-engine/app/engines/thresholds.py`. Not
- * clinically reviewed: a first cut, deliberately conservative, and they decide
- * a word rather than a number — no effect estimate, confidence or p-value
- * moves because of them.
+ * Mirrors the constants in `metabolic-engine/app/engines/thresholds.py`.
+ *
+ * These are **product** evidence thresholds, not clinical ones, and the
+ * distinction is load-bearing. A clinical threshold decides care: what a
+ * result means for somebody and what should happen next. These decide one
+ * English word on a card. No effect estimate, confidence, p-value or
+ * recommendation moves because of them, which is why they can ship without
+ * clinical review — and why the moment one starts gating something a person
+ * might act on, it has stopped being a product threshold.
+ *
+ * Reviewable rather than provisional: a considered first cut, conservative on
+ * purpose, declared as a set so they can be argued with in one place.
  */
 export const COVERAGE_FOR_WEAK = 0.25;
 export const COVERAGE_FOR_MODERATE = 0.5;
@@ -653,6 +661,93 @@ export const patternResponseSchema = z.object({
   findings: z.array(structuredFindingSchema),
 });
 export type PatternResponse = z.infer<typeof patternResponseSchema>;
+
+/**
+ * The two questions behind the one word, kept apart.
+ *
+ * `confidence` and `coverage` are different truths and blending them into a
+ * single number would lose both. Confidence asks how stable the measured
+ * relationship is inside the data there is. Coverage asks how much of the
+ * period that data actually observed. A record can be entirely consistent
+ * about the fortnight it watched and silent about the fortnight it did not,
+ * and that is not the same as a noisy record — it needs saying differently.
+ *
+ * So the engine keeps them separate and this is where the awkwardness is
+ * resolved: a surface shows both, and the overall word is the weaker. Hiding
+ * one inside the other would produce a single honest-looking number that
+ * answered neither question.
+ */
+export interface EvidenceBreakdown {
+  /** How stable the relationship is in the readings there are. */
+  signal: EvidenceStrength;
+  /** How much of the period those readings watched. Null when not a glucose finding. */
+  coverage: EvidenceStrength | null;
+  /** The weaker of the two, and the word the badge shows. */
+  overall: EvidenceStrength;
+  /**
+   * Set only when coverage is what held the finding back.
+   *
+   * Absent when the two agree, because a sentence explaining a cap that did
+   * not happen is noise on every card where nothing went wrong.
+   */
+  note: string | null;
+}
+
+const SIGNAL_PHRASE: Record<EvidenceStrength, string> = {
+  strong: 'A strong signal in the readings we saw',
+  moderate: 'A clear signal in the readings we saw',
+  weak: 'A weak signal in the readings we saw',
+  insufficient: 'Too little signal in the readings we saw',
+};
+
+const COVERAGE_PHRASE: Record<EvidenceStrength, string> = {
+  strong: 'the record covers the period well',
+  moderate: 'the record covers much of the period but not all of it',
+  weak: 'the record covers only part of the period',
+  insufficient: 'the record covers very little of the period',
+};
+
+/** What each half of the judgement is called, where a surface labels them. */
+export const EVIDENCE_BREAKDOWN_LABELS = {
+  signal: 'Signal in the readings',
+  coverage: 'Coverage of the period',
+  overall: 'Overall',
+} as const;
+
+/**
+ * How a finding's evidence word was arrived at.
+ *
+ * A restatement of numbers the engine already computed — the same category as
+ * `findingPresentation`. It introduces no claim: `signal` is what the strength
+ * would have been before coverage existed, `coverage` is the ceiling, and
+ * `overall` is what `findingStrength` returns.
+ */
+export function evidenceBreakdown(
+  finding: Pick<StructuredFinding, 'effectEstimate' | 'sampleCount' | 'confidence'> & {
+    dataQuality?: DataQuality | null;
+  },
+): EvidenceBreakdown {
+  const signal: EvidenceStrength =
+    finding.effectEstimate === null
+      ? 'insufficient'
+      : evidenceStrength(finding.sampleCount, finding.confidence);
+
+  const quality = finding.dataQuality;
+  if (!quality) return { signal, coverage: null, overall: signal, note: null };
+
+  const coverage = coverageCeiling(quality.coverage);
+  const overall = weakerOf(signal, coverage);
+
+  return {
+    signal,
+    coverage,
+    overall,
+    note:
+      overall === coverage && coverage !== signal
+        ? `${SIGNAL_PHRASE[signal]}, but ${COVERAGE_PHRASE[coverage]}.`
+        : null,
+  };
+}
 
 const STRENGTH_ORDER: Record<EvidenceStrength, number> = {
   strong: 0,

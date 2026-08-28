@@ -98,9 +98,9 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
             }
           />
 
-          {/* Beside the limitations, because it is one: how complete the
-              record was is why the badge above says what it says. */}
-          <DataQualityPanel quality={finding.dataQuality} />
+          {/* Beside the limitations, because it is one: it says which half of
+              the judgement was weak, the pattern or the watching. */}
+          <DataQualityPanel finding={finding} />
 
           {finding.wouldImproveWith.length > 0 && (
             <Section title="What would sharpen this" items={finding.wouldImproveWith} />

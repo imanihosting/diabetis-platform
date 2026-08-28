@@ -79,8 +79,9 @@ be argued for, and that is exactly why the number is tied to something rather
 than picked — it must not drift toward whatever makes a given record read
 better.
 
-All four shape thresholds are a first cut and none has been through clinical
-review. They decide a word, never a refusal or a number.
+All four shape thresholds are product evidence thresholds in the same sense as
+the coverage ones below: they decide the word a response is introduced with and
+nothing a person would act on. Reviewable, not reviewed.
 """
 
 
@@ -125,14 +126,29 @@ as regular — a factor, either way. Absolute minutes would describe a CGM and
 call every meter irregular; a ratio asks whether the person sampled the way
 they usually sample."""
 
+# --- Product evidence thresholds --------------------------------------------
+#
+# These are PRODUCT thresholds, not clinical ones, and the distinction is the
+# point rather than a hedge. A clinical threshold decides care: what a result
+# means for a person, and what should happen next. Nothing below decides any of
+# that. They decide one English word on a card — whether a finding is
+# introduced as weak, moderate or strong — and no effect estimate, confidence,
+# p-value or recommendation moves because of them.
+#
+# That is why shipping them without clinical review is defensible, and it is
+# also the boundary that must not be crossed quietly: the moment a number here
+# starts gating a suggestion, a refusal, or anything a person might act on, it
+# has stopped being a product threshold and needs the review this comment says
+# it has not had.
+#
+# Reviewable rather than provisional. They are a considered first cut, they are
+# conservative on purpose, and they are declared here as a set so somebody with
+# the standing to argue with them can do so in one place.
+#
 # Coverage below these fractions caps how strong a finding may be called. A
 # ceiling, never a promotion: coverage can lower a claim and can never raise
 # one, because a complete record is a precondition for trusting a result and
 # not evidence for it.
-#
-# NOT clinically reviewed. They are a first cut, deliberately conservative, and
-# they decide a word rather than a number: no effect estimate, confidence or
-# p-value moves because of them.
 COVERAGE_FOR_WEAK = 0.25
 COVERAGE_FOR_MODERATE = 0.50
 COVERAGE_FOR_STRONG = 0.70

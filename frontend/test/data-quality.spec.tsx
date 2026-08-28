@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  EVIDENCE_BREAKDOWN_LABELS,
   dataQualityHeadline,
   dataQualityMeasurements,
+  evidenceBreakdown,
   findingStrength,
   sourceLabel,
   type DataQuality,
@@ -112,7 +114,53 @@ describe('how the record is described', () => {
   });
 
   it('says nothing at all when there is no data quality', () => {
-    expect(renderToStaticMarkup(<DataQualityPanel quality={null} />)).toBe('');
+    // Lab trends. There is no sampling window to be complete, so there is no
+    // second half of the judgement to show.
+    expect(
+      renderToStaticMarkup(<DataQualityPanel finding={finding({ dataQuality: null })} />),
+    ).toBe('');
+  });
+});
+
+describe('the two halves of the judgement are kept apart', () => {
+  it('names both, and the weaker as the overall', () => {
+    const capped = evidenceBreakdown(finding({ dataQuality: quality({ coverage: 0.3 }) }));
+
+    // The point of the whole split: a consistent relationship, thinly watched.
+    expect(capped.signal).toBe('strong');
+    expect(capped.coverage).toBe('weak');
+    expect(capped.overall).toBe('weak');
+  });
+
+  it('explains the cap only when coverage is what caused it', () => {
+    const capped = evidenceBreakdown(finding({ dataQuality: quality({ coverage: 0.3 }) }));
+    expect(capped.note).toContain('strong signal in the readings we saw');
+    expect(capped.note).toContain('only part of the period');
+
+    // Nothing was held back, so there is nothing to explain.
+    expect(evidenceBreakdown(finding()).note).toBeNull();
+
+    // The signal was the weaker half. Saying "but coverage" would blame the
+    // wrong thing and point the reader at the wrong remedy.
+    const thin = finding({ sampleCount: 6, confidence: 0.4 });
+    expect(evidenceBreakdown(thin).note).toBeNull();
+    expect(evidenceBreakdown(thin).overall).toBe('weak');
+  });
+
+  it('agrees with the badge', () => {
+    for (const coverage of [0.1, 0.3, 0.6, 0.95]) {
+      const f = finding({ dataQuality: quality({ coverage }) });
+      expect(evidenceBreakdown(f).overall).toBe(findingStrength(f));
+    }
+  });
+
+  it('shows both halves on the card', () => {
+    const html = renderToStaticMarkup(
+      <DataQualityPanel finding={finding({ dataQuality: quality({ coverage: 0.3 }) })} />,
+    );
+    expect(html).toContain(EVIDENCE_BREAKDOWN_LABELS.signal);
+    expect(html).toContain(EVIDENCE_BREAKDOWN_LABELS.coverage);
+    expect(html).toContain(EVIDENCE_BREAKDOWN_LABELS.overall);
   });
 });
 

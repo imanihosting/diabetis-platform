@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 231 unit, no infrastructure needed
+npm test                  # 235 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -161,7 +161,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `frontend/test/*.spec.ts(x)` | 131 | no |
+| `frontend/test/*.spec.ts(x)` | 135 | no |
 | `metabolic-engine/tests` | 91 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -510,10 +510,31 @@ unwatched as complete; a test caught it. The numerator reuses
 "watched long enough", so a coverage figure cannot disagree with the
 measurements printed beside it.
 
-**Thresholds are a first cut and have not had clinical review.** They live in
-`thresholds.py` beside the shape thresholds and are mirrored in `insights.ts`;
-`backend/test/post-meal-metrics.spec.ts` fails if the two disagree. They decide
-a word, never a refusal and never a number.
+**These are product evidence thresholds, not clinical ones, and the
+distinction is load-bearing.** A clinical threshold decides care: what a result
+means for somebody and what should happen next. These decide one English word
+on a card. No effect estimate, confidence, p-value or recommendation moves
+because of them, which is why they ship without clinical review — and why the
+moment one starts gating something a person might act on, it has stopped being
+a product threshold and needs that review. Reviewable, not provisional: a
+considered first cut, conservative on purpose, declared as a set in
+`thresholds.py` beside the shape thresholds and mirrored in `insights.ts`.
+`backend/test/post-meal-metrics.spec.ts` fails if the two disagree.
+
+**Coverage and confidence stay separate, and the interface resolves it.**
+They are different truths: confidence is how stable the relationship is inside
+the data there is, coverage is how much of the period that data observed. A
+record can be entirely consistent about the fortnight it watched and silent
+about the fortnight it did not, and blending those into one number answers
+neither question. So `evidenceBreakdown()` returns both plus the weaker as the
+overall, and both surfaces show all three. A reader meeting a finding marked
+weak can see which half was weak — the pattern, or the watching — and those
+call for opposite responses: "this may not be real" against "wear the sensor
+another fortnight".
+
+The explaining sentence appears only when coverage is what held the finding
+back. When the signal was the weaker half, blaming coverage would point the
+reader at the wrong remedy.
 
 **Care-mode gating, experiment safety and prediction immutability are
 untouched.** Nothing in `registry.py`, the experiment tables or the prediction

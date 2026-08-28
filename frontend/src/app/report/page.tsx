@@ -6,8 +6,10 @@ import {
   REPORT_PERIODS,
   careModeLabel,
   findingPresentation,
+  EVIDENCE_BREAKDOWN_LABELS,
   dataQualityHeadline,
   dataQualityMeasurements,
+  evidenceBreakdown,
   postMealCaveat,
   postMealMeasurements,
   type ClinicianPacket,
@@ -429,7 +431,7 @@ function Finding({ finding }: { finding: StructuredFinding }) {
 
       <PostMeal groups={finding.comparison} />
 
-      <Quality quality={finding.dataQuality} />
+      <Quality finding={finding} />
 
       {finding.limitations.length > 0 && (
         <div className="mt-4 border-t border-rule pt-3">
@@ -454,8 +456,11 @@ function Finding({ finding }: { finding: StructuredFinding }) {
  *
  * Rows come from the same `dataQualityMeasurements()` the evidence page uses.
  */
-function Quality({ quality }: { quality: DataQuality | null }) {
+function Quality({ finding }: { finding: StructuredFinding }) {
+  const quality: DataQuality | null = finding.dataQuality;
   if (!quality) return null;
+
+  const breakdown = evidenceBreakdown(finding);
 
   return (
     <div className="mt-4 break-inside-avoid border-t border-rule pt-3">
@@ -463,8 +468,22 @@ function Quality({ quality }: { quality: DataQuality | null }) {
         Record behind this finding
       </h4>
 
+      {/* Both halves of the judgement, because they call for different
+          responses. A clinician reading "weak" is owed the difference between
+          a relationship that may not be real and one that is real enough but
+          watched for a fortnight of a quarter. */}
       <p className="mt-2 max-w-prose text-xs leading-relaxed text-ink-muted">
-        {dataQualityHeadline(quality)}
+        {breakdown.note ?? dataQualityHeadline(quality)}
+      </p>
+
+      <p className="mt-1 text-xs text-ink-muted">
+        <span className="text-ink-faint">{EVIDENCE_BREAKDOWN_LABELS.signal}: </span>
+        {breakdown.signal}
+        <span className="text-ink-faint">
+          {' '}
+          · {EVIDENCE_BREAKDOWN_LABELS.coverage}:{' '}
+        </span>
+        {breakdown.coverage ?? breakdown.signal}
       </p>
 
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
