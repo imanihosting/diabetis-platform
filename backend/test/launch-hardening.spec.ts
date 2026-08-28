@@ -207,6 +207,35 @@ describe('the developer stack is not a deployable one', () => {
   });
 });
 
+describe('the Coolify file resolves its paths from the repository root', () => {
+  const coolify = read('infra/docker/docker-compose.coolify.yml');
+
+  it('uses no parent-relative build context', () => {
+    // Coolify runs compose with --project-directory set to the checkout root,
+    // and relative paths resolve against that rather than against the
+    // directory the compose file sits in. Written the other way,
+    // `context: ../../metabolic-engine` becomes `/metabolic-engine` and the
+    // build dies with "unable to prepare context: path not found". It did.
+    expect(coolify).not.toMatch(/^\s+context: \.\./m);
+    expect(coolify).not.toMatch(/^\s+- \.\.\/\.\.\//m);
+  });
+
+  it('points each context at the root or a directory beneath it', () => {
+    const contexts = [...coolify.matchAll(/^\s+context: (.+)$/gm)].map((m) => m[1].trim());
+    expect(contexts.length).toBe(3);
+    for (const context of contexts) {
+      expect(context === '.' || context.startsWith('./')).toBe(true);
+    }
+  });
+
+  it('says which directory its paths are relative to', () => {
+    // The next person to add a service will copy an existing block, and the
+    // reason these look unlike every other compose file in the repo has to be
+    // written down beside them.
+    expect(coolify).toMatch(/relative to the repository root/i);
+  });
+});
+
 describe('nothing binds a public port behind the tunnel', () => {
   const overlay = read('infra/docker/docker-compose.production.yml');
 

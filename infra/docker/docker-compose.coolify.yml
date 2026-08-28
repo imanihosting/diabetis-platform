@@ -6,6 +6,18 @@
 # somebody clicks "deploy" on should be readable in one file, not assembled in
 # their head from two.
 #
+# **Every path here is relative to the repository root, not to this file.**
+# Coolify runs compose with `--project-directory` set to the checkout root, and
+# that is what relative build contexts and bind mounts resolve against — not
+# the directory the compose file happens to live in. Written the other way,
+# `context: ../../metabolic-engine` resolves to `/metabolic-engine` and the
+# build fails with "unable to prepare context: path not found".
+#
+# To run it by hand, pass the same project directory:
+#
+#   docker compose -f infra/docker/docker-compose.coolify.yml \
+#                  --project-directory . up -d --build
+#
 # Coolify settings that go with it:
 #
 #   Build Pack              Docker Compose      (not Dockerfile — this is four services)
@@ -39,7 +51,7 @@ services:
 
   backend:
     build:
-      context: ../..
+      context: .
       dockerfile: backend/Dockerfile
       target: runtime
     restart: unless-stopped
@@ -80,7 +92,7 @@ services:
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN:?set METABOLIC_ENGINE_TOKEN in Coolify}
       NEXT_PUBLIC_APP_URL: https://wellovue.com
     volumes:
-      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+      - ./infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
     extra_hosts:
       # node-postgres only tells Node which host to verify when the host is not
       # an IP address, so verify-full is unreachable by address however the
@@ -104,7 +116,7 @@ services:
 
   metabolic-engine:
     build:
-      context: ../../metabolic-engine
+      context: ./metabolic-engine
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
@@ -114,7 +126,7 @@ services:
       ENVIRONMENT: production
       PGSSLROOTCERT: /etc/wellovue/db-ca.crt
     volumes:
-      - ../../infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
+      - ./infra/db/ca.crt:/etc/wellovue/db-ca.crt:ro
     extra_hosts:
       - 'medical-db:10.10.5.185'
     healthcheck:
@@ -132,7 +144,7 @@ services:
 
   frontend:
     build:
-      context: ../..
+      context: .
       dockerfile: frontend/Dockerfile
       target: runtime
       args:
