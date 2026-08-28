@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import {
   REPORT_PERIODS,
+  careModeLabel,
   type ClinicianPacket,
   type DiscussionPoint,
   type LabSeries,
@@ -485,24 +486,4 @@ function formatDate(value: Date | string): string {
     month: 'long',
     year: 'numeric',
   });
-}
-
-/**
- * The care profile in words a clinician reads, not the stored enum.
- *
- * Spelled out here rather than shortened: "type_2_insulin_supported" is the
- * value the safety rules run on, and the person reading this needs to know
- * insulin is in the picture without decoding an identifier.
- */
-function careModeLabel(careMode: ClinicianPacket['careMode']): string {
-  const LABELS: Record<string, string> = {
-    type_2_standard: 'Type 2, not using insulin',
-    type_2_insulin_supported: 'Type 2, using insulin',
-    type_1_cgm_insulin: 'Type 1',
-    gestational: 'Gestational',
-    prediabetes: 'Prediabetes',
-    other_specific: 'Other, clinician-classified',
-    unknown: 'Not yet recorded',
-  };
-  return LABELS[careMode] ?? careMode;
 }

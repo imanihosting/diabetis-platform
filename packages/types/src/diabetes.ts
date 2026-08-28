@@ -246,6 +246,50 @@ const EVIDENCE_READY: readonly CareMode[] = [
   'prediabetes',
 ];
 
+/**
+ * Every care mode a person can actually be in, in the order a reader meets them.
+ *
+ * `unknown` is excluded: it is a state the product passes through before
+ * somebody answers, not a kind of diabetes, and listing it beside the others
+ * would read as a diagnosis.
+ */
+export const DIAGNOSED_CARE_MODES: readonly CareMode[] = [
+  'type_2_standard',
+  'type_2_insulin_supported',
+  'prediabetes',
+  'type_1_cgm_insulin',
+  'gestational',
+  'other_specific',
+];
+
+/**
+ * The care mode in words a person would use about themselves.
+ *
+ * Declared once because three surfaces show it — the clinician summary, the
+ * care profile, and the public pages — and a stored enum leaking into any of
+ * them ("type_2_insulin_supported") is worse than no label at all. Spelled out
+ * rather than shortened: whether insulin is in the picture changes what the
+ * safety rules do, so it belongs in the name.
+ */
+export function careModeLabel(careMode: CareMode): string {
+  switch (careMode) {
+    case 'type_2_standard':
+      return 'Type 2, not using insulin';
+    case 'type_2_insulin_supported':
+      return 'Type 2, using insulin';
+    case 'type_1_cgm_insulin':
+      return 'Type 1';
+    case 'gestational':
+      return 'Gestational';
+    case 'prediabetes':
+      return 'Prediabetes';
+    case 'other_specific':
+      return 'Other, clinician-classified';
+    case 'unknown':
+      return 'Not yet recorded';
+  }
+}
+
 export function careModeCapabilities(
   careMode: CareMode,
   activeFlags: readonly SafetyFlag[],

@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader, Prose } from '@/components/marketing/PageHeader';
 import { LoopSteps } from '@/components/marketing/LoopSteps';
+import { CareCoverage } from '@/components/marketing/CareCoverage';
 
 export const metadata: Metadata = {
   title: 'White paper · Wellovue',
   description:
-    'What Wellovue does, who it is for, how it is built, what it refuses to do, and what is not finished. Written for readers evaluating the platform in depth.',
+    'What Wellovue does, who it is for across every kind of diabetes, how it is built, what it refuses to do, and what is not finished. Written for readers evaluating the platform in depth.',
 };
 
 /**
@@ -56,11 +57,11 @@ export default function WhitePaperPage() {
 
       <Prose eyebrow="The problem" heading="A record is not an answer.">
         <p>
-          Someone living with Type 2 diabetes does not lack numbers. Meters,
-          continuous monitors and apps produce them continuously. What is
-          missing is the step from data to a decision: whether the walk after
-          dinner was worth the twelve minutes, whether eating earlier actually
-          did anything, whether the change last month held.
+          Nobody living with diabetes lacks numbers. Meters, continuous
+          monitors and apps produce them continuously. What is missing is the
+          step from data to a decision: whether the walk after dinner was worth
+          the twelve minutes, whether eating earlier actually did anything,
+          whether the change last month held.
         </p>
         <p>
           Population guidance is a reasonable starting point and a poor stopping
@@ -118,34 +119,57 @@ export default function WhitePaperPage() {
         </div>
       </section>
 
-      <Prose eyebrow="Who it is for" heading="Type 2 and prediabetes. Not everyone, on purpose.">
+      <Prose
+        eyebrow="Who it is for"
+        heading="A diabetes platform, not a Type 2 app."
+        aside={
+          <div className="mt-8">
+            <CareCoverage />
+          </div>
+        }
+      >
         <p>
           <strong className="font-semibold text-[var(--ink)]">
-            The primary reader is the person with the condition.
+            The record is diabetes-wide, and it is built that way today.
           </strong>{' '}
-          Findings are written to be read by them rather than summarised for
-          them, at the density of something used in the evening rather than
-          skimmed once.
+          Type 1, Type 2 with and without insulin, gestational, prediabetes and
+          clinician-classified forms are all first-class in the data model.
+          Everyone gets the timeline, glucose and CGM import, meals, medication,
+          activity, labs and body measurements, the audit trail, erasure, and
+          the summary for an appointment. The safety rules cover every care
+          mode, including a pregnancy tier and recognition of whether insulin is
+          in the picture, because those change what may be proposed.
         </p>
         <p>
           <strong className="font-semibold text-[var(--ink)]">
-            The clinician is second, and present.
+            Interpretation is narrower, and stated rather than implied.
           </strong>{' '}
-          The platform produces a thirty or ninety day summary: findings with
-          their limitations, glucose, lab trends, every experiment beside the
-          expectation recorded before it ran, and what is worth raising. It is
-          built to be read in a minute and to survive a printer.
+          Reviewed detectors exist for Type 2 and prediabetes. For the others
+          the platform records everything and declines to interpret — twice,
+          once at the API and once independently in the engine — and says why on
+          the screen where findings would otherwise appear.
+        </p>
+        <p>
+          That gap is a decision, not an oversight. Every detector models Type 2
+          physiology; running them over a Type 1 or a pregnancy record would
+          produce confident findings from the wrong model of a body, and the
+          person reading them would have no way to tell. The engine is built as
+          a registry where each detector declares the care modes it is valid
+          for, so adding Type 1 is adding detectors and a review, not
+          rearchitecting. Until that review happens the honest answer is a
+          refusal, and the panel opposite is generated from the same function
+          the product uses to decide.
         </p>
         <p>
           <strong className="font-semibold text-[var(--ink)]">
-            Type 1 and gestational diabetes are deliberately refused.
+            The clinician is the second reader throughout.
           </strong>{' '}
-          Every detector in the engine models Type 2 physiology. Running them
-          over a Type 1 or pregnancy record would produce confident findings
-          from the wrong model of a body, and the person reading them would have
-          no way to tell. Both care modes are declined twice — once by the API,
-          once by the engine, neither trusting the other — and both stay parked
-          until clinical review, not until it is commercially convenient.
+          The thirty or ninety day summary — findings with their limitations,
+          glucose, lab trends, every experiment beside the expectation recorded
+          before it ran, and what is worth raising — is produced for any care
+          mode. Where findings do not exist yet it says so in place of them,
+          rather than printing an empty section a clinician would read as
+          &ldquo;nothing was found&rdquo;.
         </p>
       </Prose>
 
@@ -251,18 +275,25 @@ export default function WhitePaperPage() {
 
       <Prose eyebrow="Status" heading="What exists today, and what does not.">
         <p>
-          The loop is closed for Type 2 and prediabetes: collection, one
-          timeline, findings, a safety-checked proposal, a recorded prediction,
-          a measured outcome, and a clinician summary. Database TLS is verified
-          against an internal certificate authority and rate limits are shared
-          across replicas.
+          The record is diabetes-wide and working: every type representable,
+          one timeline, ingestion of glucose by hand and by CGM or meter import,
+          meals, medication, activity, labs and body measurements, the safety
+          classifier across every care mode, the audit trail, erasure, and the
+          clinician summary. Database TLS is verified against an internal
+          certificate authority and rate limits are shared across replicas.
         </p>
         <p>
-          Not built: weighing competing explanations for a pattern against each
-          other, which is the last loop step still marked as such publicly;
-          recording a clinician&rsquo;s agreement, so gated experiments can
-          proceed; exporting the clinician summary as a file; Type 1 and
-          gestational workflows, both behind clinical review; and sleep capture.
+          The full evidence loop — findings, a safety-checked proposal, a
+          recorded prediction, a measured outcome — is closed for Type 2 and
+          prediabetes.
+        </p>
+        <p>
+          Not built: reviewed detectors for Type 1, gestational and
+          clinician-classified diabetes, all behind clinical review; weighing
+          competing explanations for a pattern against each other, the last loop
+          step still marked as such publicly; recording a clinician&rsquo;s
+          agreement, so gated experiments can proceed; exporting the clinician
+          summary as a file; and sleep capture.
         </p>
         <p>
           Two launch items remain and neither is code: a reverse proxy so
@@ -281,8 +312,11 @@ export default function WhitePaperPage() {
         </p>
         <p>
           <strong className="font-semibold text-[var(--ink)]">Clinical.</strong>{' '}
-          Expansion beyond Type 2 and prediabetes is gated on clinical review
-          that has not happened. This is a deliberate constraint on growth.
+          Interpretation beyond Type 2 and prediabetes is gated on clinical
+          review that has not happened. The record and the safety model already
+          cover those people; the findings do not. This is a deliberate
+          constraint on growth and the largest single piece of unrealised
+          scope.
         </p>
         <p>
           <strong className="font-semibold text-[var(--ink)]">Evidential.</strong>{' '}

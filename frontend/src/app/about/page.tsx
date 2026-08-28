@@ -17,9 +17,9 @@ export default function AboutPage() {
         heading="Built for the question a tracker cannot answer."
       >
         <p>
-          If you live with Type 2 diabetes you already have numbers. What you
-          usually do not have is a way to tell which of the things you changed
-          actually did anything.
+          If you live with diabetes you already have numbers. What you usually
+          do not have is a way to tell which of the things you changed actually
+          did anything.
         </p>
       </PageHeader>
 
@@ -89,19 +89,23 @@ export default function AboutPage() {
         </p>
       </Prose>
 
-      <Prose eyebrow="Where it is" heading="Early, and honest about it.">
+      <Prose eyebrow="Where it is" heading="Further along than it was, and honest about the rest.">
         <p>
-          The timeline, imports, meal, medication and lab logging, and the
-          pattern engine are working today, for Type 2 and for prediabetes.
-          Wellovue knows which kind of diabetes it is reading for and refuses
-          to interpret the ones it has no reviewed model for.
+          The record works for every kind of diabetes: the timeline, imports
+          from a meter or CGM, meals, medication, activity and labs, the safety
+          rules, and the summary you bring to an appointment.
         </p>
         <p>
-          The rest of the loop is not finished. You cannot yet propose an
-          experiment from a finding, nothing records a prediction before one
-          runs, no result is scored against a prediction, and there is no
-          clinician packet. The safety rules underneath those are built and
-          enforced, which is a different thing from the feature existing.
+          The loop is closed for Type 2 and prediabetes. A finding can propose
+          the test that would settle it, starting that test writes down what
+          Wellovue expects before you begin, and the result is scored against
+          it. Neither half can be edited afterwards.
+        </p>
+        <p>
+          Wellovue knows which kind of diabetes it is reading for and refuses to
+          interpret the ones it has no reviewed model for — Type 1, gestational
+          and clinician-classified forms are recorded and not yet interpreted.
+          Weighing competing explanations for a pattern is still being built.
         </p>
         <p>
           If you want to use it now, bring a CSV from your meter or CGM. If you

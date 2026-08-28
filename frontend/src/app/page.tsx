@@ -6,6 +6,7 @@ import { Finding } from '@/components/marketing/Finding';
 import { Reveal } from '@/components/marketing/Reveal';
 import { TimelineExcerpt } from '@/components/marketing/TimelineExcerpt';
 import { Boundaries } from '@/components/marketing/Boundaries';
+import { CareCoverage } from '@/components/marketing/CareCoverage';
 import { ClinicianBrief } from '@/components/marketing/ClinicianBrief';
 import { EmailCapture } from '@/components/marketing/EmailCapture';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
@@ -243,6 +244,38 @@ export default function LandingPage() {
       {/* ---- 06 ---------------------------------------------------------- */}
       <Fold
         index={6}
+        eyebrow="Who it is for"
+        heading="Every kind of diabetes. Not every kind of answer, yet."
+        aside={
+          <Reveal>
+            <CareCoverage />
+          </Reveal>
+        }
+      >
+        <p>
+          Type 1, Type 2 with or without insulin, gestational, prediabetes, or a
+          form your clinician has classified some other way — the record is
+          built for all of it. One timeline, your meter or CGM, meals,
+          medication, activity and labs, the safety rules, and the summary you
+          bring to an appointment.
+        </p>
+        <p>
+          Findings are narrower. The patterns are found by models built on Type
+          2 physiology, and they are offered for Type 2 and prediabetes only.
+          For everything else Wellovue keeps your record and says so, rather
+          than running the wrong model over your data and handing you a
+          confident answer you would have no way to check.
+        </p>
+        <p>
+          That is a limit we would rather state than hide. The panel is
+          generated from the same rule the product uses, so it cannot say
+          something the software does not do.
+        </p>
+      </Fold>
+
+      {/* ---- 07 ---------------------------------------------------------- */}
+      <Fold
+        index={7}
         eyebrow="Boundaries"
         heading="What this will never do."
         aside={

@@ -276,6 +276,25 @@ the only reason a label should ever come off. Both panels are typeset
 illustrations of real screens rather than screenshots of them, and their
 figures are the demo record's own.
 
+**Which kinds of diabetes the public pages claim to serve is computed, not
+written.** `CareCoverage` calls `careModeCapabilities` — the same function the
+API calls before deciding whether to ask the engine anything — and prints the
+engine's own refusal sentence for every care mode without reviewed detectors.
+The landing page and the white paper both use it. Add a reviewed Type 1
+detector and put the mode in `EVIDENCE_READY`, and both pages change
+themselves; there is no marketing copy to remember to update, which is the kind
+of promise that otherwise rots into a lie.
+
+The distinction it draws is the one to keep straight, because it is easy to get
+wrong in both directions. The record is diabetes-wide **today**: every type
+representable, timeline, ingestion, labs, medication, the safety classifier
+across every care mode, audit, erasure and the clinician summary. Interpretation
+is Type 2 and prediabetes only — the engine has four detectors for each Type 2
+mode, five for prediabetes, and zero for Type 1, gestational and
+other-specific. Calling this a Type 2 product hides most of what is built;
+calling it diabetes-wide without qualification sends somebody with Type 1 to a
+screen that refuses them, having promised otherwise.
+
 `/white-paper` is the page this rule matters most on, because it is written for
 readers evaluating the platform and it quotes specific numbers: 78 unit tests,
 180 integration, 29 engine, nineteen migrations, six guard triggers, eleven
