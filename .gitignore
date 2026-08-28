@@ -32,3 +32,4 @@ venv/
 
 # Test-stack config: no real credentials, safe to commit
 !backend/.env.test
+/docs/database-vm.md
