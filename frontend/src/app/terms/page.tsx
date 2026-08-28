@@ -1,12 +1,8 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bullet, Clause, LegalPage } from '@/components/marketing/LegalPage';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Terms · Wellovue',
-  description:
-    'What Wellovue is, what it is explicitly not, and the terms you agree to by using it.',
-};
+export const metadata = pageMetadata('/terms');
 
 export default function TermsPage() {
   return (

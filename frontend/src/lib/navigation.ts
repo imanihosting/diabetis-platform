@@ -45,6 +45,46 @@ const CONTACT: NavItem = {
   detail: 'Ask a question or report a problem',
 };
 
+/**
+ * The pages somebody arrives on from a search rather than from the homepage.
+ *
+ * They exist to be found, which means they also have to be reachable from
+ * inside the site: a page reachable only through a sitemap is a page a crawler
+ * treats as an afterthought, and a reader who lands on one has nowhere to go
+ * next. They live in the footer rather than the main row for the reason the
+ * white paper does — the top row belongs to the person with the condition, and
+ * it holds four items before it stops fitting on a phone.
+ */
+const DIABETES_INTELLIGENCE: NavItem = {
+  href: '/diabetes-intelligence',
+  label: 'Diabetes intelligence',
+  detail: 'What the phrase means here, in measurements',
+};
+
+const TYPE_2: NavItem = {
+  href: '/type-2-diabetes',
+  label: 'Type 2 diabetes',
+  detail: 'What the engine reads in a type 2 record',
+};
+
+const PREDIABETES: NavItem = {
+  href: '/prediabetes',
+  label: 'Prediabetes',
+  detail: 'Slow-moving numbers, over the window they move in',
+};
+
+const CLINICIAN_REPORT: NavItem = {
+  href: '/clinician-report',
+  label: 'Clinician report',
+  detail: 'The summary you can take to an appointment',
+};
+
+const SECURITY: NavItem = {
+  href: '/security',
+  label: 'Security',
+  detail: 'How your record is held, and what is not in place',
+};
+
 /** The public pages. These are the navigation on the marketing surface. */
 export const MARKETING_NAV: NavItem[] = [ABOUT, HOW_IT_WORKS, CONTACT];
 
@@ -102,17 +142,20 @@ export const APP_NAV: NavItem[] = [
 /**
  * The footer's groups.
  *
- * Three named columns rather than one undifferentiated row of links. A reader
+ * Named columns rather than one undifferentiated row of links. A reader
  * arrives at a footer with an errand, and the errand is almost always one of
- * these: understand the product, get help, or check what was agreed.
+ * these: understand the product, find the page about their own condition,
+ * check who is behind it, or read what was agreed.
  *
- * Support holds a single destination and keeps its heading anyway. The label
- * is doing the work of telling someone where to go with a problem; dropping it
- * to save a line would trade a signpost for a link.
+ * Conditions holds two destinations and keeps its own heading rather than
+ * being folded into Product. Those pages are where somebody searching for
+ * their own diagnosis lands, and grouping them under a heading that names the
+ * condition is the difference between a footer and a signpost.
  */
 export const FOOTER_GROUPS: { title: string; items: NavItem[] }[] = [
-  { title: 'Product', items: [ABOUT, HOW_IT_WORKS, WHITE_PAPER] },
-  { title: 'Support', items: [CONTACT] },
+  { title: 'Product', items: [HOW_IT_WORKS, DIABETES_INTELLIGENCE, CLINICIAN_REPORT] },
+  { title: 'Conditions', items: [TYPE_2, PREDIABETES] },
+  { title: 'Company', items: [ABOUT, SECURITY, WHITE_PAPER, CONTACT] },
   { title: 'Legal', items: LEGAL_NAV },
 ];
 

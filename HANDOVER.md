@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 93 unit, no infrastructure needed
+npm test                  # 203 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -161,6 +161,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
+| `frontend/test/seo.spec.tsx` | 110 | no |
 | `metabolic-engine/tests` | 69 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
@@ -189,6 +190,12 @@ A few suites are worth knowing about by name:
   drift is silent otherwise: zod strips a key it does not recognise, so an
   engine field the contract has never seen throws nowhere and simply never
   reaches the screen.
+- **`frontend/test/seo.spec.tsx`** renders every public page to markup and
+  asserts against the result rather than against page source. That is the whole
+  reason it needs a renderer: no public page on this site contains an `<h1>`,
+  because every one of them gets its heading from `PageHeader` or `LegalPage`,
+  so grepping for the tag would prove nothing. `next/navigation` is stubbed in
+  `frontend/test/stubs/` so a page renders outside a request.
 - **`metabolic-engine/tests/test_post_meal.py`** is half arithmetic and half
   silence. Every expected value was worked out by hand from the curve in the
   test rather than read off the implementation, and most of the cases are about
@@ -485,6 +492,51 @@ true first.
 
 ---
 
+## 7a. What the site tells a machine
+
+`frontend/src/lib/seo.ts` holds one registry, `PUBLIC_PAGES`, and it is the
+only place a public route is declared indexable. The sitemap is generated from
+it, every page builds its own title, description, canonical and Open Graph
+block from its entry, and the tests read it. A page cannot therefore be in the
+sitemap with one description and on the screen with another, and a page nobody
+registered is a page no crawler is invited to.
+
+**Adding a public page means adding it to that registry.** The test suite fails
+if a registered route has no page module or a page module has no registered
+route, so the two cannot come apart quietly.
+
+**`DISALLOWED_PATHS` is the other half.** `robots.ts` reads it and so does the
+test that proves none of those paths ever reaches the sitemap. It is a crawl
+instruction and not access control: what actually stops a stranger reading a
+record is the access token the API demands. What this stops is a signed-in page
+turning up in a search result, which is a different problem with a different
+answer.
+
+**`MedicalWebPage` goes on two pages and no others.** `/type-2-diabetes` and
+`/prediabetes` explain something about the condition. Everything else describes
+the software, however much diabetes it mentions, and
+`medicalWebPageSchema()` throws if it is handed a page whose `kind` is not
+`health` — a test calls it on four product pages to prove it. Structured data is
+a set of assertions about what a thing is, and a health product that marks all
+its marketing as medical content has made a claim it cannot support. The
+schemas also carry no `lastReviewed`: schema.org treats that as saying somebody
+qualified checked the content on that date, and nothing here has been through
+clinical review.
+
+**The banned-claims test matches sentences, not pages.** The same words are
+fine or forbidden depending on which side of a negation they sit on — "does not
+calculate insulin doses" is the copy this product must have, and a check that
+could not tell it from an offer of insulin advice would push the site into
+writing worse disclaimers to satisfy a test. There is a test asserting the
+check still fails on an unnegated claim, because a subtle guard that quietly
+stops guarding is worse than none.
+
+The rendered text is what gets checked, not the page source, for the same
+reason the `<h1>` count is: this site's copy and headings both arrive through
+shared components.
+
+---
+
 ## 8. Traps in this repo
 
 These have all cost time once already.
@@ -675,6 +727,24 @@ and `.github/workflows/release-gate.yml` runs it on a version tag. It is not on
 every push deliberately: it fails today, and a permanently red CI is one nobody
 reads, which would cost the ordinary checks their meaning to protect a launch
 nobody has scheduled. Filling the blanks in is not the same as legal review.
+
+**The public site has no domain, and the SEO layer needs one.**
+`NEXT_PUBLIC_SITE_URL` is a **build argument** for the frontend image, not a
+runtime variable: Next inlines `NEXT_PUBLIC_*` during the build, so setting it
+in `environment:` does nothing at all and the wrong value is already compiled
+in by the time the container starts. It ends up in every canonical URL, every
+`og:url`, `robots.txt` and the whole sitemap.
+
+Unset, it falls back to `http://localhost:3000`. That is deliberate and it is
+the safer of the two failures — a plausible-looking default would point the
+entire sitemap at a host nobody owns, and the only symptom would be a site that
+never appears in a search result. A test in `frontend/test/seo.spec.tsx` fails
+if that fallback is ever quietly replaced with a guessed domain.
+
+So: pick the domain, then build the frontend image with
+`--build-arg NEXT_PUBLIC_SITE_URL=https://…`. Deploying without it does not
+break the site; it publishes a correct site under the wrong name, which is
+worse, because nothing goes red.
 
 **Checking a deployment.** `npm run canary -- <base-url>` reports whether
 something should carry traffic, entirely over HTTP — no shell on the host, no

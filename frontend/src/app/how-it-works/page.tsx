@@ -1,16 +1,12 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader, Prose } from '@/components/marketing/PageHeader';
 import { LoopSteps } from '@/components/marketing/LoopSteps';
 import { Finding } from '@/components/marketing/Finding';
 import { Boundaries } from '@/components/marketing/Boundaries';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'How this works · Wellovue',
-  description:
-    'From a single reading to evidence you can check: the timeline, the pattern engine, safe experiments, and where a language model is and is not allowed near your data.',
-};
+export const metadata = pageMetadata('/how-it-works');
 
 export default function HowItWorksPage() {
   return (

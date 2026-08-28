@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import type { Metadata } from 'next';
 import { DayTrace } from '@/components/marketing/DayTrace';
 import { Fold } from '@/components/marketing/Fold';
 import { Finding } from '@/components/marketing/Finding';
@@ -11,12 +10,9 @@ import { ClinicianBrief } from '@/components/marketing/ClinicianBrief';
 import { EmailCapture } from '@/components/marketing/EmailCapture';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { CREATE_ACCOUNT_HREF } from '@/lib/navigation';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Wellovue',
-  description:
-    'Most diabetes tools tell you what happened. This one helps you find out why, and shows you how sure it is.',
-};
+export const metadata = pageMetadata('/');
 
 export default function LandingPage() {
   return (

@@ -1,13 +1,9 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader, Prose } from '@/components/marketing/PageHeader';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'About · Wellovue',
-  description:
-    'Why a diabetes tool built around evidence rather than tracking, who it is for, and what it deliberately will not do.',
-};
+export const metadata = pageMetadata('/about');
 
 export default function AboutPage() {
   return (

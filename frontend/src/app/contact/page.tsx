@@ -1,14 +1,10 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader } from '@/components/marketing/PageHeader';
 import { ContactForm } from '@/components/marketing/ContactForm';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Contact · Wellovue',
-  description:
-    'Ask a question, report a problem, or request your data. Not for medical advice or anything urgent.',
-};
+export const metadata = pageMetadata('/contact');
 
 export default function ContactPage() {
   return (

@@ -1,12 +1,8 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bullet, Clause, LegalPage } from '@/components/marketing/LegalPage';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Cookies · Wellovue',
-  description:
-    'Wellovue sets two cookies, both only after you sign in, and both only so the site works. No analytics, no advertising, no third parties.',
-};
+export const metadata = pageMetadata('/cookies');
 
 export default function CookiesPage() {
   return (

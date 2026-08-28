@@ -195,7 +195,7 @@ function SiteFooter({ signedIn }: { signedIn: boolean }) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-x-10 gap-y-9 sm:grid-cols-3 lg:gap-x-16">
+          <div className="grid grid-cols-2 gap-x-10 gap-y-9 sm:grid-cols-4 lg:gap-x-14">
             {FOOTER_GROUPS.map((group) => (
               <nav key={group.title} aria-label={group.title}>
                 <h2 className="text-xs font-semibold uppercase tracking-[0.11em] text-ink-faint">

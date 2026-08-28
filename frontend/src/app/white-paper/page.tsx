@@ -1,15 +1,11 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { PageHeader, Prose } from '@/components/marketing/PageHeader';
 import { LoopSteps } from '@/components/marketing/LoopSteps';
 import { CareCoverage } from '@/components/marketing/CareCoverage';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'White paper · Wellovue',
-  description:
-    'What Wellovue does, who it is for across every kind of diabetes, how it is built, what it refuses to do, and what is not finished. Written for readers evaluating the platform in depth.',
-};
+export const metadata = pageMetadata('/white-paper');
 
 /**
  * The platform in depth, for someone evaluating it rather than using it.

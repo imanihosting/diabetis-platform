@@ -1,12 +1,8 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bullet, Clause, LegalPage } from '@/components/marketing/LegalPage';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Privacy · Wellovue',
-  description:
-    'What health data Wellovue holds, where it lives, who can see it, and how to get it back or have it erased.',
-};
+export const metadata = pageMetadata('/privacy');
 
 export default function PrivacyPage() {
   return (
