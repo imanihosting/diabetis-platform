@@ -28,6 +28,128 @@ export const curvePointSchema = z.object({
 });
 export type CurvePoint = z.infer<typeof curvePointSchema>;
 
+/**
+ * A group's post-meal response, measured in diabetes rather than in statistics.
+ *
+ * Mirrors `PostMealMetrics` in `metabolic-engine/app/models/findings.py`. These
+ * two are the same contract in two languages and must be changed together.
+ *
+ * Every field is a quantity somebody with diabetes already uses to describe a
+ * meal. "A 3.1 mmol/L rise" is a statistic about two readings; peaking at 11.2
+ * an hour after eating and taking another hour to come back down is the same
+ * meal, said in the language of the condition.
+ *
+ * The engine measures these on each meal's own curve and then averages, never
+ * off the group's mean curve. Peaks land at different times, so averaging the
+ * curves first flattens them, and a group whose meals routinely reached 11
+ * could otherwise be reported as never leaving target range.
+ *
+ * `peakMmol` is not repeated here — it is on the group already, and one card
+ * showing two peaks counted over slightly different meals is worse than one.
+ */
+export const postMealMetricsSchema = z.object({
+  /**
+   * Meals watched long enough for their timings to mean anything.
+   *
+   * Often smaller than the group's `n`: a meal with a reading twenty minutes
+   * after it belongs in the rise average and has nothing to say about when
+   * glucose came back. Shown rather than hidden, so a reader comparing this
+   * against `n` on the group knows which meals these numbers came from.
+   */
+  n: z.number().int().min(0),
+  /** Mean minutes from the meal to the highest reading after it. */
+  timeToPeakMinutes: z.number(),
+  /** Mean minutes above the top of target range. Zero is a real answer, and a good one. */
+  minutesAboveRange: z.number(),
+  /**
+   * Mean minutes until glucose was back at or below target, over the meals
+   * that came back at all.
+   *
+   * Null has two meanings, and the other fields separate them: with
+   * `minutesAboveRange` at zero nothing went above target and there was nothing
+   * to return from; with it above zero, no meal came back before the window
+   * ended, and `stillAboveAtWindowEnd` counts them.
+   */
+  returnToRangeMinutes: z.number().nullable().default(null),
+  /** Mean mmol/L x minutes above target: how far above and for how long, together. */
+  areaAboveRange: z.number(),
+  /** Meals whose last reading in the window was still above target. */
+  stillAboveAtWindowEnd: z.number().int().min(0),
+  /**
+   * One word for the response, from thresholds in the engine.
+   *
+   * A string rather than an enum on purpose. A shape the engine adds tomorrow
+   * must not fail contract validation and take the whole evidence response
+   * down with it; `postMealShapeLabel` falls back instead.
+   */
+  shape: z.string().min(1),
+});
+export type PostMealMetrics = z.infer<typeof postMealMetricsSchema>;
+
+export interface PostMealShape {
+  /** The word itself, as a reader meets it. */
+  label: string;
+  /** What that word means, in a clause that sits under the measurements. */
+  description: string;
+}
+
+/**
+ * What the engine's shape word says, in a reader's language.
+ *
+ * A display name for an enum, in the same category as `findingPresentation`
+ * and `careModeLabel`. It restates a label the engine already computed from
+ * thresholds it already documents; it must never be where a new claim about
+ * somebody's glucose is introduced.
+ *
+ * None of these descriptions names a number. The thresholds live in the
+ * engine's `thresholds.py`, and a sentence here saying "an hour or more" would
+ * be a second copy of one — wrong the day it moves, and wrong on a surface
+ * that has the real figure printed two lines above it.
+ *
+ * An unrecognised word falls back to itself rather than disappearing, for the
+ * same reason `findingPresentation` does: a shape shipped without an entry
+ * here should look unfinished to whoever ships it, and never look like an
+ * error to a reader.
+ */
+const POST_MEAL_SHAPES: Record<string, PostMealShape> = {
+  flat: { label: 'Flat', description: 'barely moved from where it started' },
+  sharp: { label: 'Sharp', description: 'climbed and peaked quickly' },
+  delayed: { label: 'Delayed', description: 'peaked late in the two hours' },
+  prolonged: {
+    label: 'Prolonged',
+    description: 'spent a long stretch above target range',
+  },
+  // The residual, and named for what was measured rather than for a verdict.
+  // "Typical" was the first attempt and it was wrong: it read as a reassurance
+  // the engine has no basis for, and two groups spending 56 and 11 minutes
+  // above target both landed in it.
+  rose_and_returned: {
+    label: 'Rose and returned',
+    description: 'peaked in the middle of the window and came back down',
+  },
+};
+
+/**
+ * Every shape this map can name. Used to prove none of the engine's is missing.
+ *
+ * The same job `proposableTemplates()` does for experiment templates: the
+ * fallback in `postMealShapeLabel` means a word with no entry here reaches a
+ * reader looking almost right, so completeness has to be asserted somewhere
+ * rather than noticed.
+ */
+export function knownPostMealShapes(): string[] {
+  return Object.keys(POST_MEAL_SHAPES);
+}
+
+export function postMealShapeLabel(shape: string): PostMealShape {
+  const known = POST_MEAL_SHAPES[shape];
+  if (known) return known;
+  return {
+    label: shape.charAt(0).toUpperCase() + shape.slice(1).replace(/_/g, ' '),
+    description: 'measured from the response curve',
+  };
+}
+
 export const groupMeasureSchema = z.object({
   label: z.string(),
   n: z.number().int().min(0),
@@ -42,6 +164,15 @@ export const groupMeasureSchema = z.object({
    * movement, where a line would invent motion nobody measured.
    */
   curve: z.array(curvePointSchema).default([]),
+  /**
+   * The response measured as a post-meal excursion, when it is one.
+   *
+   * Null for a group that is not a meal response — asking when a morning
+   * average returned to range is not a question — and null for a meal group
+   * whose responses were not watched long enough to time. A surface renders
+   * this section or omits it, and never renders it empty.
+   */
+  postMeal: postMealMetricsSchema.nullable().default(null),
 });
 export type GroupMeasure = z.infer<typeof groupMeasureSchema>;
 

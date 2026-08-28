@@ -1,6 +1,7 @@
 import { findingPresentation, type StructuredFinding } from '@wellovue/types';
 import { EvidenceBadge } from '@/components/EvidenceBadge';
 import { FindingTrace } from '@/components/FindingTrace';
+import { PostMealMeasurements } from '@/components/PostMealMeasurements';
 import { ProposeExperiment } from '@/components/ProposeExperiment';
 import { Disclosure } from '@/components/Disclosure';
 
@@ -67,6 +68,12 @@ export function FindingCard({ finding }: { finding: StructuredFinding }) {
               rest of the product uses. Absent when the finding is not a
               glucose comparison, rather than drawn empty. */}
           <FindingTrace groups={finding.comparison} />
+
+          {/* The same curve, in the numbers a person with diabetes already
+              uses to describe a meal: when it peaked, how long it stayed above
+              target, when it came back. Absent when the responses were not
+              watched long enough to time, rather than estimated. */}
+          <PostMealMeasurements groups={finding.comparison} />
 
           {finding.clinicianReviewRecommended && (
             <p className="mt-6 max-w-[52ch] border-t border-rule pt-4 text-sm leading-relaxed text-ink-muted">

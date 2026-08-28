@@ -21,6 +21,7 @@ from scipy import stats
 
 from app.engines import glucose_data, prediabetes, registry, suggestions
 from app.engines.meal_response import MealResponse, post_meal_responses
+from app.engines.post_meal import post_meal_metrics
 from app.engines.thresholds import (
     LAB_TREND_LOOKBACK_DAYS,
     MIN_SAMPLES_FOR_ANY_FINDING,
@@ -29,7 +30,7 @@ from app.engines.thresholds import (
 )
 from app.models.findings import CurvePoint, GroupMeasure, StructuredFinding
 
-MODEL_VERSION = "pattern-engine-v1.1.0"
+MODEL_VERSION = "pattern-engine-v1.2.0"
 """Bumped when output changes, not when code does.
 
 v1.1.0 reads hour-of-day on the account's timezone rather than on UTC, which
@@ -42,6 +43,14 @@ That matters beyond the screen. Every prediction records the engine build that
 made it, and the clinician packet reports it. A prediction made under the UTC
 reading and one made after are not answers to the same question, and giving
 them the same version would quietly claim they were comparable.
+
+v1.2.0 adds the post-meal measurements — time to peak, minutes above range,
+return to range, area above range, and the word for the shape — to every meal
+comparison group. Additive: no existing summary, effect estimate, confidence or
+sample count moves, which is why it is a minor rather than another point
+release. It is still a version, because the output a prediction was made
+against is part of what that prediction meant, and a packet quoting v1.1.0 was
+answering with strictly less about the same meals.
 """
 
 _EMPTY_LABS = pd.DataFrame(
@@ -234,6 +243,12 @@ def _group(label: str, responses: Sequence[MealResponse]) -> GroupMeasure:
     mean over one straggling meal is not the group's response, and a curve that
     thinned out to a single meal at the tail would draw its noise as though it
     were the pattern.
+
+    The post-meal measurements are not read off that mean curve. They are
+    measured on each meal's own response and then averaged, because peaks land
+    at different times and averaging the curves first flattens them: a group
+    whose meals routinely reached 11 mmol/L can produce a mean curve that never
+    crosses target at all. See `post_meal`.
     """
     if not responses:
         return GroupMeasure(label=label, n=0)
@@ -253,12 +268,19 @@ def _group(label: str, responses: Sequence[MealResponse]) -> GroupMeasure:
         if len(values) >= threshold
     ]
 
+    baseline_mmol = round(float(np.mean(baselines)), 2)
+    peak_mmol = round(float(np.mean(peaks)), 2)
+
     return GroupMeasure(
         label=label,
         n=len(responses),
-        baseline_mmol=round(float(np.mean(baselines)), 2),
-        peak_mmol=round(float(np.mean(peaks)), 2),
+        baseline_mmol=baseline_mmol,
+        peak_mmol=peak_mmol,
         curve=curve,
+        # The same responses, measured as a post-meal excursion rather than as
+        # two endpoints. The rise handed over is the one the legend prints, so
+        # the word describing the shape is answerable by the numbers beside it.
+        post_meal=post_meal_metrics(responses, peak_mmol - baseline_mmol),
     )
 
 

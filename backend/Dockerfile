@@ -52,8 +52,18 @@ CMD ["node", "backend/dist/main.js"]
 FROM build AS test
 ENV NODE_ENV=test
 
-# The engine's copy of the target range, so target-range.spec.ts can check that
-# it still agrees with the shared contract. One file, not the engine: this image
-# has no business running Python, only reading two numbers out of it.
+# The engine sources that the contract-drift specs read. Still not the engine:
+# this image has no business running Python, only reading declarations out of it.
+#
+#   thresholds.py  - the target range, checked against the shared contract by
+#                    target-range.spec.ts
+#   findings.py    - the wire names of PostMealMetrics and GroupMeasure
+#   post_meal.py   - the shape words the engine can emit
+#
+# Both of the latter are read by post-meal-metrics.spec.ts. Named file by file
+# rather than copying the tree, so adding a spec that reads a new one fails
+# loudly here instead of the spec quietly finding nothing to check.
 COPY metabolic-engine/app/engines/thresholds.py ./metabolic-engine/app/engines/thresholds.py
+COPY metabolic-engine/app/engines/post_meal.py ./metabolic-engine/app/engines/post_meal.py
+COPY metabolic-engine/app/models/findings.py ./metabolic-engine/app/models/findings.py
 CMD ["npm", "run", "test", "--workspace", "backend"]

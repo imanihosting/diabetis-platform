@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 83 unit, no infrastructure needed
+npm test                  # 93 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 83 | no |
+| `backend/test/*.spec.ts` | 93 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -161,7 +161,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 | `backend/test/integration/labs-prediabetes.spec.ts` | 9 | yes |
 | `backend/test/integration/engine-gate.spec.ts` | 7 | yes |
 | `backend/test/integration/throttle.spec.ts` | 7 | yes |
-| `metabolic-engine/tests` | 38 | no |
+| `metabolic-engine/tests` | 69 | no |
 
 To iterate from an editor: `npm run test:stack:up` then
 `npm run test:integration`. **Wait for the migrate container to finish** before
@@ -182,6 +182,18 @@ A few suites are worth knowing about by name:
 - **`target-range.spec.ts`** reads `thresholds.py` and fails if its numbers
   disagree with the shared contract. Python cannot import TypeScript; this is
   what stops the copy drifting.
+- **`post-meal-metrics.spec.ts`** does the same job for `PostMealMetrics`,
+  which exists in both languages for the same reason. It reads the field
+  aliases out of `findings.py` and the shape words out of `post_meal.py` and
+  fails if either side has grown something the other has not heard of. That
+  drift is silent otherwise: zod strips a key it does not recognise, so an
+  engine field the contract has never seen throws nowhere and simply never
+  reaches the screen.
+- **`metabolic-engine/tests/test_post_meal.py`** is half arithmetic and half
+  silence. Every expected value was worked out by hand from the curve in the
+  test rather than read off the implementation, and most of the cases are about
+  getting no answer rather than a number — because every way these can be wrong
+  makes a meal look better than it was.
 
 ---
 
@@ -254,6 +266,11 @@ so a prediction made under the UTC reading and one made after are not answers
 to the same question — giving them the same version would quietly claim they
 were comparable. Bump it whenever a detector's output moves, not when a file
 does.
+
+`v1.2.0` is the additive case and shows what the minor digit is for: the
+post-meal measurements added output without moving a single existing summary,
+effect estimate, confidence or sample count. Still a version, because a packet
+quoting `v1.1.0` was answering with strictly less about the same meals.
 
 **An offset-less CSV timestamp is the person's wall clock.** Most CGM exports
 write local time with no offset. Those used to be parsed by `new Date`, which
@@ -346,6 +363,68 @@ while a filled shape only needs 3:1.
 **Atkinson Hyperlegible is a functional choice.** The Braille Institute drew it
 for low vision, and retinopathy is a complication of the condition this serves.
 The mono cut is reserved for measured values.
+
+---
+
+## 6a. Post-Meal Intelligence v1
+
+Shipped. Every meal comparison group now carries `postMeal`: time to peak,
+minutes above target range, time back in range, area above target, the count of
+meals still above when the window closed, and one word for the shape. Peak and
+rise were already on the group and are not repeated. The engine is
+`pattern-engine-v1.2.0`; nothing an earlier build reported has moved.
+
+Where it lives: `metabolic-engine/app/engines/post_meal.py` computes it,
+`_group()` in `patterns.py` attaches it, `PostMealMetrics` in `findings.py` and
+in `packages/types/src/insights.ts` are the two halves of the contract, and
+`frontend/src/components/PostMealMeasurements.tsx` renders it under the trace.
+
+**Measured per meal, then averaged. Never off the mean curve.** This is the
+decision the feature turns on. Peaks land at different times, so averaging the
+curves first flattens them — a group whose meals routinely reached 11 mmol/L
+can produce a mean curve that never crosses target at all, and the product
+would report somebody as never having left range on the strength of it. The
+error is not merely inaccurate, it is inaccurate in the direction that makes a
+meal look better than it was. `test_averages_the_meals_rather_than_the_curves`
+is the one holding this.
+
+**A meal is measured only if it was watched.** Three curve points minimum, and
+the last one at or past three quarters of the window. Below that the meal joins
+the group's rise average and contributes nothing here, and `PostMealMetrics.n`
+reports how many actually qualified — often fewer than the `n` on the badge,
+which is why the table prints "18 of 22" rather than trusting the reader to
+assume. A response that stopped at forty-five minutes reports a shorter time
+above range and an earlier return than the same meal watched for two hours; the
+bar exists so it reports nothing instead. The three-point floor is set just
+below the classic fingerstick pattern — before, an hour, two hours — because
+that person is exactly who these measurements are for.
+
+**The window ending is not a return to range.** `returnToRangeMinutes` averages
+only the meals that came back, and `stillAboveAtWindowEnd` counts the rest. Null
+therefore means two different things, and the other fields separate them: with
+`minutesAboveRange` at zero nothing went above target; above zero, nothing came
+back in time. Folding the stragglers in as though the clock running out were a
+return would bury the meals that most need to be visible.
+
+**The shape thresholds are a first cut and have not had clinical review.** They
+live in `thresholds.py` so they can be argued with as a set. `prolonged` is
+anchored to half of `POST_MEAL_WINDOW_MINUTES` rather than picked, specifically
+so it cannot drift toward whatever makes a given record read better. They decide
+a word, never a refusal and never a number.
+
+**The residual shape is `rose_and_returned`, not `typical`.** It was `typical`
+until two groups were read side by side — one spending 56 minutes above target,
+the other 11 — and both came back labelled typical. The word claims a normality
+this engine has not computed and has no basis for: typical of whom? A residual
+bucket has to be named for the measurements that put a response in it. The same
+rule that keeps `findingPresentation` a lookup rather than a sentence generator.
+
+**Still to do here.** The clinician packet renders findings through its own
+`Finding` component in `frontend/src/app/report/page.tsx` and does not show any
+of this. A clinician is the reader most likely to want time above range and
+return-to-range, so that is the obvious follow-on — but it is a separate change
+to a separate surface, and the packet is a record somebody carries into an
+appointment.
 
 ---
 
@@ -623,7 +702,7 @@ and a gate that goes red for the shipped configuration gets switched off.
 ## 12. Where to pick up
 
 `docs/diabetes-wide-platform.md` § **Next Implementation Ticket** tracks the
-loop, and the loop is closed. What is left is a choice between five things.
+loop, and the loop is closed. What is left is a choice between four things.
 Pick deliberately rather than by whatever is nearest — they have very different
 shapes, and two of them are not code.
 
@@ -631,34 +710,34 @@ shapes, and two of them are not code.
 is safe and directionally right, but it understands "patterns in diabetes data"
 more than it understands diabetes. Its first three recommendations shipped in
 `4c34810` and `71964d7` — timezone-aware hours, timezone-aware CSV import,
-refusing an unresolvable zone, and a version bump. Two remain, and they are 1
-and 2 below.
+refusing an unresolvable zone, and a version bump. Its fourth, richer post-meal
+features, is Post-Meal Intelligence v1 and has shipped; see §6a. The one that
+remains is 1 below.
 
-1. **Richer post-meal features.** Peak, time-to-peak, minutes above range,
-   return-to-range, area above target. Nearly free: `GroupMeasure.curve`
-   already carries the mean response at fifteen-minute offsets, so this is
-   arithmetic over data the engine already returns, plus contract and UI. It is
-   the most diabetes-native output per unit of work left anywhere in the
-   product, and it is the natural next thing after the evidence redesign.
-
-2. **Data quality and CGM coverage.** Sensor coverage, gaps, sampling density,
+1. **Data quality and CGM coverage.** Sensor coverage, gaps, sampling density,
    days worn, fingerstick versus CGM — folded into evidence strength rather
    than left as sample count and confidence. Deliberately its own ticket:
    it changes what every existing confidence number means, so it should not
-   ride along with anything else.
+   ride along with anything else. It is the agreed next ticket.
 
-3. **Weighing competing explanations.** Step four, and the only "Being built"
+   It now has one more caller than it did. `PostMealMetrics.n` counts meals
+   watched for at least three quarters of the post-meal window, which is a
+   coverage measure the engine computes and then uses for exactly one purpose.
+   Whatever coverage model this ticket builds should absorb it rather than sit
+   beside it.
+
+2. **Weighing competing explanations.** Step four, and the only "Being built"
    label left. It needs the treatment `suggestions.py` got — a reviewed
    per-detector catalogue enforced by engine tests, not free text — because a
    competing explanation is a clinical claim and the frontend is the one place
    it must never be written. See §6.
 
-4. **Exporting the clinician packet.** A printed sheet is what gets carried
+3. **Exporting the clinician packet.** A printed sheet is what gets carried
    into an appointment, and the page was built for a printer without anybody
    testing it against one. Reuse the server packet; do not build a second
    report path.
 
-5. **The rest of the go-live blockers in §10**, none of which is code: a DNS
+4. **The rest of the go-live blockers in §10**, none of which is code: a DNS
    name for the database host, a reverse proxy that sets `X-Forwarded-For`,
    and the five legal facts plus a lawyer. The DNS name is the only item here
    with a lead time.
