@@ -176,22 +176,24 @@ services:
       # dropping them. Without this the chain breaks here and every request in
       # the deployment keys on one container.
       TRUST_PROXY: 'true'
-    # Published on the host, the way every other application on this server is.
+    # Published on the host's LAN address, and only that one.
     #
-    # `cloudflared` reaches origins by the host's LAN address —
+    # `cloudflared` reaches origins by the host's address —
     # `http://10.10.9.208:3000` — not over loopback, so a socket bound to
-    # 127.0.0.1 refuses those connections even though the tunnel runs on the
-    # same machine. Loopback was tried and is why the tunnel could not reach
-    # this service.
+    # 127.0.0.1 refuses those connections even from this same machine. That was
+    # tried and is why the tunnel could not reach the service.
     #
-    # The exposure is the private LAN, which is where the rest of this
-    # infrastructure already lives. It is not the internet: 10.10.0.0/16 is not
-    # routable, and Cloudflare remains the only public path in. What that path
-    # gives — TLS, the WAF, and the CF-Connecting-IP header the rate limiter
-    # keys on — is bypassed by anything already inside the LAN, so the network
-    # boundary is doing that work rather than this port binding.
+    # The interface is named rather than left as 0.0.0.0. Unqualified, Docker
+    # would also listen on every bridge gateway on this host — 10.0.0.1,
+    # 10.0.1.1, 10.0.2.1 — which every container in every other project on the
+    # box can reach, and on any public interface the host is ever given. Naming
+    # it keeps the surface to the one address the tunnel actually uses.
+    #
+    # It is host-specific, and deliberately so: moved to another server this
+    # fails to bind at startup with the address in the error, which is a better
+    # way to find out than discovering the port answering somewhere unintended.
     ports:
-      - '3000:3000'
+      - '10.10.9.208:3000:3000'
     depends_on:
       backend:
         condition: service_healthy

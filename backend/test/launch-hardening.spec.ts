@@ -173,7 +173,7 @@ describe('the production deployment turns them all on', () => {
     // The backend is the API and the engine's only protection is a service
     // token. Neither may be routable from outside.
     expect(coolify).not.toMatch(/^\s+- '(4000|8000|6379):/m);
-    expect(coolify).toMatch(/frontend:[\s\S]*- '3000:3000'/);
+    expect(coolify).toMatch(/frontend:[\s\S]*- '10\.10\.9\.208:3000:3000'/);
   });
 
   it('names the production site so canonical URLs are right', () => {
@@ -287,16 +287,28 @@ describe('the Coolify file resolves its paths from the repository root', () => {
 
 describe('nothing binds a public port behind the tunnel', () => {
   const overlay = read('infra/docker/docker-compose.production.yml');
+  const coolify = read('infra/docker/docker-compose.coolify.yml');
+
+  it('never publishes a port on every interface', () => {
+    // The rule, stated once for both production descriptions: a published port
+    // names the interface it listens on. Unqualified, Docker binds 0.0.0.0 —
+    // every bridge gateway on the host, reachable by containers in every other
+    // project, and any public interface the machine is ever given.
+    for (const file of [overlay, coolify]) {
+      const unqualified = file.match(/^\s+- '[0-9]+:[0-9]+'/gm) ?? [];
+      expect(unqualified).toEqual([]);
+    }
+  });
 
   it('publishes the frontend and nothing else', () => {
-    // The frontend has to be reachable at the host's LAN address, because that
-    // is how cloudflared reaches every origin on this server. Loopback was
-    // tried and refuses those connections even from the same machine.
+    // The frontend has to be reachable at the host's address, because that is
+    // how cloudflared reaches every origin on this server. Loopback was tried
+    // and refuses those connections even from the same machine.
     //
     // The backend and the engine publish nothing at all. The backend is the
     // API and the engine's only protection is a service token: neither should
     // be reachable from anywhere but the compose network.
-    expect(overlay).toContain("- '3000:3000'");
+    expect(overlay).toContain("- '10.10.9.208:3000:3000'");
     expect(overlay).not.toMatch(/^\s+- '?[0-9.:]*\b(4000|8000|6379):/m);
   });
 
