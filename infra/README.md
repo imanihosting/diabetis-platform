@@ -393,23 +393,69 @@ is the one nobody thinks to check.
 
 ### Coolify
 
-Point Coolify at this repository and give it the two compose files:
+One compose file, because Coolify's UI takes one path:
+
+| Setting | Value |
+|---|---|
+| Build Pack | **Docker Compose** — not Dockerfile. This is four services; a Dockerfile build pack deploys one container. |
+| Base Directory | `/` |
+| Docker Compose Location | `infra/docker/docker-compose.coolify.yml` |
+| Domain | `https://wellovue.com`, on the **frontend service only** |
+
+`infra/docker/docker-compose.coolify.yml` is deliberately self-contained rather
+than the base file plus the production overlay. It duplicates most of
+`docker-compose.yml`, and that is the price of a deployment somebody clicks
+"deploy" on being readable in one file instead of assembled in their head from
+two.
+
+**Only the frontend gets a domain.** The backend and the engine are reached
+over the compose network and must never be routable from outside — the backend
+is the API, and the engine's only protection is a service token.
+
+Set these in Coolify's environment editor. They are secrets or they are
+environment-specific, and neither belongs in a committed file:
 
 ```
-docker-compose.yml
-docker-compose.production.yml
+DATABASE_URL             postgres://…@medical-db:5432/…?sslmode=verify-full
+JWT_SECRET
+METABOLIC_ENGINE_TOKEN
+S3_ENDPOINT  S3_REGION  S3_BUCKET  S3_ACCESS_KEY_ID  S3_SECRET_ACCESS_KEY
 ```
 
-Set the environment in Coolify rather than in a committed file: `DATABASE_URL`,
-`REDIS_URL`, the object storage credentials, `JWT_SECRET`,
-`METABOLIC_ENGINE_TOKEN`. The production overlay sets the launch switches
-itself, so they cannot be forgotten and cannot be quietly turned off in a
-dashboard.
+The launch switches are **not** in that list. `PUBLIC_LAUNCH`, `TRUST_PROXY`,
+`CLIENT_IP_HEADER`, `REQUIRE_VERIFIED_DB_TLS`, `REQUIRE_SHARED_RATE_LIMIT` and
+`DATABASE_SSL_REJECT_UNAUTHORIZED` are set in the compose file itself, so they
+cannot be forgotten on a redeploy or quietly turned off in a dashboard.
 
 Coolify's own proxy sits between the tunnel and the containers. It adds a hop,
-which is exactly why the address comes from `CF-Connecting-IP` rather than from
-counting hops — a hop count is a number that has to be changed every time the
-topology does, and nothing fails loudly when it is wrong.
+which is exactly why the client address comes from `CF-Connecting-IP` rather
+than from counting hops: a hop count has to change every time the topology
+does, and nothing fails loudly when it is wrong.
+
+#### The first deploy will fail, on purpose
+
+`PUBLIC_LAUNCH: 'true'` is a build argument on the frontend image, so the build
+runs the launch-blocker check and **stops** while `[LEGAL ENTITY]` and the other
+four placeholders are still in the Privacy policy and the Terms. The build log
+names every one and the file and line it is on.
+
+That is the acceptance rule doing its job rather than a misconfiguration: the
+platform must not be able to look live while a page tells somebody
+`[LEGAL ENTITY]` is responsible for their health data.
+
+To get past it, in order:
+
+1. Fill in the five facts. `npm run check:launch` passes when they are gone.
+2. Have a lawyer read the two pages against the jurisdiction they name, and
+   delete the `lawyer-review` job in `.github/workflows/release-gate.yml` in
+   the same commit that records it.
+3. Deploy.
+
+To stand the stack up **before** any of that — on a staging hostname, to
+confirm the tunnel and the database work — point Coolify at
+`infra/docker/docker-compose.yml` instead. That file has no launch switches, so
+it builds and runs with the placeholders in place, and every page it serves is
+honest about being unfinished.
 
 ### Running it
 

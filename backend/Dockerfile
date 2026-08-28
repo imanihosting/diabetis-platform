@@ -77,6 +77,7 @@ COPY metabolic-engine/app/models/findings.py ./metabolic-engine/app/models/findi
 # forwarding chain — and a test asserting the shape of a deployment has to be
 # able to see it.
 COPY infra/docker/docker-compose.production.yml ./infra/docker/docker-compose.production.yml
+COPY infra/docker/docker-compose.coolify.yml ./infra/docker/docker-compose.coolify.yml
 COPY frontend/Dockerfile ./frontend/Dockerfile
 COPY frontend/src/app/api ./frontend/src/app/api
 CMD ["npm", "run", "test", "--workspace", "backend"]

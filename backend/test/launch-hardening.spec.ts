@@ -138,22 +138,48 @@ describe('the switch is wired everywhere it can be', () => {
 });
 
 describe('the production deployment turns them all on', () => {
+  // Both files describe production: the overlay for `docker compose -f a -f b`
+  // on a host, and the self-contained one Coolify is pointed at. They must not
+  // disagree about the switches, because whichever is wrong is the one that
+  // ships.
   const overlay = read('infra/docker/docker-compose.production.yml');
+  const coolify = read('infra/docker/docker-compose.coolify.yml');
 
-  it('serves the public with every switch set', () => {
-    for (const setting of [
-      "PUBLIC_LAUNCH: 'true'",
-      "TRUST_PROXY: 'true'",
-      "REQUIRE_VERIFIED_DB_TLS: 'true'",
-      "REQUIRE_SHARED_RATE_LIMIT: 'true'",
-      "DATABASE_SSL_REJECT_UNAUTHORIZED: 'true'",
-    ]) {
-      expect(overlay).toContain(setting);
+  it('serves the public with every switch set, in both descriptions', () => {
+    for (const file of [overlay, coolify]) {
+      for (const setting of [
+        "PUBLIC_LAUNCH: 'true'",
+        "TRUST_PROXY: 'true'",
+        "REQUIRE_VERIFIED_DB_TLS: 'true'",
+        "REQUIRE_SHARED_RATE_LIMIT: 'true'",
+        "DATABASE_SSL_REJECT_UNAUTHORIZED: 'true'",
+        'CLIENT_IP_HEADER: cf-connecting-ip',
+      ]) {
+        expect(file).toContain(setting);
+      }
     }
   });
 
+  it('makes the frontend build fail on a placeholder, in both', () => {
+    // PUBLIC_LAUNCH has to reach the image as a build argument, not only as an
+    // environment variable: the placeholder check runs during the build,
+    // because by boot the page is compiled.
+    for (const file of [overlay, coolify]) {
+      expect(file).toMatch(/args:[\s\S]{0,600}PUBLIC_LAUNCH: 'true'/);
+    }
+  });
+
+  it('gives the domain to the frontend alone', () => {
+    // The backend is the API and the engine's only protection is a service
+    // token. Neither may be routable from outside.
+    expect(coolify).not.toMatch(/^\s+- '(4000|8000|6379):/m);
+    expect(coolify).toMatch(/frontend:[\s\S]*expose:\s*\n\s+- '3000'/);
+  });
+
   it('names the production site so canonical URLs are right', () => {
-    expect(overlay).toContain('https://wellovue.com');
+    for (const file of [overlay, coolify]) {
+      expect(file).toContain('https://wellovue.com');
+    }
   });
 
   it('puts the application behind the tunnel rather than beside it', () => {

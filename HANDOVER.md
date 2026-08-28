@@ -140,7 +140,7 @@ their password and every real record with it.
 ## 5. Tests
 
 ```bash
-npm test                  # 288 unit, no infrastructure needed
+npm test                  # 290 unit, no infrastructure needed
 npm run test:docker       # everything, in a throwaway stack
 ```
 
@@ -151,7 +151,7 @@ hypertables, vector indexes and the guard triggers are exercised for real.
 
 | Suite | Count | Needs infra |
 |---|---|---|
-| `backend/test/*.spec.ts` | 132 | no |
+| `backend/test/*.spec.ts` | 134 | no |
 | `backend/test/integration/api.spec.ts` | 58 | yes |
 | `backend/test/integration/reports.spec.ts` | 13 | yes |
 | `backend/test/integration/experiments.spec.ts` | 28 | yes |
@@ -696,7 +696,7 @@ calling it diabetes-wide without qualification sends somebody with Type 1 to a
 screen that refuses them, having promised otherwise.
 
 `/white-paper` is the page this rule matters most on, because it is written for
-readers evaluating the platform and it quotes specific numbers: 132 unit tests,
+readers evaluating the platform and it quotes specific numbers: 134 unit tests,
 184 integration, 104 engine, twenty migrations, six guard triggers, eleven
 domain schemas, and the demo engine recovering about -1.05 against a seeded
 -1.3.
@@ -1066,6 +1066,19 @@ interpolating a value, which closes injection and log leakage together.
 **Legal review is a CI job that always fails.** Deleting it is the record: it
 appears in the history with a name against it, which is a more honest artefact
 than a boolean somebody set. Filling in the placeholders is not review.
+
+**Coolify takes one compose path**, so `infra/docker/docker-compose.coolify.yml`
+is self-contained rather than base-plus-overlay. It duplicates most of
+`docker-compose.yml` on purpose: a file somebody clicks "deploy" on should be
+readable in one place. A test asserts both production descriptions set the same
+switches, because whichever one is wrong is the one that ships.
+
+**The first Coolify deploy fails, and should.** `PUBLIC_LAUNCH` is a build
+argument on the frontend image, so the build runs the placeholder check and
+stops while the Privacy policy still says `[LEGAL ENTITY]`. To stand the stack
+up before the legal work — to prove the tunnel and the database — point Coolify
+at `infra/docker/docker-compose.yml` instead: no launch switches, and every
+page it serves is honest about being unfinished.
 
 ### Still not done, and not something code can do
 
