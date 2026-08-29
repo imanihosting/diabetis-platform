@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { createHash } from 'node:crypto';
 import { AppModule } from '../../src/app.module';
 import { testClientConfig, verifyEmailFor } from './helpers';
 
@@ -625,6 +626,26 @@ describe('API end to end', () => {
   describe('waitlist', () => {
     const address = () => `wl-${Date.now()}-${Math.random().toString(36).slice(2)}@test.local`;
 
+    /**
+     * The live confirmation token for an address.
+     *
+     * Read out of the queued outbox row, because that is the only place the
+     * secret half exists — the signup row holds a hash. Same reasoning as
+     * `verifyEmailFor` in helpers.ts, and the same requirement: this suite
+     * runs with MAIL_ENABLED and MAIL_DRY_RUN both on.
+     */
+    async function confirmToken(email: string): Promise<string> {
+      const { rows } = await pool.query<{ url: string }>(
+        `select payload->>'confirmUrl' as url from notify.mail_outbox
+          where lower(recipient_email) = lower($1)
+            and template like 'waitlist_confirmation%'
+          order by created_at desc limit 1`,
+        [email],
+      );
+      if (!rows[0]?.url) throw new Error(`No confirmation email queued for ${email}`);
+      return new URL(rows[0].url).searchParams.get('token') ?? '';
+    }
+
     it('accepts a signup without authentication', async () => {
       const res = await http()
         .post('/api/waitlist')
@@ -658,6 +679,137 @@ describe('API end to end', () => {
         [email],
       );
       expect(Number(rows[0].count)).toBe(1);
+    });
+
+    it('queues one confirmation email and leaves the address unconfirmed', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+
+      const { rows } = await pool.query<{ confirmed_at: Date | null }>(
+        'select confirmed_at from identity.waitlist_signups where lower(email) = lower($1)',
+        [email],
+      );
+      // Submitting the form does not put anybody on the list. Clicking does.
+      expect(rows[0].confirmed_at).toBeNull();
+
+      const mail = await pool.query<{ template: string; status: string }>(
+        `select template, status from notify.mail_outbox
+          where lower(recipient_email) = lower($1)`,
+        [email],
+      );
+      expect(mail.rows.map((r) => r.template)).toEqual(['waitlist_confirmation.v1']);
+      expect(mail.rows[0].status).toBe('queued');
+    });
+
+    it('confirms the address when the link is opened', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+
+      const res = await http()
+        .post('/api/waitlist/confirm')
+        .send({ token: await confirmToken(email) })
+        .expect(200);
+      expect(res.body).toEqual({ confirmed: true });
+
+      const { rows } = await pool.query<{ confirmed_at: Date | null; hash: string | null }>(
+        `select confirmed_at, confirm_token_hash as hash
+           from identity.waitlist_signups where lower(email) = lower($1)`,
+        [email],
+      );
+      expect(rows[0].confirmed_at).not.toBeNull();
+      // The token is cleared on use, so the link cannot be replayed.
+      expect(rows[0].hash).toBeNull();
+    });
+
+    it('will not spend the same confirmation twice', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      const token = await confirmToken(email);
+
+      await http().post('/api/waitlist/confirm').send({ token }).expect(200);
+      const second = await http()
+        .post('/api/waitlist/confirm')
+        .send({ token })
+        .expect(200);
+      expect(second.body).toEqual({ confirmed: false, reason: 'invalid' });
+    });
+
+    it('rejects an expired confirmation, and says so', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      const token = await confirmToken(email);
+
+      // Aged directly. The alternative is a suite that takes a week.
+      await pool.query(
+        `update identity.waitlist_signups set confirm_expires_at = now() - interval '1 minute'
+          where lower(email) = lower($1)`,
+        [email],
+      );
+
+      const res = await http().post('/api/waitlist/confirm').send({ token }).expect(200);
+      expect(res.body).toEqual({ confirmed: false, reason: 'expired' });
+    });
+
+    it('rejects a token nobody ever issued', async () => {
+      const res = await http()
+        .post('/api/waitlist/confirm')
+        .send({ token: 'not-a-token-but-long-enough-to-pass-the-schema' })
+        .expect(200);
+      expect(res.body).toEqual({ confirmed: false, reason: 'invalid' });
+    });
+
+    it('replaces the live link when an unconfirmed address signs up again', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      const first = await confirmToken(email);
+
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      const second = await confirmToken(email);
+      expect(second).not.toBe(first);
+
+      // Somebody who did not receive the first email is trying again. Leaving
+      // the old link alive would mean two live tokens for one address.
+      expect(
+        (await http().post('/api/waitlist/confirm').send({ token: first }).expect(200)).body,
+      ).toEqual({ confirmed: false, reason: 'invalid' });
+      expect(
+        (await http().post('/api/waitlist/confirm').send({ token: second }).expect(200)).body,
+      ).toEqual({ confirmed: true });
+    });
+
+    it('sends nothing more once an address is confirmed', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      await http()
+        .post('/api/waitlist/confirm')
+        .send({ token: await confirmToken(email) })
+        .expect(200);
+
+      // Re-entering an address already on the list must not mail them again,
+      // and must still answer exactly as it does for a new one.
+      const again = await http().post('/api/waitlist').send({ email }).expect(200);
+      expect(again.body).toEqual({ subscribed: true });
+
+      const { rows } = await pool.query<{ n: number }>(
+        `select count(*)::int as n from notify.mail_outbox
+          where lower(recipient_email) = lower($1)`,
+        [email],
+      );
+      expect(rows[0].n).toBe(1);
+    });
+
+    it('stores only a hash of the confirmation token', async () => {
+      const email = address();
+      await http().post('/api/waitlist').send({ email }).expect(200);
+      const token = await confirmToken(email);
+
+      const { rows } = await pool.query<{ hash: string }>(
+        `select confirm_token_hash as hash from identity.waitlist_signups
+          where lower(email) = lower($1)`,
+        [email],
+      );
+      expect(rows[0].hash).not.toBe(token);
+      expect(rows[0].hash).toBe(createHash('sha256').update(token).digest('hex'));
     });
 
     it('does not record the address in the audit metadata', async () => {

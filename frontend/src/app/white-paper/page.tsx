@@ -238,7 +238,7 @@ export default function WhitePaperPage() {
           seeded number exactly would be evidence of a bug, not of accuracy.
         </p>
         <p>
-          The platform carries 174 unit tests, 216 integration tests against a
+          The platform carries 175 unit tests, 224 integration tests against a
           real PostgreSQL with the production extension versions, and 104 engine
           tests with strict type checking. The suites worth naming are the ones
           that attack the product rather than exercise it: one drives the

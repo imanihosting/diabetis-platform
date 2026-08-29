@@ -17,6 +17,7 @@ import type {
 import { ENV, type Env } from '../config/env';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
+import { toPostgresInterval, ttlToSeconds } from '../common/ttl';
 import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
 import { VerificationService } from './verification.service';
 
@@ -260,23 +261,6 @@ function toUser(row: UserRow): User {
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
-}
-
-/** Converts `15m` / `30d` style TTLs into a Postgres interval literal. */
-function toPostgresInterval(ttl: string): string {
-  const match = /^(\d+)([smhd])$/.exec(ttl);
-  if (!match) throw new Error(`Unsupported TTL format: ${ttl}`);
-  const units = { s: 'seconds', m: 'minutes', h: 'hours', d: 'days' } as const;
-  return `${match[1]} ${units[match[2] as keyof typeof units]}`;
-}
-
-function ttlToSeconds(ttl: string): number {
-  const match = /^(\d+)([smhd])$/.exec(ttl);
-  if (!match) throw new Error(`Unsupported TTL format: ${ttl}`);
-  const multiplier = { s: 1, m: 60, h: 3600, d: 86_400 }[
-    match[2] as 's' | 'm' | 'h' | 'd'
-  ];
-  return Number(match[1]) * multiplier;
 }
 
 /**

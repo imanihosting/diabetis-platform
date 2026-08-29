@@ -22,6 +22,7 @@ Seven templates, and that is the whole list:
 | `new_device_sign_in.v1` | A successful sign-in from a browser not seen before |
 | `email_changed.v1` | The address on an account changes |
 | `security_alert.v1` | A fixed set of account-security events |
+| `waitlist_confirmation.v1` | Somebody left an address on the landing page — the only message sent to a person with no account |
 
 **No message contains health information.** Not a glucose value, not a lab
 result, not a diagnosis, not a finding, not anything from a clinician report.
@@ -100,6 +101,7 @@ annotated list.
 | `MAIL_SUPPORT_EMAIL` | The address every template tells people to write to. |
 | `MAIL_SAVE_TO_SENT_ITEMS` | `false`. See below. |
 | `EMAIL_VERIFICATION_TTL` / `PASSWORD_RESET_TTL` | `24h` / `60m`. |
+| `WAITLIST_CONFIRM_TTL` | `7d`. Longer because nothing is waiting on it. |
 | `THROTTLE_MAIL_LIMIT` / `THROTTLE_MAIL_TTL_S` | Per caller **and** per address, on the endpoints that mail somebody. |
 | `MAIL_PER_RECIPIENT_LIMIT` / `_WINDOW_S` | A backstop counted in the outbox itself. |
 | `MAIL_MAX_ATTEMPTS` | Retries before a transient failure is treated as permanent. |
@@ -200,6 +202,43 @@ They will be asked to verify on their next request, and can send themselves a
 link from the app.
 
 ---
+
+## The waitlist is a confirmed list
+
+The landing page's email capture is **double opt-in**. Submitting the form
+writes an unconfirmed row and sends one message asking the person to confirm;
+the address joins the list only when they click. An address that never
+confirms is never written to again.
+
+This is not politeness. The platform has one sending domain, and account mail —
+verification, password reset — depends on its reputation. A send to addresses
+that never opted in is how that reputation is spent, and the first thing it
+takes down with it is the verification email somebody needs to reach their own
+record.
+
+**Anything that eventually sends to this list must filter on
+`confirmed_at is not null`.** There is no code enforcing that yet, because
+nothing sends to the list yet.
+
+```sql
+-- The actual list.
+select email from identity.waitlist_signups where confirmed_at is not null;
+
+-- Signed up but never confirmed. Not mailable.
+select count(*) from identity.waitlist_signups where confirmed_at is null;
+```
+
+**Addresses collected before migration 0022 are unconfirmed and stay that way.**
+No backfill, deliberately, and the opposite of the call made for user accounts
+in 0021 — the reasoning for the difference is written into 0022. In short:
+leaving an account unverified locks a real person out of their health record,
+while leaving a waitlist address unconfirmed costs that person nothing, and
+marking it confirmed would assert a consent that never happened in the one
+table whose purpose is to record that consent.
+
+Still outstanding before any list send: an unsubscribe mechanism and a
+suppression list. Neither exists, and neither should be improvised at send
+time.
 
 ## Runbook
 

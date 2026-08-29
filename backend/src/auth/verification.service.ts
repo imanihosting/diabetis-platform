@@ -7,7 +7,8 @@ import type {
   PasswordResetCompleteResult,
   VerifyEmailResult,
 } from '@wellovue/types';
-import { ENV, type Env, type Ttl } from '../config/env';
+import { ENV, type Env } from '../config/env';
+import { describeTtl, toPostgresInterval } from '../common/ttl';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { MailService } from '../notifications/mail.service';
@@ -476,25 +477,6 @@ export class VerificationService {
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
-}
-
-/** Converts `15m` / `24h` style TTLs into a Postgres interval literal. */
-function toPostgresInterval(ttl: Ttl): string {
-  const match = /^(\d+)([smhd])$/.exec(ttl);
-  if (!match) throw new Error(`Unsupported TTL format: ${ttl}`);
-  const units = { s: 'seconds', m: 'minutes', h: 'hours', d: 'days' } as const;
-  return `${match[1]} ${units[match[2] as keyof typeof units]}`;
-}
-
-/** `24h` as "24 hours", for an email that has to say when a link stops working. */
-export function describeTtl(ttl: Ttl): string {
-  const match = /^(\d+)([smhd])$/.exec(ttl);
-  if (!match) return ttl;
-  const amount = Number(match[1]);
-  const unit = { s: 'second', m: 'minute', h: 'hour', d: 'day' }[
-    match[2] as 's' | 'm' | 'h' | 'd'
-  ];
-  return `${amount} ${unit}${amount === 1 ? '' : 's'}`;
 }
 
 /**

@@ -24,7 +24,8 @@ export type MailTemplateName =
   | 'new_device_sign_in'
   | 'email_changed'
   | 'password_changed'
-  | 'security_alert';
+  | 'security_alert'
+  | 'waitlist_confirmation';
 
 /**
  * Reasons a security alert may be raised.
@@ -47,6 +48,7 @@ export interface MailTemplateVars {
   email_changed: { changedAt: string };
   password_changed: { changedAt: string };
   security_alert: { reason: SecurityAlertReason; occurredAt: string };
+  waitlist_confirmation: { confirmUrl: string; expiresIn: string };
 }
 
 /** Fixed strings for the shared parts of every message. */
@@ -182,6 +184,7 @@ const TEMPLATE_IDS: Record<MailTemplateName, string> = {
   email_changed: 'email_changed.v1',
   password_changed: 'password_changed.v1',
   security_alert: 'security_alert.v1',
+  waitlist_confirmation: 'waitlist_confirmation.v1',
 };
 
 const SECURITY_ALERT_COPY: Record<SecurityAlertReason, { headline: string; body: string }> = {
@@ -262,6 +265,25 @@ const TEMPLATES: Renderers = {
         'Every signed-in session was ended, so you will be asked to sign in again.',
         'If you did not do this, contact us immediately using the address below.',
       ],
+    }),
+
+  /**
+   * The only message this platform sends to somebody with no account.
+   *
+   * It asks rather than tells, and it says plainly that ignoring it is a
+   * complete answer — because it is: an address that is never confirmed is
+   * never written to again. That sentence is the difference between a
+   * confirmation and the first of a series somebody did not ask for.
+   */
+  waitlist_confirmation: (vars, b) =>
+    compose('waitlist_confirmation', 'Confirm you want updates from Wellovue', b, {
+      heading: 'Confirm your email address',
+      paragraphs: [
+        'Somebody entered this address on the Wellovue site to hear when there is news.',
+        `Confirm it below and we will add you. The link works for ${vars.expiresIn}.`,
+        'If that was not you, ignore this message. Nothing is added, and this is the only email you will get.',
+      ],
+      action: { label: 'Confirm this address', url: vars.confirmUrl },
     }),
 
   security_alert: (vars, b) => {

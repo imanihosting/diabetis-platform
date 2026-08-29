@@ -28,6 +28,7 @@ import type {
   TimelineEntry,
   User,
   VerifyEmailResult,
+  WaitlistConfirmResult,
 } from '@wellovue/types';
 
 /**
@@ -219,6 +220,21 @@ export const api = {
 
   users: {
     me: () => request<User>('/users/me'),
+  },
+
+  waitlist: {
+    /**
+     * Spends a confirmation token from the landing page's capture email.
+     *
+     * A refused token comes back as a result rather than an error: confirmed,
+     * expired and not-valid are three things the page says differently, and
+     * two of them are expected.
+     */
+    confirm: (token: string) =>
+      request<WaitlistConfirmResult>('/waitlist/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
   },
 
   timeline: {

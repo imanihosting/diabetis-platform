@@ -273,6 +273,9 @@ export const DISALLOWED_PATHS = [
   '/verify-email',
   '/forgot-password',
   '/reset-password',
+  // Same reason as /verify-email: a crawler that follows the link spends the
+  // token, and the person who was mailed it finds a dead one.
+  '/waitlist',
 ] as const;
 
 export function publicPage(path: string): PublicPage {

@@ -8,8 +8,14 @@ type State = 'idle' | 'submitting' | 'done' | 'invalid' | 'failed';
  * Email capture for readers who are not ready to create an account.
  *
  * One field, because asking a stranger for more before they have seen anything
- * is a poor trade. The success message is identical whether the address is new
- * or already present, so the form cannot be used to check who is on the list.
+ * is a poor trade. The success message is identical whether the address is new,
+ * already waiting, or already confirmed, so the form cannot be used to check
+ * who is on the list.
+ *
+ * Submitting does not put anybody on the list. It sends one email asking them
+ * to confirm, and an address that never confirms is never written to again —
+ * which is what the message below has to say, because "we have your address"
+ * would leave somebody thinking they were done when a step remains.
  */
 export function EmailCapture() {
   const [email, setEmail] = useState('');
@@ -45,8 +51,8 @@ export function EmailCapture() {
         <span aria-hidden className="text-[var(--in-range-text)]">
           &#10003;
         </span>
-        We have your address. Nothing else, and nothing until there is
-        something worth sending.
+        Check your email and confirm the address. Nothing else, and nothing
+        until there is something worth sending.
       </p>
     );
   }

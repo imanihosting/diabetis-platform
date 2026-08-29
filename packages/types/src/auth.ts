@@ -84,10 +84,18 @@ export const waitlistSignupSchema = z.object({
 export type WaitlistSignupInput = z.infer<typeof waitlistSignupSchema>;
 
 export const waitlistSignupResultSchema = z.object({
-  /** True whether the address is new or already present — see the service. */
+  /**
+   * True whether the address is new, already present, or already confirmed.
+   *
+   * Deliberately not "we sent you an email", which would differ between an
+   * address already on the list and one that is not, and turn this public form
+   * into a way to test who is on it.
+   */
   subscribed: z.boolean(),
 });
 export type WaitlistSignupResult = z.infer<typeof waitlistSignupResultSchema>;
+
+
 
 /** Topics the contact form offers, so messages can be routed without triage. */
 export const contactTopicSchema = z.enum([
@@ -168,3 +176,23 @@ export const passwordResetCompleteResultSchema = z.object({
   reason: verificationFailureSchema.optional(),
 });
 export type PasswordResetCompleteResult = z.infer<typeof passwordResetCompleteResultSchema>;
+
+/**
+ * Confirming a waitlist address.
+ *
+ * Separate from `verifyEmailSchema` despite the identical shape, because the
+ * two tokens live in different tables and mean different things: one proves an
+ * account holder can read their inbox, the other records that a stranger
+ * consented to be written to. Sharing a type would invite sharing a code path.
+ */
+export const waitlistConfirmSchema = z.object({
+  token: z.string().min(20).max(400),
+});
+export type WaitlistConfirmInput = z.infer<typeof waitlistConfirmSchema>;
+
+export const waitlistConfirmResultSchema = z.object({
+  confirmed: z.boolean(),
+  /** Absent when `confirmed` is true. */
+  reason: verificationFailureSchema.optional(),
+});
+export type WaitlistConfirmResult = z.infer<typeof waitlistConfirmResultSchema>;

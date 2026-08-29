@@ -52,3 +52,17 @@ export function useCompletePasswordReset() {
       api.auth.completePasswordReset(input.token, input.password),
   });
 }
+
+/**
+ * Confirms a waitlist address.
+ *
+ * Separate from `useVerifyEmail` despite the identical shape: one proves an
+ * account holder can read their inbox, the other records that a stranger
+ * consented to be written to. They reach different endpoints and different
+ * tables, and sharing a hook would invite sharing a code path.
+ */
+export function useConfirmWaitlist() {
+  return useMutation({
+    mutationFn: (token: string) => api.waitlist.confirm(token),
+  });
+}

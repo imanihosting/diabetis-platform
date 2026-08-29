@@ -20,9 +20,14 @@ import { Wordmark } from '@/components/RangeMark';
 export function AccountPageShell({
   title,
   children,
+  // The default is true for every page here except the waitlist confirmation,
+  // whose reader has no account and would rightly wonder what account is being
+  // talked about.
+  footnote = 'Wellovue emails you about your account only. Nothing you record in the app is ever sent by email.',
 }: {
   title: string;
   children: ReactNode;
+  footnote?: string;
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -57,8 +62,7 @@ export function AccountPageShell({
             ))}
           </nav>
           <p className="max-w-[58ch] text-xs leading-relaxed text-ink-faint">
-            Wellovue emails you about your account only. Nothing you record in
-            the app is ever sent by email.
+            {footnote}
           </p>
         </div>
       </footer>

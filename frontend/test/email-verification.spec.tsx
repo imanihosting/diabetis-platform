@@ -33,11 +33,20 @@ const resend = {
   isSuccess: false,
 };
 
+const confirmWaitlist = {
+  mutate: vi.fn(),
+  isIdle: true,
+  isPending: false,
+  isError: false,
+  data: undefined as { confirmed: boolean; reason?: string } | undefined,
+};
+
 vi.mock('@/hooks/useEmailVerification', () => ({
   useVerifyEmail: () => verify,
   useResendVerification: () => resend,
   useRequestPasswordReset: () => resend,
   useCompletePasswordReset: () => resend,
+  useConfirmWaitlist: () => confirmWaitlist,
 }));
 
 vi.mock('@/hooks/useAuth', () => ({
@@ -70,6 +79,10 @@ beforeEach(() => {
   resend.isPending = false;
   resend.isError = false;
   resend.isSuccess = false;
+  confirmWaitlist.isIdle = true;
+  confirmWaitlist.isPending = false;
+  confirmWaitlist.isError = false;
+  confirmWaitlist.data = undefined;
 });
 
 afterEach(() => {
@@ -163,12 +176,47 @@ describe('asking for another link', () => {
   });
 });
 
+describe('the waitlist confirmation screen', () => {
+  it('confirms, and says what will and will not arrive', async () => {
+    confirmWaitlist.isIdle = false;
+    confirmWaitlist.data = { confirmed: true };
+
+    const text = textOf(await renderPage('@/app/waitlist/confirm/page'));
+    expect(text).toContain('That address is confirmed');
+    expect(text).toContain('something worth sending');
+    // Its reader has no account, so the shell's usual footnote about account
+    // mail would leave them wondering what account is meant.
+    expect(text).not.toContain('about your account only');
+  });
+
+  it('keeps a failed confirmation low-drama', async () => {
+    confirmWaitlist.isIdle = false;
+    confirmWaitlist.data = { confirmed: false, reason: 'expired' };
+
+    const text = textOf(await renderPage('@/app/waitlist/confirm/page'));
+    // Nothing is broken and nothing is lost — entering the address again is
+    // the whole remedy, and the page says so rather than apologising.
+    expect(text).toContain('Nothing is lost');
+    expect(text).toContain('sends a new one');
+  });
+
+  it('does not offer a sign-in form to somebody with no account', async () => {
+    confirmWaitlist.isIdle = false;
+    confirmWaitlist.data = { confirmed: true };
+
+    const html = await renderPage('@/app/waitlist/confirm/page');
+    // One link out, and it goes back to the site rather than into the product.
+    expect(html).toContain('href="/"');
+  });
+});
+
 describe('what these pages promise', () => {
   const PAGES = [
     '@/app/check-email/page',
     '@/app/verify-email/page',
     '@/app/forgot-password/page',
     '@/app/reset-password/page',
+    '@/app/waitlist/confirm/page',
   ];
 
   it('never implies that health information is being emailed', async () => {

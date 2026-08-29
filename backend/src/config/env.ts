@@ -295,6 +295,15 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_TTL: ttlSchema.default('24h'),
   /** Shorter still: a reset link is the account. */
   PASSWORD_RESET_TTL: ttlSchema.default('60m'),
+  /**
+   * How long a waitlist confirmation link works.
+   *
+   * Longer than the others on purpose. Nothing is waiting on it — no account
+   * is half-created and nobody is locked out — and the person it was sent to
+   * may not read that inbox daily. A short window here would mean quietly
+   * discarding people who did want to be on the list.
+   */
+  WAITLIST_CONFIRM_TTL: ttlSchema.default('7d'),
 
   /** How often the worker looks for due mail. */
   MAIL_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),

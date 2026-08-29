@@ -46,6 +46,10 @@ const SAMPLES: { [K in MailTemplateName]: MailTemplateVars[K] } = {
   email_changed: { changedAt: '2026-08-29 12:40 UTC' },
   password_changed: { changedAt: '2026-08-29 12:40 UTC' },
   security_alert: { reason: 'sessions_revoked', occurredAt: '2026-08-29 12:40 UTC' },
+  waitlist_confirmation: {
+    confirmUrl: 'https://wellovue.example/waitlist/confirm?token=abc123',
+    expiresIn: '7 days',
+  },
 };
 
 const NAMES = Object.keys(SAMPLES) as MailTemplateName[];
@@ -63,6 +67,7 @@ describe('notification templates', () => {
         'password_changed',
         'password_reset',
         'security_alert',
+        'waitlist_confirmation',
         'welcome',
       ].sort(),
     );
@@ -135,6 +140,16 @@ describe('notification templates', () => {
       .toContain('24 hours');
     expect(renderMail('password_reset', SAMPLES.password_reset, BRANDING).text)
       .toContain('60 minutes');
+    expect(renderMail('waitlist_confirmation', SAMPLES.waitlist_confirmation, BRANDING).text)
+      .toContain('7 days');
+  });
+
+  it('tells a waitlist reader that ignoring the email is a complete answer', () => {
+    // The one message sent to somebody with no account, and the difference
+    // between a confirmation and the first of a series they did not ask for.
+    const mail = renderMail('waitlist_confirmation', SAMPLES.waitlist_confirmation, BRANDING);
+    expect(mail.text).toContain('ignore this message');
+    expect(mail.text).toContain('the only email you will get');
   });
 
   it('uses the exact subjects the product asked for', () => {
