@@ -144,6 +144,16 @@ services:
       THROTTLE_AUTH_LIMIT: "10000"
       THROTTLE_REFRESH_LIMIT: "10000"
       THROTTLE_WRITE_LIMIT: "10000"
+      THROTTLE_MAIL_LIMIT: "10000"
+      # Mail behaves as it does in a deployment — queued to the outbox — and
+      # dry run keeps it off the network. The suite asserts what was queued;
+      # what Microsoft Graph does with a message is the Graph client's own
+      # unit test, against a stubbed provider.
+      MAIL_ENABLED: "true"
+      MAIL_DRY_RUN: "true"
+      MAIL_WORKER_INTERVAL_MS: "3600000"
+      MAIL_PER_RECIPIENT_LIMIT: "100"
+      APP_PUBLIC_URL: http://localhost:3000
     command: ["npm", "run", "test:all", "--workspace", "backend"]
     depends_on:
       migrate:

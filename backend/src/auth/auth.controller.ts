@@ -13,17 +13,31 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ThrottleScope,
   THROTTLE_AUTH,
+  THROTTLE_MAIL,
   THROTTLE_REFRESH,
+  THROTTLE_WRITE,
 } from '../common/guards/throttle.guard';
 import type { Request, Response } from 'express';
 import {
   loginSchema,
+  passwordResetCompleteSchema,
+  passwordResetRequestSchema,
   registerSchema,
+  resendVerificationSchema,
+  verifyEmailSchema,
   type AuthResponse,
   type LoginInput,
+  type MailRequestResult,
+  type PasswordResetCompleteInput,
+  type PasswordResetCompleteResult,
+  type PasswordResetRequestInput,
   type RegisterInput,
+  type ResendVerificationInput,
+  type VerifyEmailInput,
+  type VerifyEmailResult,
 } from '@wellovue/types';
 import { AuthService } from './auth.service';
+import { VerificationService } from './verification.service';
 import {
   REFRESH_COOKIE_NAME,
   clearRefreshCookie,
@@ -31,6 +45,7 @@ import {
 } from './refresh-cookie';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { Public } from '../common/decorators/public.decorator';
+import { AllowUnverified } from '../common/decorators/allow-unverified.decorator';
 import {
   CurrentUser,
   type AuthenticatedUser,
@@ -51,6 +66,7 @@ type ClientAuthResponse = Omit<AuthResponse, 'tokens'> & {
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly verification: VerificationService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -87,9 +103,17 @@ export class AuthController {
   @UsePipes(new ZodValidationPipe(loginSchema))
   async login(
     @Body() body: LoginInput,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ClientAuthResponse> {
-    return this.respond(response, await this.auth.login(body));
+    // The user agent, and only the user agent. It is what decides whether this
+    // sign-in gets a "new device" notification; the address is deliberately not
+    // passed, because the platform has not reviewed what turning an IP into a
+    // location would mean for someone's record.
+    return this.respond(
+      response,
+      await this.auth.login(body, request.get('user-agent')),
+    );
   }
 
   @Public()
@@ -121,6 +145,9 @@ export class AuthController {
   }
 
   @Post('logout')
+  // Signing out is not product use. An account that cannot get in still has to
+  // be able to get out.
+  @AllowUnverified()
   @HttpCode(204)
   @ApiOperation({ summary: 'End the session and revoke its refresh token' })
   async logout(
@@ -130,5 +157,74 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(user.id, request.cookies?.[REFRESH_COOKIE_NAME]);
     clearRefreshCookie(response, this.isProduction);
+  }
+
+  @Public()
+  // The token is the secret, so this is not guessable and does not need the
+  // account-keyed limit. The write limit is here to stop somebody grinding
+  // through the token space, which would take longer than the heat death of
+  // the sun but costs us nothing to refuse.
+  @ThrottleScope(THROTTLE_WRITE)
+  @Post('verify-email')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Prove an email address using a mailed token' })
+  @UsePipes(new ZodValidationPipe(verifyEmailSchema))
+  async verifyEmail(@Body() body: VerifyEmailInput): Promise<VerifyEmailResult> {
+    // A refused token comes back 200 with `verified: false` rather than as an
+    // error. The page has three different things to say — verified, expired,
+    // invalid — and an exception carrying a reason code is a worse way to say
+    // one of three expected outcomes.
+    return this.verification.verifyEmail(body.token);
+  }
+
+  @Public()
+  @ThrottleScope(THROTTLE_MAIL)
+  @Post('verify-email/resend')
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Send another verification link' })
+  @UsePipes(new ZodValidationPipe(resendVerificationSchema))
+  async resendVerification(
+    @Body() body: ResendVerificationInput,
+  ): Promise<MailRequestResult> {
+    // Always `accepted`. Whether an account exists, and whether it is already
+    // verified, are both invisible from out here — see VerificationService.
+    return this.verification.resendVerification(body.email);
+  }
+
+  @Public()
+  @ThrottleScope(THROTTLE_MAIL)
+  @Post('password-reset')
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Ask for a password reset link' })
+  @UsePipes(new ZodValidationPipe(passwordResetRequestSchema))
+  async requestPasswordReset(
+    @Body() body: PasswordResetRequestInput,
+  ): Promise<MailRequestResult> {
+    return this.verification.requestPasswordReset(body.email);
+  }
+
+  @Public()
+  // The auth limit, not the mail limit: this one takes a password, so it is
+  // the same surface as sign-in and deserves the same treatment.
+  @ThrottleScope(THROTTLE_AUTH)
+  @Post('password-reset/complete')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Set a new password using a mailed token' })
+  @UsePipes(new ZodValidationPipe(passwordResetCompleteSchema))
+  async completePasswordReset(
+    @Body() body: PasswordResetCompleteInput,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<PasswordResetCompleteResult> {
+    const result = await this.verification.completePasswordReset(
+      body.token,
+      body.password,
+    );
+
+    // Every session was revoked server-side. Clearing the cookie here stops
+    // this browser retrying with a refresh token that will never work again,
+    // and stops the readable session hint claiming a session that is gone.
+    if (result.reset) clearRefreshCookie(response, this.isProduction);
+
+    return result;
   }
 }

@@ -82,10 +82,12 @@ export function useRegister() {
     onSuccess: (data) => {
       tokenStore.set(data.tokens.accessToken);
       queryClient.setQueryData(['currentUser'], data.user);
-      // A new account has no care profile, so nothing can be interpreted for
-      // them yet. Sending them to a timeline of raw readings first, and only
-      // explaining later why Evidence refuses, gets the order backwards.
-      router.push('/profile?welcome=1');
+      // Before the care profile, and before anything else: a new account is
+      // unverified, and the product is closed to it until the address has been
+      // proven. Sending somebody to the setup question first would have them
+      // fill it in and then be refused, which is a worse first minute than
+      // being told plainly what to do.
+      router.push(`/check-email?email=${encodeURIComponent(data.user.email)}`);
     },
   });
 }

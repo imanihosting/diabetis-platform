@@ -13,6 +13,8 @@ interface AccessTokenPayload {
   sub: string;
   email: string;
   role: AuthenticatedUser['primaryRole'];
+  /** Absent in tokens issued before email verification existed. */
+  verified?: boolean;
 }
 
 /**
@@ -48,6 +50,11 @@ export class JwtAuthGuard implements CanActivate {
         id: payload.sub,
         email: payload.email,
         primaryRole: payload.role,
+        // Absent means unverified, which costs a token issued before this
+        // existed one database lookup in EmailVerifiedGuard and then goes
+        // away on its next refresh. Defaulting the other way would admit
+        // every such token to the product without a check.
+        emailVerified: payload.verified === true,
       };
       return true;
     } catch {

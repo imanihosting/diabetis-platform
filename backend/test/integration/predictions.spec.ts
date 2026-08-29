@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
-import { captureError, testClientConfig } from './helpers';
+import { captureError, testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * Predictions, and whether they can be rewritten.
@@ -44,6 +44,7 @@ describe('predictions', () => {
       .send({ email, password, displayName: 'Predictions' })
       .expect(201);
     accessToken = registered.body.tokens.accessToken;
+    await verifyEmailFor(http, pool, email);
 
     const { rows } = await pool.query<{ id: string }>(
       'select id from identity.users where email = $1',
@@ -233,10 +234,12 @@ describe('predictions', () => {
     });
 
     it('refuses someone else’s experiment', async () => {
+      const otherEmail = `other-pred-${Date.now()}@test.local`;
       const other = await http()
         .post('/api/auth/register')
-        .send({ email: `other-pred-${Date.now()}@test.local`, password })
+        .send({ email: otherEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, otherEmail);
 
       await http()
         .post(`/api/experiments/${experimentId}/start`)

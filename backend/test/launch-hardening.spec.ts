@@ -27,6 +27,8 @@ function ready(over: Partial<Env> = {}): Env {
   return {
     TRUST_PROXY: true,
     DATABASE_SSL_REJECT_UNAUTHORIZED: true,
+    MAIL_ENABLED: true,
+    MAIL_DRY_RUN: false,
     ...over,
   } as Env;
 }
@@ -40,6 +42,29 @@ describe('launch blockers', () => {
         rateLimitsShared: true,
       }),
     ).toEqual([]);
+  });
+
+  it('refuses to serve the public when no mail can be sent', () => {
+    // Verification gates the product, so a deployment that cannot send is one
+    // where nobody finishes signing up and nobody who forgets a password gets
+    // back in. The symptom is silent: unverified accounts pile up and every
+    // one of them looks like somebody who lost interest.
+    const off = launchBlockers({
+      env: ready({ MAIL_ENABLED: false }),
+      databaseUrl: 'postgres://u@medical-db:5432/db',
+      rateLimitsShared: true,
+    });
+    expect(off.map((b) => b.id)).toContain('mail-not-sending');
+
+    // Dry run counts as not sending. It writes the verification link to a log,
+    // which is right on a developer's machine and wrong in front of the public.
+    const dry = launchBlockers({
+      env: ready({ MAIL_DRY_RUN: true }),
+      databaseUrl: 'postgres://u@medical-db:5432/db',
+      rateLimitsShared: true,
+    });
+    expect(dry.map((b) => b.id)).toContain('mail-not-sending');
+    expect(dry[0].problem).toContain('MAIL_DRY_RUN');
   });
 
   it('refuses a database reached by address', () => {

@@ -1,3 +1,4 @@
+import type request from 'supertest';
 import { Client } from 'pg';
 
 /**
@@ -55,4 +56,48 @@ export async function captureError(fn: () => Promise<unknown>): Promise<Error | 
   } catch (err) {
     return err as Error;
   }
+}
+
+/**
+ * Takes a freshly registered account through email verification.
+ *
+ * Registration leaves an account unverified, and an unverified account is
+ * refused every product route — so any suite that registers an account and
+ * then uses it has to do this, exactly as a person would.
+ *
+ * It goes through the real endpoint rather than setting the column, and reads
+ * the token out of the queued outbox row's `payload`, which is the only place
+ * the secret half of the token exists: the token table stores a hash. That
+ * makes this the same path a browser takes, and it means a change that breaks
+ * verification breaks every suite rather than quietly passing them all.
+ *
+ * Requires MAIL_ENABLED with MAIL_DRY_RUN, which is what backend/.env.test and
+ * the test compose file both set. With mail disabled the row is written
+ * `skipped` and carries no payload, and this throws saying so.
+ */
+export async function verifyEmailFor(
+  agent: () => request.Agent,
+  db: Client,
+  email: string,
+): Promise<void> {
+  const { rows } = await db.query<{ url: string | null }>(
+    `select payload->>'verifyUrl' as url
+       from notify.mail_outbox
+      where lower(recipient_email) = lower($1)
+        and template like 'email_verification%'
+      order by created_at desc
+      limit 1`,
+    [email],
+  );
+
+  const url = rows[0]?.url;
+  if (!url) {
+    throw new Error(
+      `No verification email was queued for ${email}. This suite needs ` +
+        'MAIL_ENABLED=true and MAIL_DRY_RUN=true — see backend/.env.test.',
+    );
+  }
+
+  const token = new URL(url).searchParams.get('token');
+  await agent().post('/api/auth/verify-email').send({ token }).expect(200);
 }

@@ -18,6 +18,7 @@ import { ENV, type Env } from '../config/env';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { DiabetesProfileService } from '../diabetes-profile/diabetes-profile.service';
+import { VerificationService } from './verification.service';
 
 interface UserRow {
   id: string;
@@ -25,6 +26,7 @@ interface UserRow {
   display_name: string | null;
   primary_role: 'patient' | 'clinician' | 'admin';
   created_at: Date;
+  email_verified_at: Date | null;
 }
 
 @Injectable()
@@ -35,6 +37,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly profiles: DiabetesProfileService,
+    private readonly verification: VerificationService,
   ) {}
 
   async register(input: RegisterInput): Promise<AuthResponse> {
@@ -51,10 +54,14 @@ export class AuthService {
     });
 
     const user = await this.db.transaction(async (client) => {
+      // Created unverified. `email_verified_at` is left null rather than set,
+      // which is what the guard on the product routes reads: a new account can
+      // sign in and see its own status, and nothing else, until the address
+      // has been proven.
       const { rows } = await client.query<UserRow>(
         `insert into identity.users (email, display_name, primary_role)
          values ($1, $2, 'patient')
-         returning id, email, display_name, primary_role, created_at`,
+         returning id, email, display_name, primary_role, created_at, email_verified_at`,
         [input.email, input.displayName ?? null],
       );
       const created = rows[0];
@@ -81,16 +88,21 @@ export class AuthService {
         client,
       );
 
+      // Queued, not sent. The outbox row commits with the account, so a
+      // rolled-back registration has emailed nobody, and Microsoft Graph being
+      // slow or throttled never decides whether somebody gets an account.
+      await this.verification.sendVerification(created, client);
+
       return created;
     });
 
     return { user: toUser(user), tokens: await this.issueTokens(user) };
   }
 
-  async login(input: LoginInput): Promise<AuthResponse> {
+  async login(input: LoginInput, userAgent?: string): Promise<AuthResponse> {
     const row = await this.db.queryOne<UserRow & { password_hash: string | null }>(
       `select u.id, u.email, u.display_name, u.primary_role, u.created_at,
-              c.password_hash
+              u.email_verified_at, c.password_hash
          from identity.users u
          left join identity.credentials c on c.user_id = u.id
         where lower(u.email) = lower($1) and u.status = 'active'`,
@@ -123,6 +135,13 @@ export class AuthService {
       return this.issueTokens(row, client);
     });
 
+    // After the session exists, and deliberately outside its transaction. This
+    // is a courtesy notification: it must not be able to fail a sign-in, and a
+    // mail provider having a bad afternoon must not roll back somebody's
+    // session. `noteSignInDevice` swallows and logs its own failures for the
+    // same reason.
+    await this.verification.noteSignInDevice(row, userAgent);
+
     return { user: toUser(row), tokens };
   }
 
@@ -130,7 +149,7 @@ export class AuthService {
     const tokenHash = hashToken(refreshToken);
     const row = await this.db.queryOne<UserRow & { token_id: string }>(
       `select u.id, u.email, u.display_name, u.primary_role, u.created_at,
-              r.id as token_id
+              u.email_verified_at, r.id as token_id
          from identity.refresh_tokens r
          join identity.users u on u.id = r.user_id
         where r.token_hash = $1
@@ -188,8 +207,19 @@ export class AuthService {
   }
 
   private async issueTokens(user: UserRow, client?: PoolClient) {
+    // `verified` rides along so the guard on the product routes can answer
+    // from the token for the common case. It is a claim about a moment 15
+    // minutes ago at worst, which is why the guard treats `false` as "ask the
+    // database" rather than as a refusal — see EmailVerifiedGuard. A verified
+    // user therefore pays nothing, and an unverified one pays a lookup until
+    // their next token.
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, role: user.primary_role },
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.primary_role,
+        verified: user.email_verified_at !== null,
+      },
       { expiresIn: this.env.JWT_ACCESS_TTL as `${number}m` },
     );
 
@@ -224,6 +254,7 @@ function toUser(row: UserRow): User {
     displayName: row.display_name,
     primaryRole: row.primary_role,
     createdAt: row.created_at,
+    emailVerifiedAt: row.email_verified_at,
   };
 }
 

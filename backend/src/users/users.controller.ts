@@ -7,6 +7,7 @@ import {
   type AuthenticatedUser,
 } from '../common/decorators/current-user.decorator';
 import { AuditService } from '../audit/audit.service';
+import { AllowUnverified } from '../common/decorators/allow-unverified.decorator';
 
 @ApiTags('users')
 @Controller('users')
@@ -17,6 +18,10 @@ export class UsersController {
   ) {}
 
   @Get('me')
+  // The one thing an unverified account must be able to read: itself. The app
+  // needs `emailVerifiedAt` to know which screen to show, and refusing this
+  // would leave it unable to tell "not verified" from "not signed in".
+  @AllowUnverified()
   @ApiOperation({ summary: 'Current user profile' })
   async me(@CurrentUser() user: AuthenticatedUser): Promise<User> {
     const row = await this.db.queryOne<{
@@ -25,8 +30,9 @@ export class UsersController {
       display_name: string | null;
       primary_role: User['primaryRole'];
       created_at: Date;
+      email_verified_at: Date | null;
     }>(
-      `select id, email, display_name, primary_role, created_at
+      `select id, email, display_name, primary_role, created_at, email_verified_at
          from identity.users where id = $1`,
       [user.id],
     );
@@ -39,6 +45,7 @@ export class UsersController {
       displayName: row.display_name,
       primaryRole: row.primary_role,
       createdAt: row.created_at,
+      emailVerifiedAt: row.email_verified_at,
     };
   }
 

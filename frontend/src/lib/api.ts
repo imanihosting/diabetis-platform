@@ -6,6 +6,7 @@ import type {
   ClientAuthResponse,
   GlucoseSummary,
   LoginInput,
+  MailRequestResult,
   Meal,
   CreateExperimentInput,
   CreateLabResultInput,
@@ -22,9 +23,11 @@ import type {
   RecordSafetyFlagInput,
   SafetyFlag,
   UpdateDiabetesProfileInput,
+  PasswordResetCompleteResult,
   RegisterInput,
   TimelineEntry,
   User,
+  VerifyEmailResult,
 } from '@wellovue/types';
 
 /**
@@ -45,6 +48,15 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly issues?: { path: string; message: string }[],
+    /**
+     * A machine-readable reason, when the server sent one.
+     *
+     * Exists for one case so far and an important one: `email_unverified` on a
+     * 403. Without it the app cannot tell "prove your address" from "you are
+     * not allowed here", and a person who needs to click a link in their inbox
+     * gets told they lack permission.
+     */
+    readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -134,6 +146,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       payload?.message ?? `Request failed with ${res.status}`,
       res.status,
       payload?.issues,
+      payload?.code,
     );
   }
 
@@ -164,6 +177,44 @@ export const api = {
       }),
     // The server revokes the refresh token and clears its cookie.
     logout: () => request<void>('/auth/logout', { method: 'POST', body: '{}' }),
+
+    /**
+     * Spends a verification token from a mailed link.
+     *
+     * A refused token comes back as a result, not an error: expired, invalid
+     * and verified are three things the page says differently, and the first
+     * two are expected outcomes rather than failures.
+     */
+    verifyEmail: (token: string) =>
+      request<VerifyEmailResult>('/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
+
+    /**
+     * Asks for another verification link.
+     *
+     * Always resolves for a well-formed address, whether or not an account
+     * exists. The server will not say, and neither will this.
+     */
+    resendVerification: (email: string) =>
+      request<MailRequestResult>('/auth/verify-email/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+
+    /** Same contract as the resend above: the same answer for every address. */
+    requestPasswordReset: (email: string) =>
+      request<MailRequestResult>('/auth/password-reset', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+
+    completePasswordReset: (token: string, password: string) =>
+      request<PasswordResetCompleteResult>('/auth/password-reset/complete', {
+        method: 'POST',
+        body: JSON.stringify({ token, password }),
+      }),
   },
 
   users: {

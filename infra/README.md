@@ -304,7 +304,7 @@ It is deliberately not derived from `NODE_ENV`: the containers already run with
 gate to it would fail every developer's `docker:up`. A gate that goes red for
 the configuration something shipped with is a gate somebody switches off.
 
-The four runtime blockers, from `backend/src/config/launch.ts`:
+The five runtime blockers, from `backend/src/config/launch.ts`:
 
 | Blocker | Fixed by |
 |---|---|
@@ -312,6 +312,7 @@ The four runtime blockers, from `backend/src/config/launch.ts`:
 | `database-tls-unverified` | `sslmode=verify-full`, `DATABASE_SSL_REJECT_UNAUTHORIZED=true`, `REQUIRE_VERIFIED_DB_TLS=true` |
 | `rate-limits-not-shared` | `REDIS_URL` set and answering, `REQUIRE_SHARED_RATE_LIMIT=true` |
 | `client-addresses-not-known` | A reverse proxy that overwrites `X-Forwarded-For`, and `TRUST_PROXY=true` on **both** the backend and the frontend |
+| `mail-not-sending` | The Entra app registered with admin consent for `Mail.Send`, the four `GRAPH_*` variables set, `MAIL_ENABLED=true` and `MAIL_DRY_RUN=false`. Email verification gates the product, so without this nobody can finish signing up. See [docs/email-notifications.md](../docs/email-notifications.md) |
 
 ### How it is deployed
 

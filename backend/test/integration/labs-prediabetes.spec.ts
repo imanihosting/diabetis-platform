@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
-import { testClientConfig } from './helpers';
+import { testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * Labs, and the prediabetes findings that read them.
@@ -55,6 +55,7 @@ describe('labs and prediabetes evidence', () => {
       .send({ email, password, displayName: 'Prediab' })
       .expect(201);
     accessToken = res.body.tokens.accessToken;
+    await verifyEmailFor(http, pool, email);
 
     const { rows } = await pool.query<{ id: string }>(
       'select id from identity.users where email = $1',
@@ -170,10 +171,12 @@ describe('labs and prediabetes evidence', () => {
     });
 
     it('keeps one person’s results out of another’s list', async () => {
+      const otherEmail = `other-${Date.now()}@test.local`;
       const other = await http()
         .post('/api/auth/register')
-        .send({ email: `other-${Date.now()}@test.local`, password })
+        .send({ email: otherEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, otherEmail);
 
       const theirs = await http()
         .get('/api/labs')

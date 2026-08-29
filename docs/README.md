@@ -21,6 +21,7 @@ The carried-forward direction is:
 - [Data Model](./data-model.md)
 - [Build Roadmap](./build-roadmap.md)
 - [Diabetes-Wide Platform Expansion](./diabetes-wide-platform.md)
+- [Email and Notifications](./email-notifications.md) — Microsoft Graph setup, the verification flow, and the mail runbook
 
 ## Product Thesis
 

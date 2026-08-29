@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
-import { testClientConfig } from './helpers';
+import { testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * The clinician packet.
@@ -43,6 +43,7 @@ describe('clinician packet', () => {
       .send({ email, password, displayName: 'Packet' })
       .expect(201);
     accessToken = registered.body.tokens.accessToken;
+    await verifyEmailFor(http, pool, email);
 
     const { rows } = await pool.query<{ id: string }>(
       'select id from identity.users where email = $1',
@@ -304,6 +305,7 @@ describe('clinician packet', () => {
         .post('/api/auth/register')
         .send({ email: theirEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, theirEmail);
       const theirAuth = {
         authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
       };
@@ -369,6 +371,7 @@ describe('clinician packet', () => {
         .post('/api/auth/register')
         .send({ email: theirEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, theirEmail);
       const theirAuth = {
         authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
       };

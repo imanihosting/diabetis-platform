@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
-import { testClientConfig } from './helpers';
+import { testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * End-to-end through the real application: real database, real object storage,
@@ -70,7 +70,13 @@ describe('API end to end', () => {
       expect(res.body.user.email).toBe(email);
       expect(res.body.user.primaryRole).toBe('patient');
       expect(res.body.tokens.accessToken).toBeTruthy();
+      expect(res.body.user.emailVerifiedAt).toBeNull();
       accessToken = res.body.tokens.accessToken;
+
+      // A new account is unverified, and unverified accounts are refused every
+      // product route below. A person clicks the link in their email at this
+      // point; the helper does the same thing through the same endpoint.
+      await verifyEmailFor(http, pool, email);
     });
 
     it('never returns the password hash', async () => {
@@ -502,11 +508,13 @@ describe('API end to end', () => {
 
     beforeAll(async () => {
       // A second account whose records the first must never be able to touch.
+      const otherEmail = `other-${Date.now()}@test.local`;
       const other = await http()
         .post('/api/auth/register')
-        .send({ email: `other-${Date.now()}@test.local`, password })
+        .send({ email: otherEmail, password })
         .expect(201);
       othersToken = other.body.tokens.accessToken;
+      await verifyEmailFor(http, pool, otherEmail);
 
       const med = await http()
         .post('/api/medications')

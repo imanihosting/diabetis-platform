@@ -7,6 +7,7 @@ import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { StorageModule } from './storage/storage.module';
 import { AuditModule } from './audit/audit.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { EngineModule } from './engine/engine.module';
 
 import { AuthModule } from './auth/auth.module';
@@ -26,9 +27,11 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 import { SupportModule } from './support/support.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { EmailVerifiedGuard } from './common/guards/email-verified.guard';
 import {
   ScopedThrottlerGuard,
   THROTTLE_AUTH,
+  THROTTLE_MAIL,
   THROTTLE_REFRESH,
   THROTTLE_WRITE,
 } from './common/guards/throttle.guard';
@@ -43,6 +46,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     DatabaseModule,
     StorageModule,
     AuditModule,
+    NotificationsModule,
     EngineModule,
 
     // Limits are read from the validated environment rather than hardcoded:
@@ -64,6 +68,7 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
           { name: THROTTLE_AUTH, ttl: env.THROTTLE_AUTH_TTL_S * 1000, limit: env.THROTTLE_AUTH_LIMIT },
           { name: THROTTLE_REFRESH, ttl: env.THROTTLE_REFRESH_TTL_S * 1000, limit: env.THROTTLE_REFRESH_LIMIT },
           { name: THROTTLE_WRITE, ttl: env.THROTTLE_WRITE_TTL_S * 1000, limit: env.THROTTLE_WRITE_LIMIT },
+          { name: THROTTLE_MAIL, ttl: env.THROTTLE_MAIL_TTL_S * 1000, limit: env.THROTTLE_MAIL_LIMIT },
         ],
         storage: createThrottlerStorage(env.REDIS_URL),
       }),
@@ -97,6 +102,14 @@ import { ZodExceptionFilter } from './common/filters/zod-exception.filter';
     // Authentication is on by default. Opening a route requires an explicit
     // @Public() decorator, so nothing is exposed by omission.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+
+    // And then: an authenticated account whose address is unproven reaches
+    // nothing but itself. Runs after JwtAuthGuard because it needs the user
+    // that guard resolves, and globally for the same reason that one is
+    // global — a health endpoint should never be one missing decorator away
+    // from being open to an address nobody has confirmed. Opening a route to
+    // an unverified account takes an explicit @AllowUnverified().
+    { provide: APP_GUARD, useClass: EmailVerifiedGuard },
 
     // Registered here rather than in main.ts so the tests, which build the
     // app through the testing module, get the same behaviour as production.

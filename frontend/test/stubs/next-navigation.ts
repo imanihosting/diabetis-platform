@@ -14,6 +14,20 @@ export function useRouter() {
   return { push: () => {}, replace: () => {}, refresh: () => {}, back: () => {} };
 }
 
+/**
+ * The query string a test wants the page to see.
+ *
+ * The account pages branch on it — a verification link carries its token here,
+ * and "no token" is one of the states the page has to handle — so the stub
+ * needs to be settable rather than always empty.
+ */
+let searchParams = new URLSearchParams();
+
 export function useSearchParams(): URLSearchParams {
-  return new URLSearchParams();
+  return searchParams;
+}
+
+/** Test-only. Set the query string the next render will read. */
+export function __setSearchParams(query: string): void {
+  searchParams = new URLSearchParams(query);
 }

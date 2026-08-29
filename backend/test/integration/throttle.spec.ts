@@ -17,12 +17,15 @@ describe('rate limiting', () => {
 
   const AUTH_LIMIT = 3;
   const WRITE_LIMIT = 2;
+  const MAIL_LIMIT = 2;
 
   beforeAll(async () => {
     process.env.THROTTLE_AUTH_LIMIT = String(AUTH_LIMIT);
     process.env.THROTTLE_AUTH_TTL_S = '900';
     process.env.THROTTLE_WRITE_LIMIT = String(WRITE_LIMIT);
     process.env.THROTTLE_WRITE_TTL_S = '3600';
+    process.env.THROTTLE_MAIL_LIMIT = String(MAIL_LIMIT);
+    process.env.THROTTLE_MAIL_TTL_S = '900';
     process.env.THROTTLE_GLOBAL_LIMIT = '100000';
 
     // Imported after the environment is set: the config is validated and
@@ -99,6 +102,47 @@ describe('rate limiting', () => {
       const res = await http().get('/api/timeline');
       expect(res.status).toBe(401);
     }
+  });
+
+  it('limits how often one address can be mailed a verification link', async () => {
+    // What this stops: an unauthenticated endpoint that takes an address and
+    // sends mail to it is a way to use somebody else's inbox as a weapon, and
+    // to burn this platform's sending reputation doing it. The address is in
+    // the key as well as the caller, so rotating either one alone buys nothing.
+    const email = `resend-${Date.now()}@test.local`;
+
+    for (let attempt = 0; attempt < MAIL_LIMIT; attempt += 1) {
+      await http().post('/api/auth/verify-email/resend').send({ email }).expect(202);
+    }
+
+    const blocked = await http().post('/api/auth/verify-email/resend').send({ email });
+    expect(blocked.status).toBe(429);
+    // And still says nothing about whether the address has an account.
+    expect(JSON.stringify(blocked.body)).not.toContain(email);
+  });
+
+  it('limits password reset requests the same way', async () => {
+    const email = `reset-${Date.now()}@test.local`;
+
+    for (let attempt = 0; attempt < MAIL_LIMIT; attempt += 1) {
+      await http().post('/api/auth/password-reset').send({ email }).expect(202);
+    }
+    expect((await http().post('/api/auth/password-reset').send({ email })).status).toBe(429);
+  });
+
+  it('counts the mail limit per address, not just per caller', async () => {
+    // Otherwise one person exhausting their own resend allowance would stop
+    // everyone behind the same proxy from asking for a link.
+    const first = `mail-a-${Date.now()}@test.local`;
+    const second = `mail-b-${Date.now()}@test.local`;
+
+    for (let attempt = 0; attempt < MAIL_LIMIT; attempt += 1) {
+      await http().post('/api/auth/verify-email/resend').send({ email: first }).expect(202);
+    }
+    expect(
+      (await http().post('/api/auth/verify-email/resend').send({ email: first })).status,
+    ).toBe(429);
+    await http().post('/api/auth/verify-email/resend').send({ email: second }).expect(202);
   });
 
   it('reports the posture a deploy gate checks from outside', async () => {

@@ -103,6 +103,32 @@ services:
       METABOLIC_ENGINE_URL: http://metabolic-engine:8000
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN:?set METABOLIC_ENGINE_TOKEN in Coolify}
       NEXT_PUBLIC_APP_URL: https://wellovue.com
+      # Outbound mail through Microsoft Graph.
+      #
+      # Only the four credentials are variables, and every one of them is a
+      # secret that belongs in Coolify's store rather than in this file. The
+      # rest is fixed: mail is on in this deployment, and the links point at
+      # the domain this deployment serves — neither is a per-environment
+      # decision, and naming them would create dashboard entries for settings
+      # nobody should be changing from a web form.
+      #
+      # MAIL_DRY_RUN, GRAPH_BASE_URL, MAIL_SUPPORT_EMAIL, MAIL_SAVE_TO_SENT_ITEMS
+      # and the TTLs are absent for the same reason as the JWT ones above:
+      # env.ts already defaults all of them to exactly what this wants.
+      #
+      # Turning mail on without all four refuses to start, and leaving it off
+      # is a launch blocker — email verification gates the product, so a public
+      # deployment that cannot send is one where nobody finishes signing up.
+      MAIL_ENABLED: 'true'
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:?set GRAPH_TENANT_ID in Coolify}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:?set GRAPH_CLIENT_ID in Coolify}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:?set GRAPH_CLIENT_SECRET in Coolify}
+      GRAPH_SENDER_USER: ${GRAPH_SENDER_USER:?set GRAPH_SENDER_USER in Coolify}
+      # Where a verification or reset link points. Read at runtime by the
+      # backend, unlike NEXT_PUBLIC_SITE_URL which the frontend bakes in at
+      # build time — a link built against the wrong host is an account nobody
+      # can activate.
+      APP_PUBLIC_URL: https://wellovue.com
     # No volume for the CA certificate: it is baked into the image. A bind
     # mount from the checkout breaks here, because Coolify builds in a
     # temporary directory and deletes it — Docker then replaces the missing

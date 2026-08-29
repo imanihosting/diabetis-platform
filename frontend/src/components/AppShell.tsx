@@ -8,7 +8,8 @@ import { Disclosure } from '@/components/Disclosure';
 import { Wordmark } from '@/components/RangeMark';
 import { CareBoundary } from '@/components/CareBoundary';
 import { APP_NAV, APP_SECONDARY_NAV, LEGAL_NAV, isCurrent } from '@/lib/navigation';
-import { useLogout } from '@/hooks/useAuth';
+import { useCurrentUser, useLogout } from '@/hooks/useAuth';
+import { ResendVerification } from '@/components/ResendVerification';
 
 /**
  * Chrome for the signed-in app.
@@ -29,6 +30,15 @@ import { useLogout } from '@/hooks/useAuth';
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const logout = useLogout();
+  const user = useCurrentUser();
+
+  // An account whose address is unproven reaches none of this. The server is
+  // what enforces it — every product route is behind EmailVerifiedGuard and
+  // answers 403 — and this is what makes the refusal legible instead of
+  // showing a screen full of failed requests. One place rather than a check in
+  // each page, because "the page nobody added the check to" is the failure
+  // this arrangement exists to make impossible.
+  const unverified = Boolean(user.data && !user.data.emailVerifiedAt);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -108,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Product width, not document width. Prose inside stays narrow; the
           timeline, the evidence list and the clinician packet use it all. */}
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12 print:p-0 sm:px-8">
-        {children}
+        {unverified ? <VerificationRequired email={user.data?.email} /> : children}
       </main>
 
       <footer data-print="hide" className="mt-16">
@@ -134,6 +144,39 @@ export function AppShell({ children }: { children: ReactNode }) {
           <CareBoundary className="mt-7 pb-12" />
         </div>
       </footer>
+    </div>
+  );
+}
+
+/**
+ * What an unverified account sees instead of the product.
+ *
+ * Says why, says what to do, and offers the one action that helps. No apology
+ * and no explanation of the security reasoning: somebody who wants to look at
+ * their timeline is not reading a paragraph about typo'd addresses, they are
+ * looking for the button.
+ */
+function VerificationRequired({ email }: { email?: string }) {
+  return (
+    <div className="max-w-xl">
+      <h1 className="text-fold font-semibold text-balance">
+        Confirm your email to continue
+      </h1>
+      <p className="mt-5 text-lede text-ink-muted">
+        {email ? (
+          <>
+            We sent a link to <span className="text-ink">{email}</span>. Opening
+            it confirms the address belongs to you, which is what keeps your
+            record reachable only by you.
+          </>
+        ) : (
+          'We sent you a link. Opening it confirms the address belongs to you, which is what keeps your record reachable only by you.'
+        )}
+      </p>
+
+      <div className="mt-10 border-t border-rule pt-8">
+        <ResendVerification email={email} />
+      </div>
     </div>
   );
 }

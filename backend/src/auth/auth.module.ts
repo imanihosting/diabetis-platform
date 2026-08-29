@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { VerificationService } from './verification.service';
 import { ENV, type Env } from '../config/env';
 import { DiabetesProfileModule } from '../diabetes-profile/diabetes-profile.module';
 
@@ -21,7 +22,7 @@ import { DiabetesProfileModule } from '../diabetes-profile/diabetes-profile.modu
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, VerificationService],
   exports: [JwtModule],
 })
 export class AuthModule {}

@@ -149,6 +149,17 @@ function LoginView() {
                     : 'Sign in'}
               </button>
 
+              {!creating && (
+                <p className="mt-6 text-sm text-ink-muted">
+                  <Link
+                    href="/forgot-password"
+                    className="text-ink underline underline-offset-4"
+                  >
+                    Forgot your password?
+                  </Link>
+                </p>
+              )}
+
               <p className="mt-6 text-sm text-ink-muted">
                 {creating ? 'Already have an account?' : 'New here?'}{' '}
                 <button

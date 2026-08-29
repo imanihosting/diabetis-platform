@@ -264,6 +264,15 @@ export const DISALLOWED_PATHS = [
   '/profile',
   '/report',
   '/login',
+  // The account flows. `/verify-email` and `/reset-password` carry a
+  // single-use token in the query string, and a crawler that follows one
+  // spends it — which is a verification link that stops working before the
+  // person who was mailed it opens it. The others are here because a page that
+  // says "check your email" has nothing to offer a search result.
+  '/check-email',
+  '/verify-email',
+  '/forgot-password',
+  '/reset-password',
 ] as const;
 
 export function publicPage(path: string): PublicPage {

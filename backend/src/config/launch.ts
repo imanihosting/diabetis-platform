@@ -101,6 +101,30 @@ export function launchBlockers({
     });
   }
 
+  // Mail is not a nicety here: verification gates the product, so a public
+  // deployment that cannot send is a deployment where nobody can finish
+  // signing up and nobody who forgets a password can get back in. The symptom
+  // is silent — accounts pile up unverified and every one of them looks like a
+  // person who lost interest.
+  //
+  // Dry run counts as not sending, deliberately. It is the mode that renders
+  // everything and writes the link to a log, which is exactly right on a
+  // developer's machine and exactly wrong in front of the public.
+  if (!env.MAIL_ENABLED || env.MAIL_DRY_RUN) {
+    blockers.push({
+      id: 'mail-not-sending',
+      problem: env.MAIL_ENABLED
+        ? 'MAIL_DRY_RUN is on, so verification and password-reset links are ' +
+          'written to the log instead of being sent. Nobody can finish signing up.'
+        : 'MAIL_ENABLED is off, so no verification or password-reset email is ' +
+          'sent. Nobody can finish signing up.',
+      resolution:
+        'Register the Entra app, grant admin consent for the Mail.Send ' +
+        'application permission, set the four GRAPH_* variables, then ' +
+        'MAIL_ENABLED=true and MAIL_DRY_RUN=false. See docs/email-notifications.md.',
+    });
+  }
+
   return blockers;
 }
 

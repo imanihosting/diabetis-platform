@@ -57,6 +57,22 @@ an answer we control. It also encodes a deliberate confound (late meals are
 also the highest-carbohydrate ones) to verify the engine reports that
 limitation rather than glossing over it.
 
+### Email locally
+
+Mail is off by default (`MAIL_ENABLED=false`), which is a real operating mode
+rather than a broken one: outbox rows are still written and marked `skipped`,
+so the flow is visible without a Microsoft tenant. To exercise the whole path
+and finish a verification without a mailbox:
+
+```bash
+MAIL_ENABLED=true MAIL_DRY_RUN=true npm run dev:backend
+```
+
+The rendered message, verification link included, is written to the backend
+log. See [docs/email-notifications.md](./docs/email-notifications.md) for the
+Entra app registration, the `Mail.Send` admin consent it needs, and the
+runbook.
+
 ### Running it in Docker instead
 
 ```bash
@@ -156,7 +172,29 @@ it, rather than a confident-looking number built on three readings.
 
 **Auth is on by default.** The JWT guard is registered globally; exposing a
 route requires an explicit `@Public()` decorator, so nothing is exposed by
-omission.
+omission. The same is true one layer in: an account whose email address is not
+verified reaches nothing but itself, and opening a route to one takes an
+explicit `@AllowUnverified()`.
+
+**Email is proven before the product opens.** A new account can sign in, see
+who it is, ask for another verification link, and sign out. Nothing else. An
+unverified address means nobody has shown they can read that inbox, while the
+account behind it accumulates glucose imports and clinical context — and a typo
+at signup would let the real owner of what was typed reset the password into a
+stranger's record. Accounts created before this shipped were marked verified by
+an audited backfill; the reasoning is written out in migration 0021.
+
+**No email contains health information.** Not a glucose value, not a lab
+result, not a diagnosis, not a finding. Enforced rather than agreed: every
+render passes a check against the vocabulary of the domain, including terms
+that arrived through a variable, and it throws rather than filtering. See
+[docs/email-notifications.md](./docs/email-notifications.md).
+
+**Mail is queued, never sent inline.** An outbox row is written in the same
+transaction as the thing that caused it, and a worker sends it afterwards. A
+signup that rolls back has emailed nobody, and Microsoft Graph being slow or
+throttled decides when a message goes out rather than whether an account gets
+created.
 
 **No credential is readable by page JavaScript.** The refresh token — the
 long-lived one — lives in an HttpOnly, SameSite=Strict cookie scoped to

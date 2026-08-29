@@ -68,6 +68,24 @@ services:
       METABOLIC_ENGINE_URL: http://metabolic-engine:8000
       METABOLIC_ENGINE_TOKEN: ${METABOLIC_ENGINE_TOKEN}
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      # Outbound mail. Off by default on a developer's machine, which is a real
+      # operating mode rather than a broken one: the outbox row is still
+      # written and marked `skipped`, so the flow is visible without a tenant.
+      # Set MAIL_ENABLED=true with MAIL_DRY_RUN=true to exercise the whole path
+      # and read the verification link out of the container logs.
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_DRY_RUN: ${MAIL_DRY_RUN:-true}
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      GRAPH_SENDER_USER: ${GRAPH_SENDER_USER:-}
+      GRAPH_BASE_URL: ${GRAPH_BASE_URL:-https://graph.microsoft.com/v1.0}
+      MAIL_SUPPORT_EMAIL: ${MAIL_SUPPORT_EMAIL:-support@wellovue.com}
+      # Where verification and reset links point. Read at runtime by the
+      # backend, unlike NEXT_PUBLIC_SITE_URL which the frontend bakes in at
+      # build time — a link generated against the wrong host is an account
+      # nobody can activate.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
     ports:
       - "127.0.0.1:4000:4000"
     # The trust anchor is baked into the image rather than mounted. It used to

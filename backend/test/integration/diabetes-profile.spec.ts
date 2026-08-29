@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { AppModule } from '../../src/app.module';
-import { captureError, testClientConfig } from './helpers';
+import { captureError, testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * The diabetes profile, end to end through the real guards and database.
@@ -41,6 +41,9 @@ describe('diabetes profile', () => {
       .send({ email, password, displayName: 'Profile' })
       .expect(201);
     accessToken = res.body.tokens.accessToken;
+    // Unverified accounts reach no product route; a person clicks the link in
+    // their email here.
+    await verifyEmailFor(http, pool, email);
 
     const { rows } = await pool.query<{ id: string }>(
       'select id from identity.users where email = $1',

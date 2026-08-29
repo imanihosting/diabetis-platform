@@ -14,7 +14,7 @@ import {
   type SafetyStatus,
 } from '@wellovue/types';
 import { AppModule } from '../../src/app.module';
-import { captureError, testClientConfig } from './helpers';
+import { captureError, testClientConfig, verifyEmailFor } from './helpers';
 
 /**
  * The experiment endpoint, and whether the three layers agree.
@@ -109,6 +109,10 @@ describe('experiments', () => {
       .send({ email, password, displayName: 'Experiments' })
       .expect(201);
     accessToken = res.body.tokens.accessToken;
+    // Registration leaves the account unverified, and unverified accounts are
+    // refused every product route. A person clicks the link in their email
+    // here; the helper does the same thing through the same endpoint.
+    await verifyEmailFor(http, pool, email);
 
     const { rows } = await pool.query<{ id: string }>(
       'select id from identity.users where email = $1',
@@ -295,6 +299,7 @@ describe('experiments', () => {
         .post('/api/auth/register')
         .send({ email: theirEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, theirEmail);
       const token = registered.body.tokens.accessToken as string;
       const theirAuth = { authorization: `Bearer ${token}` };
 
@@ -513,6 +518,7 @@ describe('experiments', () => {
         .post('/api/auth/register')
         .send({ email: theirEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, theirEmail);
       const theirAuth = {
         authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
       };
@@ -758,6 +764,7 @@ describe('experiments', () => {
           .post('/api/auth/register')
           .send({ email: theirEmail, password })
           .expect(201);
+        await verifyEmailFor(http, pool, theirEmail);
         return {
           auth: {
             authorization: `Bearer ${registered.body.tokens.accessToken as string}`,
@@ -802,10 +809,12 @@ describe('experiments', () => {
         .expect(201);
       const id = mine.body.experiment.id as string;
 
+      const otherEmail = `other-detail-${Date.now()}@test.local`;
       const other = await http()
         .post('/api/auth/register')
-        .send({ email: `other-detail-${Date.now()}@test.local`, password })
+        .send({ email: otherEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, otherEmail);
 
       await http()
         .get(`/api/experiments/${id}`)
@@ -823,10 +832,12 @@ describe('experiments', () => {
     });
 
     it('keeps one person’s experiments out of another’s list', async () => {
+      const otherEmail = `other-exp-${Date.now()}@test.local`;
       const other = await http()
         .post('/api/auth/register')
-        .send({ email: `other-exp-${Date.now()}@test.local`, password })
+        .send({ email: otherEmail, password })
         .expect(201);
+      await verifyEmailFor(http, pool, otherEmail);
 
       const theirs = await http()
         .get('/api/experiments')

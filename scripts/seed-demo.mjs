@@ -85,9 +85,14 @@ async function main() {
   // identity link does not.
   await client.query('delete from identity.users where email = $1', [DEMO_EMAIL]);
 
+  // Verified on creation. The demo account exists to be signed into
+  // immediately, and an unverified account reaches nothing but itself — the
+  // seed would produce a login that lands on "check your email" for a mailbox
+  // nobody owns. This is the one place a verification is asserted rather than
+  // proven, and it is a local fixture rather than a person's account.
   const { rows: userRows } = await client.query(
-    `insert into identity.users (email, display_name, primary_role)
-     values ($1, 'Demo Patient', 'patient') returning id`,
+    `insert into identity.users (email, display_name, primary_role, email_verified_at)
+     values ($1, 'Demo Patient', 'patient', now()) returning id`,
     [DEMO_EMAIL],
   );
   const userId = userRows[0].id;

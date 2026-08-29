@@ -15,6 +15,15 @@ import { ENV, type Env } from '../../config/env';
 export const THROTTLE_AUTH = 'auth';
 export const THROTTLE_REFRESH = 'refresh';
 export const THROTTLE_WRITE = 'write';
+/**
+ * Endpoints that cause an email to be sent to an address the caller chose.
+ *
+ * Its own limit rather than reuse of the write limit, because what it protects
+ * is somebody else's inbox rather than a table of ours: verification resend
+ * and password reset both take an address and mail it. Tight, and keyed on the
+ * address as well as the caller — see `generateKey`.
+ */
+export const THROTTLE_MAIL = 'mail';
 
 const THROTTLE_SCOPE = 'wellovue:throttle-scope';
 
@@ -102,14 +111,19 @@ export class ScopedThrottlerGuard extends ThrottlerGuard {
    * `generateKey` is the one hook that knows which named limit is being
    * applied, which is why the email is folded in here rather than in
    * `getTracker`: the same address should get a generous allowance for reading
-   * the timeline and a tight one for guessing a password.
+   * the timeline and a tight one for guessing a password, or for asking that a
+   * message be sent to somebody.
    */
   protected generateKey(
     context: ExecutionContext,
     suffix: string,
     name: string,
   ): string {
-    if (name !== THROTTLE_AUTH) {
+    // The mail limits key the same way and for a closely related reason: an
+    // attacker rotating addresses is aiming at inboxes, and an attacker
+    // rotating source addresses is aiming at one inbox. Folding both into the
+    // key means neither rotation buys a fresh budget.
+    if (name !== THROTTLE_AUTH && name !== THROTTLE_MAIL) {
       return super.generateKey(context, suffix, name);
     }
 
